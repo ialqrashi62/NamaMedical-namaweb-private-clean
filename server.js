@@ -123,15 +123,15 @@ const MAX_DISCOUNT_BY_ROLE = { admin: 100, manager: 50, cashier: 10, receptionis
 // RBAC middleware - role-based access control
 const ROLE_PERMISSIONS = {
     'Admin': '*',
-    'Doctor': ['dashboard', 'patients', 'appointments', 'doctor', 'lab', 'radiology', 'pharmacy', 'nursing', 'waiting', 'reports', 'messaging', 'surgery', 'consent', 'icu'],
-    'Nurse': ['dashboard', 'patients', 'nursing', 'waiting', 'vitals', 'icu', 'emergency', 'inpatient', 'transport', 'dietary'],
+    'Doctor': ['dashboard', 'patients', 'appointments', 'doctor', 'lab', 'radiology', 'pharmacy', 'nursing', 'waiting', 'reports', 'messaging', 'surgery', 'consent', 'icu', 'research', 'publichealth', 'crisis', 'toxicology'],
+    'Nurse': ['dashboard', 'patients', 'nursing', 'waiting', 'vitals', 'icu', 'emergency', 'inpatient', 'transport', 'dietary', 'publichealth', 'crisis', 'toxicology'],
     'Pharmacist': ['dashboard', 'pharmacy', 'inventory', 'messaging'],
     'Lab Technician': ['dashboard', 'lab', 'messaging'],
     'Radiologist': ['dashboard', 'radiology', 'messaging'],
     'Reception': ['dashboard', 'patients', 'appointments', 'waiting', 'messaging', 'accounts'],
-    'Finance': ['dashboard', 'finance', 'insurance', 'reports', 'accounts', 'invoices'],
-    'HR': ['dashboard', 'hr', 'messaging', 'reports'],
-    'IT': ['dashboard', 'settings', 'messaging', 'maintenance'],
+    'Finance': ['dashboard', 'finance', 'insurance', 'reports', 'accounts', 'invoices', 'legal'],
+    'HR': ['dashboard', 'hr', 'messaging', 'reports', 'legal'],
+    'IT': ['dashboard', 'settings', 'messaging', 'maintenance', 'research', 'publichealth', 'crisis', 'iot'],
     'Staff': ['dashboard', 'messaging']
 };
 function requireRole(...modules) {
@@ -6953,6 +6953,76 @@ app.put('/api/pharmacy/prescriptions/:id', requireAuth, requireTenantScope, asyn
             `Updated prescription #${req.params.id} status:${status}`, req.ip);
         res.json(r.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// ===== STITCH DESIGN SYSTEM: NEW MODULE MOCK APIs =====
+app.get('/api/research/trials', requireAuth, requireRole('research'), (req, res) => {
+    res.json([
+        { id: 1, trial_name: 'دراسة اللقاح الخماسي المطوّر', phase: 'Phase III', sponsor: 'وزارة الصحة السعودية', status: 'Recruiting', start_date: '2026-01-10', enrolled_count: 342 },
+        { id: 2, trial_name: 'علاج مناعي متقدم لأورام القولون', phase: 'Phase II', sponsor: 'الشركة الوطنية للصناعات الدوائية', status: 'Active', start_date: '2025-06-15', enrolled_count: 85 },
+        { id: 3, trial_name: 'استخدام الذكاء الاصطناعي في الفحص المبكر لاعتلال الشبكية السكري', phase: 'Observational', sponsor: 'مستشفى الملك فيصل التخصصي', status: 'Active', start_date: '2025-09-01', enrolled_count: 1200 },
+        { id: 4, trial_name: 'تقييم فاعلية بروتوكول الرعاية المنزلية لمرضى قصور القلب', phase: 'Phase IV', sponsor: 'نما الطبي للأبحاث', status: 'Completed', start_date: '2024-03-01', enrolled_count: 500 }
+    ]);
+});
+
+app.get('/api/public-health/stats', requireAuth, requireRole('publichealth'), (req, res) => {
+    res.json({
+        vaccine_coverage: 94.8,
+        chronic_prevalence: 12.3,
+        active_outbreaks: 0,
+        satisfaction_score: 96.5,
+        recent_screenings: [
+            { id: 1, type: 'فحص سرطان الثدي المبكر', target_population: 'النساء 40+ سنة', screened_count: 2450, target_count: 3000, compliance_rate: 81.6 },
+            { id: 2, type: 'كشف ضغط الدم والسكري الميداني', target_population: 'سكان الأحياء المجاورة', screened_count: 5800, target_count: 5000, compliance_rate: 116.0 },
+            { id: 3, type: 'تحصينات الأطفال الأساسية', target_population: 'الأطفال دون عمر السنتين', screened_count: 1230, target_count: 1250, compliance_rate: 98.4 }
+        ],
+        alerts: [
+            { id: 1, level: 'info', title: 'حملة التطعيم ضد الإنفلونزا الموسمية', message: 'تبدأ الأسبوع القادم في جميع الفروع.' }
+        ]
+    });
+});
+
+app.get('/api/crisis/alerts', requireAuth, requireRole('crisis'), (req, res) => {
+    res.json({
+        status: 'Green - Stable',
+        threat_level: 'Low',
+        last_updated: new Date().toISOString(),
+        active_resources: {
+            ambulances: 12,
+            icu_beds_available: 15,
+            emergency_staff_on_duty: 45,
+            decontamination_units: 4
+        },
+        incidents: [
+            { id: 1, title: 'محاكاة خطة الإخلاء الافتراضية للكوارث', type: 'Drill', status: 'Completed', time: '2026-06-20' },
+            { id: 2, title: 'جاهزية مهبط طائرات الإخلاء الطبي', type: 'Inspection', status: 'Passed', time: '2026-06-21' }
+        ]
+    });
+});
+
+app.get('/api/facility/iot', requireAuth, requireRole('iot'), (req, res) => {
+    res.json([
+        { id: 1, device_name: 'جهاز تنفس اصطناعي ذكي - ICU-A1', type: 'Ventilator', status: 'Normal', connectivity: 'Connected', battery: 98, metric: '14 bpm / 99% SpO2' },
+        { id: 2, device_name: 'ثلاجة لقاحات الصيدلية المركزية - FR-09', type: 'Temperature Controller', status: 'Warning', connectivity: 'Connected', battery: 100, metric: '2.4°C (Target: 2.0-8.0)' },
+        { id: 3, device_name: 'مراقبة علامات حيوية متنقل - Ward-304', type: 'Patient Monitor', status: 'Normal', connectivity: 'Connected', battery: 42, metric: 'HR: 76 bpm | Temp: 37.1°C' },
+        { id: 4, device_name: 'جهاز غسيل الكلى ذكي - Dialysis-B4', type: 'Dialysis', status: 'Maintenance', connectivity: 'Disconnected', battery: 12, metric: 'Under preventive maintenance' }
+    ]);
+});
+
+app.get('/api/legal/cases', requireAuth, requireRole('legal'), (req, res) => {
+    res.json([
+        { id: 1, case_number: 'ML-2026-004', subject: 'طلب إقرار طبي شرعي - قضية حادث مروري', risk_level: 'Low', status: 'Pending', date: '2026-06-18' },
+        { id: 2, case_number: 'ML-2026-012', subject: 'مراجعة عقد توريد أجهزة أشعة PACS جديدة', risk_level: 'Medium', status: 'In Review', date: '2026-06-15' },
+        { id: 3, case_number: 'ML-2025-098', subject: 'دعوى تعويض خطأ تشخيصي طبي (مغلقة)', risk_level: 'High', status: 'Settled', date: '2025-11-20' }
+    ]);
+});
+
+app.get('/api/toxicology/incidents', requireAuth, requireRole('toxicology'), (req, res) => {
+    res.json([
+        { id: 1, date: '2026-06-22', substance: 'استنشاق غاز أول أكسيد الكربون (حالة حريق)', severity: 'Critical', treatment: 'أكسجين عالي الضغط وغرفة غسيل النيتروجين', status: 'In ICU' },
+        { id: 2, date: '2026-06-21', substance: 'تسمم بمبيد حشري فوسفاتي عضوي', severity: 'Critical', treatment: 'حقن الأتروبين والتوكسوجونين الفوري', status: 'Recovered' },
+        { id: 3, date: '2026-06-19', substance: 'ابتلاع جرعة دواء زائدة (تسمم دوائي بالباراسيتامول)', severity: 'Moderate', treatment: 'غسيل معدة فوري وإعطاء N-acetylcysteine', status: 'Discharged' }
+    ]);
 });
 
 // ===== BOOT-TIME COLUMN MIGRATIONS (non-production only) =====

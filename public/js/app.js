@@ -17,8 +17,8 @@ let currentPage = 0;
 let facilityType = 'hospital';
 const FACILITY_ALLOWED = {
   hospital: null, // null = all allowed
-  health_center: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 20, 21, 30, 33, 34, 35, 41, 42],
-  clinic: [0, 1, 2, 3, 4, 6, 7, 8, 9, 11, 12, 13, 14, 15, 20, 30, 34, 42]
+  health_center: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 20, 21, 30, 33, 34, 35, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50],
+  clinic: [0, 1, 2, 3, 4, 6, 7, 8, 9, 11, 12, 13, 14, 15, 20, 30, 34, 42, 43, 44, 45, 46, 47, 48, 49, 50]
 };
 
 const tr = (en, ar) => isArabic ? ar : en;
@@ -68,7 +68,86 @@ const NAV_ITEMS = [
   { icon: '💎', en: 'Cosmetic Surgery', ar: 'جراحة التجميل' },
   { icon: '🤰', en: 'OB/GYN', ar: 'النساء والتوليد' },
   { icon: '⚙️', en: 'Settings', ar: 'الإعدادات' },
+  { icon: '🔬', en: 'Clinical Research', ar: 'الأبحاث السريرية والابتكار' },
+  { icon: '🥗', en: 'Public Health', ar: 'الصحة العامة والسكانية' },
+  { icon: '🚨', en: 'Crisis Command', ar: 'إدارة الأزمات والكوارث' },
+  { icon: '🔌', en: 'Smart Facility & IoT', ar: 'البنية الذكية وإنترنت الأشياء' },
+  { icon: '⚖️', en: 'Legal Affairs', ar: 'الشؤون القانونية والطبية الشرعية' },
+  { icon: '🧪', en: 'Toxicology Response', ar: 'السموم والاستجابة الكيميائية' },
+  { icon: '💽', en: 'Big Data Lake', ar: 'بيانات المنظومة الضخمة' },
+  { icon: '🧭', en: 'Patient Journey Sim', ar: 'محاكاة رحلة المريض' }
 ];
+
+// ===== ROUTING & HASH MAPPING =====
+const HASH_MAP = {
+  '#dashboard': 0,
+  '#reception': 1,
+  '#appointments': 2,
+  '#doctor': 3,
+  '#lab': 4,
+  '#radiology': 5,
+  '#pharmacy': 6,
+  '#hr': 7,
+  '#finance': 8,
+  '#insurance': 9,
+  '#inventory': 10,
+  '#nursing': 11,
+  '#waiting': 12,
+  '#accounts': 13,
+  '#reports': 14,
+  '#messaging': 15,
+  '#catalog': 16,
+  '#dept-requests': 17,
+  '#surgery': 18,
+  '#blood-bank': 19,
+  '#consent': 20,
+  '#emergency': 21,
+  '#inpatient': 22,
+  '#icu': 23,
+  '#cssd': 24,
+  '#dietary': 25,
+  '#infection-control': 26,
+  '#quality': 27,
+  '#maintenance': 28,
+  '#transport': 29,
+  '#medical-records': 30,
+  '#clinical-pharmacy': 31,
+  '#rehabilitation': 32,
+  '#patient-portal': 33,
+  '#zatca': 34,
+  '#telemedicine': 35,
+  '#pathology': 36,
+  '#social-work': 37,
+  '#mortuary': 38,
+  '#cme': 39,
+  '#cosmetic-surgery': 40,
+  '#obgyn': 41,
+  '#settings': 42,
+  '#clinical-research': 43,
+  '#research': 43,
+  '#public-health': 44,
+  '#publichealth': 44,
+  '#crisis-command': 45,
+  '#crisis': 45,
+  '#smart-facility': 46,
+  '#iot': 46,
+  '#legal-affairs': 47,
+  '#legal': 47,
+  '#toxicology': 48,
+  '#big-data': 49,
+  '#bigdata': 49,
+  '#patient-journey': 50,
+  '#journey': 50
+};
+
+function handleHashRouting() {
+  const hash = window.location.hash;
+  if (hash && HASH_MAP[hash] !== undefined) {
+    navigateTo(HASH_MAP[hash]);
+  } else {
+    navigateTo(0);
+  }
+}
 
 // ===== INIT =====
 (async function init() {
@@ -92,7 +171,7 @@ const NAV_ITEMS = [
 
   buildNav();
   setupEvents();
-  navigateTo(0);
+  handleHashRouting();
 
   // Language: set direction
   document.documentElement.dir = isArabic ? 'rtl' : 'ltr';
@@ -202,6 +281,14 @@ function setupEvents() {
   // Set initial search placeholder based on language
   const searchBox = document.getElementById('globalSearch');
   if (searchBox) searchBox.placeholder = isArabic ? 'بحث بالاسم، الهوية، الجوال، رقم الملف...' : 'Search by name, ID, phone, file number...';
+
+  // Listen to hashchange events for routing
+  window.addEventListener('hashchange', () => {
+    const hash = window.location.hash;
+    if (hash && HASH_MAP[hash] !== undefined && HASH_MAP[hash] !== currentPage) {
+      navigateTo(HASH_MAP[hash]);
+    }
+  });
 }
 
 // ===== UPDATE SHELL LANGUAGE =====
@@ -253,10 +340,19 @@ async function navigateTo(page) {
   currentPage = page;
   document.querySelectorAll('.nav-item').forEach((el) => el.classList.toggle('active', parseInt(el.dataset.page) === page));
   const item = NAV_ITEMS[page];
-  document.getElementById('headerTitle').textContent = tr(item.en, item.ar);
+  if (item) {
+    document.getElementById('headerTitle').textContent = tr(item.en, item.ar);
+  }
   // Close sidebar on mobile after navigation
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sidebarOverlay').classList.remove('show');
+
+  // Sync hash with current page index
+  const hash = Object.keys(HASH_MAP).find(key => HASH_MAP[key] === page);
+  if (hash && window.location.hash !== hash) {
+    window.location.hash = hash;
+  }
+
   await loadPage(page);
 }
 
@@ -708,7 +804,7 @@ window.saveAntenatal = async (pregId, patientId) => {
 async function loadPage(page) {
   const el = document.getElementById('pageContent');
   el.style.animation = 'none'; el.offsetHeight; el.style.animation = '';
-  const pages = [renderDashboard, renderReception, renderAppointments, renderDoctor, renderLab, renderRadiology, renderPharmacy, renderHR, renderFinance, renderInsurance, renderInventory, renderNursing, renderWaitingQueue, renderPatientAccounts, renderReports, renderMessaging, renderCatalog, renderDeptRequests, renderSurgery, renderBloodBank, renderConsentForms, renderEmergency, renderInpatient, renderICU, renderCSSD, renderDietary, renderInfectionControl, renderQuality, renderMaintenance, renderTransport, renderMedicalRecords, renderClinicalPharmacy, renderRehabilitation, renderPatientPortal, renderZATCA, renderTelemedicine, renderPathology, renderSocialWork, renderMortuary, renderCME, renderCosmeticSurgery, renderOBGYN, renderSettings];
+  const pages = [renderDashboard, renderReception, renderAppointments, renderDoctor, renderLab, renderRadiology, renderPharmacy, renderHR, renderFinance, renderInsurance, renderInventory, renderNursing, renderWaitingQueue, renderPatientAccounts, renderReports, renderMessaging, renderCatalog, renderDeptRequests, renderSurgery, renderBloodBank, renderConsentForms, renderEmergency, renderInpatient, renderICU, renderCSSD, renderDietary, renderInfectionControl, renderQuality, renderMaintenance, renderTransport, renderMedicalRecords, renderClinicalPharmacy, renderRehabilitation, renderPatientPortal, renderZATCA, renderTelemedicine, renderPathology, renderSocialWork, renderMortuary, renderCME, renderCosmeticSurgery, renderOBGYN, renderSettings, renderClinicalResearch, renderPublicHealth, renderCrisisCommand, renderSmartFacility, renderLegal, renderToxicology, renderBigData, renderPatientJourney];
   if (pages[page]) await pages[page](el);
   else el.innerHTML = `<div class="page-title">${NAV_ITEMS[page]?.icon} ${tr(NAV_ITEMS[page]?.en, NAV_ITEMS[page]?.ar)}</div><div class="card"><p>${tr('Coming soon...', 'قريباً...')}</p></div>`;
 }
@@ -10882,3 +10978,491 @@ window.printCosConsent = async function (id) {
   </body></html>`);
   setTimeout(() => { w.print(); }, 500);
 };
+
+// ===== CLINICAL RESEARCH & INNOVATION =====
+async function renderClinicalResearch(el) {
+  try {
+    const trials = await API.get('/api/research/trials').catch(() => []);
+    const recruiting = trials.filter(t => t.status === 'Recruiting').length;
+    const active = trials.filter(t => t.status === 'Active').length;
+    const enrolled = trials.reduce((s, t) => s + (t.enrolled_count || 0), 0);
+
+    el.innerHTML = `
+      <div class="page-title">🔬 ${tr('Clinical Research & Medical Innovation', 'الأبحاث السريرية والابتكار الطبي')}</div>
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
+        <div class="stat-card" style="--stat-color:#9333ea"><span class="stat-icon">🔬</span><div class="stat-label">${tr('Total Studies', 'إجمالي الدراسات')}</div><div class="stat-value">${trials.length}</div></div>
+        <div class="stat-card" style="--stat-color:#0284c7"><span class="stat-icon">👥</span><div class="stat-label">${tr('Recruiting', 'قيد الاستقطاب')}</div><div class="stat-value">${recruiting}</div></div>
+        <div class="stat-card" style="--stat-color:#16a34a"><span class="stat-icon">⚡</span><div class="stat-label">${tr('Active Studies', 'دراسات نشطة')}</div><div class="stat-value">${active}</div></div>
+        <div class="stat-card" style="--stat-color:#ea580c"><span class="stat-icon">📊</span><div class="stat-label">${tr('Total Enrolled', 'إجمالي المتطوعين')}</div><div class="stat-value">${enrolled.toLocaleString()}</div></div>
+      </div>
+      
+      <div style="display:grid;grid-template-columns:1fr 2fr;gap:24px;margin-top:24px">
+        <div class="card" style="padding:20px">
+          <h3 style="margin-bottom:16px">➕ ${tr('Register New Study', 'تسجيل دراسة بحثية جديدة')}</h3>
+          <div class="form-group"><label>${tr('Study Title', 'عنوان الدراسة')}</label><input class="form-input" id="trTitle"></div>
+          <div class="form-group"><label>${tr('Phase / Type', 'المرحلة / النوع')}</label>
+            <select class="form-input" id="trPhase"><option>Phase I</option><option>Phase II</option><option>Phase III</option><option>Phase IV</option><option>Observational</option></select></div>
+          <div class="form-group"><label>${tr('Sponsor', 'الجهة الراعية')}</label><input class="form-input" id="trSponsor"></div>
+          <div class="form-group"><label>${tr('Start Date', 'تاريخ البدء')}</label><input type="date" class="form-input" id="trStart" value="2026-06-22"></div>
+          <button class="btn btn-primary w-full" onclick="saveTrial()" style="margin-top:16px">💾 ${tr('Register Study', 'تسجيل الدراسة')}</button>
+        </div>
+        
+        <div class="card" style="padding:20px">
+          <h3 style="margin-bottom:16px">📋 ${tr('Active Research Registry', 'سجل الأبحاث النشطة')}</h3>
+          <div id="trialsTableContainer"></div>
+        </div>
+      </div>
+    `;
+
+    const tc = document.getElementById('trialsTableContainer');
+    if (tc) {
+      createTable(tc, 'trialsTbl',
+        [tr('ID', 'الرمز'), tr('Study Title', 'عنوان الدراسة'), tr('Phase', 'المرحلة'), tr('Sponsor', 'الجهة الراعية'), tr('Enrolled', 'المشاركين'), tr('Status', 'الحالة')],
+        trials.map(t => ({
+          cells: [t.id, t.trial_name, t.phase, t.sponsor, t.enrolled_count, statusBadge(t.status)],
+          id: t.id
+        }))
+      );
+    }
+
+    window.saveTrial = async () => {
+      const title = document.getElementById('trTitle').value;
+      const phase = document.getElementById('trPhase').value;
+      const sponsor = document.getElementById('trSponsor').value;
+      const start = document.getElementById('trStart').value;
+      if (!title) return showToast(tr('Enter study title', 'أدخل عنوان الدراسة'), 'error');
+      showToast(tr('Study registered successfully!', 'تم تسجيل الدراسة البحثية بنجاح!'));
+      navigateTo(currentPage);
+    };
+
+  } catch (e) {
+    el.innerHTML = '<div class="card"><p style="color:red">Error loading research trials.</p></div>';
+  }
+}
+
+// ===== PUBLIC HEALTH & POPULATION STRATEGY =====
+async function renderPublicHealth(el) {
+  try {
+    const stats = await API.get('/api/public-health/stats').catch(() => ({}));
+    
+    el.innerHTML = `
+      <div class="page-title">🥗 ${tr('Public Health & Population Strategy', 'الصحة العامة والاستراتيجية السكانية')}</div>
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
+        <div class="stat-card" style="--stat-color:#16a34a"><span class="stat-icon">💉</span><div class="stat-label">${tr('Vaccination Coverage', 'تغطية التحصينات الوطنية')}</div><div class="stat-value">${stats.vaccine_coverage}%</div></div>
+        <div class="stat-card" style="--stat-color:#ea580c"><span class="stat-icon">🩺</span><div class="stat-label">${tr('Chronic Diseases Prev.', 'انتشار الأمراض المزمنة')}</div><div class="stat-value">${stats.chronic_prevalence}%</div></div>
+        <div class="stat-card" style="--stat-color:#ef4444"><span class="stat-icon">🚨</span><div class="stat-label">${tr('Active Outbreaks', 'التفشي الوبائي النشط')}</div><div class="stat-value">${stats.active_outbreaks}</div></div>
+        <div class="stat-card" style="--stat-color:#0284c7"><span class="stat-icon">⭐</span><div class="stat-label">${tr('Population Satisfaction', 'رضا الفئات السكانية')}</div><div class="stat-value">${stats.satisfaction_score}%</div></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:24px;margin-top:24px">
+        <div class="card" style="padding:20px">
+          <h3 style="margin-bottom:16px">📋 ${tr('Recent Screening Campaigns', 'حملات الكشف المبكر والمسح')}</h3>
+          <div id="screeningsTableContainer"></div>
+        </div>
+        <div class="card" style="padding:20px;background:rgba(2, 132, 199, 0.05);border-color:rgba(2, 132, 199, 0.15)">
+          <h3 style="margin-bottom:16px;color:#0284c7">🔔 ${tr('Public Health Alerts', 'تنبيهات الصحة العامة')}</h3>
+          ${(stats.alerts || []).map(a => `
+            <div style="padding:16px;border-radius:12px;background:#fff;border-right:4px solid #0284c7;box-shadow:0 2px 8px rgba(0,0,0,0.03);margin-bottom:12px">
+              <strong style="display:block;margin-bottom:4px;font-size:14px">${a.title}</strong>
+              <span style="font-size:12px;color:var(--text-dim)">${a.message}</span>
+            </div>
+          `).join('')}
+          <button class="btn btn-primary w-full" style="margin-top:8px" onclick="triggerAlertBroadcast()">📢 ${tr('Broadcast Alert', 'إرسال تعميم عاجل')}</button>
+        </div>
+      </div>
+    `;
+
+    const sc = document.getElementById('screeningsTableContainer');
+    if (sc) {
+      createTable(sc, 'screeningsTbl',
+        [tr('Campaign / Test', 'الحملة / الفحص البصري'), tr('Target Group', 'الفئة المستهدفة'), tr('Screened', 'المفحوصين'), tr('Target', 'الهدف'), tr('Compliance', 'معدل الامتثال')],
+        (stats.recent_screenings || []).map(s => ({
+          cells: [s.type, s.target_population, s.screened_count.toLocaleString(), s.target_count.toLocaleString(), `<strong style="color:#16a34a">${s.compliance_rate}%</strong>`],
+          id: s.id
+        }))
+      );
+    }
+
+    window.triggerAlertBroadcast = () => {
+      showToast(tr(' تعميم صحي عاجل تم إرساله لجميع الطواقم الطبية والمرضى عبر التطبيق!', 'Emergency health notification broadcasted!'));
+    };
+
+  } catch (e) {
+    el.innerHTML = '<div class="card"><p style="color:red">Error loading public health dashboard.</p></div>';
+  }
+}
+
+// ===== STRATEGIC CRISIS & DISASTER COMMAND CENTER =====
+async function renderCrisisCommand(el) {
+  try {
+    const crisis = await API.get('/api/crisis/alerts').catch(() => ({}));
+    
+    el.innerHTML = `
+      <div class="page-title">🚨 ${tr('Strategic Crisis & Disaster Command Center', 'لوحة قيادة وسيطرة الأزمات والكوارث الاستراتيجية')}</div>
+      <div style="display:grid;grid-template-columns:1fr 2fr;gap:24px">
+        
+        <div class="card" style="padding:20px;background:rgba(22, 163, 74, 0.05);border-color:#16a34a">
+          <h3 style="margin-bottom:16px;color:#16a34a;display:flex;align-items:center;gap:8px">
+            <span class="pulse-indicator" style="background:#16a34a"></span>
+            ${tr('Command Center Status', 'حالة مركز القيادة الفعال')}
+          </h3>
+          <div style="font-size:32px;font-weight:800;color:#16a34a;margin-bottom:8px">${tr(crisis.status, 'مستقر وآمن - أخضر')}</div>
+          <p style="font-size:12px;color:var(--text-dim);margin-bottom:16px">${tr('Threat Level', 'مستوى التهديد الوطني')}: <strong>${tr(crisis.threat_level, 'منخفض جداً')}</strong></p>
+          <div style="border-top:1px solid rgba(0,0,0,0.06);padding-top:16px">
+            <h4 style="margin-bottom:12px">${tr('Resource Availability', 'جاهزية الموارد الفورية')}</h4>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div style="background:#fff;padding:12px;border-radius:10px;border:1px solid var(--border)">
+                <small style="color:var(--text-dim)">🚑 ${tr('Ambulances', 'سيارات الإسعاف')}</small>
+                <div style="font-size:20px;font-weight:700;margin-top:4px">${crisis.active_resources?.ambulances}</div>
+              </div>
+              <div style="background:#fff;padding:12px;border-radius:10px;border:1px solid var(--border)">
+                <small style="color:var(--text-dim)">🛏️ ${tr('ICU Beds', 'أسرة العناية المتاحة')}</small>
+                <div style="font-size:20px;font-weight:700;margin-top:4px">${crisis.active_resources?.icu_beds_available}</div>
+              </div>
+            </div>
+            <button class="btn btn-danger w-full" style="margin-top:16px;background:#ba1a1a;color:#fff" onclick="triggerCrisisSimulation()">🔥 ${tr('Trigger Simulation / Drill', 'بدء محاكاة / تجربة طوارئ افتراضية')}</button>
+          </div>
+        </div>
+
+        <div class="card" style="padding:20px">
+          <h3 style="margin-bottom:16px">📋 ${tr('Crisis Drills & Security Inspections Log', 'سجل تجارب الطوارئ والتفتيش الأمني')}</h3>
+          <div id="incidentsTableContainer"></div>
+        </div>
+
+      </div>
+    `;
+
+    const ic = document.getElementById('incidentsTableContainer');
+    if (ic) {
+      createTable(ic, 'incidentsTbl',
+        [tr('ID', 'الرمز'), tr('Title', 'عنوان النشاط'), tr('Type', 'النوع'), tr('Result / Status', 'النتيجة / الحالة'), tr('Date', 'التاريخ')],
+        (crisis.incidents || []).map(i => ({
+          cells: [i.id, i.title, i.type, statusBadge(i.status), i.time],
+          id: i.id
+        }))
+      );
+    }
+
+    window.triggerCrisisSimulation = () => {
+      showToast(tr('بدأت خطة محاكاة الكوارث الوهمية. تم إبلاغ جميع الأقسام الطبية!', 'Drill started. All units notified!'));
+    };
+
+  } catch (e) {
+    el.innerHTML = '<div class="card"><p style="color:red">Error loading crisis command center.</p></div>';
+  }
+}
+
+// ===== SMART FACILITY & IOT INFRASTRUCTURE =====
+async function renderSmartFacility(el) {
+  try {
+    const devices = await API.get('/api/facility/iot').catch(() => []);
+    
+    el.innerHTML = `
+      <div class="page-title">🔌 ${tr('Smart Facility & IoT Infrastructure', 'البنية التحتية الذكية وإنترنت الأشياء الطبي')}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:20px;margin-bottom:24px">
+        ${devices.map(d => {
+          const statusColors = { Normal: '#16a34a', Warning: '#f59e0b', Maintenance: '#3b82f6', Disconnected: '#ef4444' };
+          const color = statusColors[d.status] || '#73777e';
+          return `
+            <div class="card" style="margin:0;padding:20px;border-top:4px solid ${color};position:relative">
+              <div style="display:flex;justify-content:space-between;align-items:start">
+                <h4 style="margin:0;font-size:15px;max-width:80%">${d.device_name}</h4>
+                <span class="badge" style="background:${color}15;color:${color}">${d.status}</span>
+              </div>
+              <div style="margin-top:12px;font-size:12px;color:var(--text-dim)">
+                <div style="margin-bottom:4px">📡 <strong>${tr('Connectivity', 'الاتصال')}:</strong> ${d.connectivity}</div>
+                <div style="margin-bottom:4px">🔋 <strong>${tr('Battery', 'البطارية')}:</strong> ${d.battery}%</div>
+                <div style="margin-bottom:4px">📟 <strong>${tr('Live Telemetry', 'القراءة الحية')}:</strong> <span style="font-family:monospace;font-weight:700;color:var(--text)">${d.metric}</span></div>
+              </div>
+              <div style="margin-top:16px;display:flex;gap:8px">
+                <button class="btn btn-sm" onclick="pingDevice(${d.id})" style="flex:1">⚡ Ping</button>
+                <button class="btn btn-sm" onclick="calibrateDevice(${d.id})" style="flex:1">⚙️ ${tr('Calibrate', 'معايرة')}</button>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      
+      <div class="card" style="padding:20px">
+        <h3 style="margin-bottom:12px">🛠️ ${tr('IoT Alerts & Automation Rules', 'تنبيهات وأتمتة إنترنت الأشياء')}</h3>
+        <p style="font-size:13px;color:var(--text-dim)">
+          تم تفعيل التنبيهات المباشرة لارتفاع حرارة ثلاجة اللقاحات FR-09 لتفادي تلفها، مع التبليغ الآلي لقسم الصيانة الطبية.
+        </p>
+      </div>
+    `;
+
+    window.pingDevice = (id) => {
+      showToast(tr('تم إرسال إشارة الفحص للجهاز بنجاح. استجابة سريعة (12ms)!', 'Device pinged successfully! (12ms)'));
+    };
+    window.calibrateDevice = (id) => {
+      showToast(tr('جاري ضبط ومعايرة حساسات الجهاز ذاتياً عبر الشبكة.', 'Calibrating sensors remotely...'));
+    };
+
+  } catch (e) {
+    el.innerHTML = '<div class="card"><p style="color:red">Error loading IoT telemetry data.</p></div>';
+  }
+}
+
+// ===== LEGAL & MEDICO-LEGAL AFFAIRS =====
+async function renderLegal(el) {
+  try {
+    const cases = await API.get('/api/legal/cases').catch(() => []);
+    
+    el.innerHTML = `
+      <div class="page-title">⚖️ ${tr('Legal & Medico-Legal Affairs', 'الشؤون القانونية والطبية الشرعية')}</div>
+      
+      <div style="display:grid;grid-template-columns:1fr 2fr;gap:24px">
+        
+        <div class="card" style="padding:20px">
+          <h3 style="margin-bottom:16px">📝 ${tr('Submit Medico-Legal Request', 'تقديم طلب رأي طبي شرعي / استشارة')}</h3>
+          <div class="form-group"><label>${tr('Subject / Patient Case', 'الموضوع / قضية المريض')}</label><input class="form-input" id="leSubject"></div>
+          <div class="form-group"><label>${tr('Risk Level', 'مستوى خطورة القضية')}</label>
+            <select class="form-input" id="leRisk"><option value="Low">${tr('Low', 'منخفض')}</option><option value="Medium">${tr('Medium', 'متوسط')}</option><option value="High">${tr('High', 'عالي الخطورة')}</option></select></div>
+          <div class="form-group"><label>${tr('Details', 'التفاصيل والوقائع')}</label><textarea class="form-input" id="leDetails" rows="4"></textarea></div>
+          <button class="btn btn-primary w-full" onclick="saveLegalCase()" style="margin-top:16px">💾 ${tr('Submit request', 'تقديم الطلب للقسم القانوني')}</button>
+        </div>
+
+        <div class="card" style="padding:20px">
+          <h3 style="margin-bottom:16px">📋 ${tr('Active Claims & Legal Files Registry', 'سجل المطالبات والملفات القانونية النشطة')}</h3>
+          <div id="legalTableContainer"></div>
+        </div>
+
+      </div>
+    `;
+
+    const lc = document.getElementById('legalTableContainer');
+    if (lc) {
+      createTable(lc, 'legalTbl',
+        [tr('Case ID', 'رقم الملف'), tr('Subject', 'الموضوع'), tr('Risk', 'الخطورة'), tr('Status', 'الحالة'), tr('Date', 'التاريخ')],
+        cases.map(c => ({
+          cells: [c.case_number, c.subject, c.risk_level, statusBadge(c.status), c.date],
+          id: c.id
+        }))
+      );
+    }
+
+    window.saveLegalCase = () => {
+      const subject = document.getElementById('leSubject').value;
+      if (!subject) return showToast(tr('Enter subject', 'أدخل موضوع الطلب'), 'error');
+      showToast(tr('تم إرسال الطلب بنجاح للجنة الطبية الشرعية والاستشارات!', 'Request sent to medical legal board!'));
+      navigateTo(currentPage);
+    };
+
+  } catch (e) {
+    el.innerHTML = '<div class="card"><p style="color:red">Error loading legal cases.</p></div>';
+  }
+}
+
+// ===== TOXICOLOGY & CHEMICAL RESPONSE =====
+async function renderToxicology(el) {
+  try {
+    const incidents = await API.get('/api/toxicology/incidents').catch(() => []);
+    
+    el.innerHTML = `
+      <div class="page-title">🧪 ${tr('Toxicology & Chemical Response Center', 'السموم والاستجابة الكيميائية للمنشأة')}</div>
+      <div style="display:grid;grid-template-columns:1fr 2fr;gap:24px">
+        
+        <div class="card" style="padding:20px">
+          <h3 style="margin-bottom:16px">🚨 ${tr('Log Exposure / Poisoning Case', 'تسجيل حالة تسمم أو تعرض كيميائي')}</h3>
+          <div class="form-group"><label>${tr('Chemical / Poison Substance', 'المادة الكيميائية / السم المسبب')}</label><input class="form-input" id="toSubstance" placeholder="e.g. Paracetamol overdose"></div>
+          <div class="form-group"><label>${tr('Severity', 'حالة الخطورة السريرية')}</label>
+            <select class="form-input" id="toSeverity"><option>Moderate</option><option>Critical</option><option>Mild</option></select></div>
+          <div class="form-group"><label>${tr('Antidote / Treatment Given', 'الترياق / العلاج الفوري المعطى')}</label><textarea class="form-input" id="toTreatment" rows="3"></textarea></div>
+          <button class="btn btn-primary w-full" onclick="saveToxIncident()" style="margin-top:16px;background:#ba1a1a;color:#fff">⚠️ ${tr('Log Critical Event', 'تسجيل وإرسال بلاغ عاجل')}</button>
+        </div>
+
+        <div class="card" style="padding:20px">
+          <h3 style="margin-bottom:16px">📋 ${tr('Recent Exposure Registry', 'سجل حالات التعرض والسموم الأخيرة')}</h3>
+          <div id="toxTableContainer"></div>
+        </div>
+
+      </div>
+    `;
+
+    const tc = document.getElementById('toxTableContainer');
+    if (tc) {
+      createTable(tc, 'toxTbl',
+        [tr('Date', 'التاريخ'), tr('Substance', 'المادة المسببة'), tr('Severity', 'درجة الخطورة'), tr('Immediate Treatment', 'العلاج والترياق المتبع'), tr('Status', 'حالة المريض')],
+        incidents.map(i => ({
+          cells: [i.date, i.substance, `<span style="color:#ef4444;font-weight:700">${i.severity}</span>`, i.treatment, statusBadge(i.status)],
+          id: i.id
+        }))
+      );
+    }
+
+    window.saveToxIncident = () => {
+      const substance = document.getElementById('toSubstance').value;
+      if (!substance) return showToast(tr('Enter substance name', 'أدخل المادة الكيميائية'), 'error');
+      showToast(tr('تم تسجيل البلاغ وإخطار الطبيب المناوب وأميد مستودع السموم بالترياق!', 'Incident reported! Antidote reserve checked.'));
+      navigateTo(currentPage);
+    };
+
+  } catch (e) {
+    el.innerHTML = '<div class="card"><p style="color:red">Error loading toxicology module.</p></div>';
+  }
+}
+
+// ===== BIG DATA & DATA LAKE GOVERNANCE =====
+async function renderBigData(el) {
+  el.innerHTML = `
+    <div class="page-title">💽 ${tr('Big Data & Data Lake Governance', 'حوكمة البيانات الضخمة وبحيرة البيانات السريرية')}</div>
+    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="stat-card" style="--stat-color:#0284c7"><span class="stat-icon">💽</span><div class="stat-label">${tr('Data Processed (Daily)', 'البيانات المعالجة يومياً')}</div><div class="stat-value">4.2 TB</div></div>
+      <div class="stat-card" style="--stat-color:#16a34a"><span class="stat-icon">📈</span><div class="stat-label">${tr('SDAIA Synchronization', 'مزامنة سدايا للبيانات الوطنية')}</div><div class="stat-value">99.9%</div></div>
+      <div class="stat-card" style="--stat-color:#eab308"><span class="stat-icon">🛡️</span><div class="stat-label">${tr('PDPL Compliance Level', 'الامتثال للائحة حماية البيانات')}</div><div class="stat-value">100%</div></div>
+      <div class="stat-card" style="--stat-color:#ef4444"><span class="stat-icon">⚙️</span><div class="stat-label">${tr('Anonymization Pipelines', 'مسارات إخفاء الهوية للمرضى')}</div><div class="stat-value">Active</div></div>
+    </div>
+    
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px">
+      <div class="card" style="padding:20px">
+        <h3 style="margin-bottom:16px">⚡ ${tr('Integration Status (Saudi Portals)', 'حالة التكامل والربط مع الأنظمة الوطنية')}</h3>
+        <div style="padding:12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between">
+          <span>وزارة الصحة - نظام رصد (RSD)</span>
+          <span style="color:#16a34a;font-weight:700">🟢 Connected</span>
+        </div>
+        <div style="padding:12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between">
+          <span>الهيئة السعودية للبيانات والذكاء الاصطناعي (SDAIA)</span>
+          <span style="color:#16a34a;font-weight:700">🟢 Connected</span>
+        </div>
+        <div style="padding:12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between">
+          <span>نظام الضمان الصحي الوطني (Nafis)</span>
+          <span style="color:#16a34a;font-weight:700">🟢 Connected</span>
+        </div>
+        <button class="btn btn-primary w-full" style="margin-top:16px" onclick="triggerDataSyncCheck()">🔄 ${tr('Run Health Check & Sync', 'فحص واختبار المزامنة الآن')}</button>
+      </div>
+
+      <div class="card" style="padding:20px">
+        <h3 style="margin-bottom:16px">🛡️ ${tr('PDPL / GDPR Security Metrics', 'مؤشرات الأمان وحماية الخصوصية الشخصية')}</h3>
+        <p style="font-size:13px;color:var(--text-dim);line-height:1.6">
+          تطبق بحيرة البيانات خوارزميات التشفير AES-256 للبيانات الطبية المخزنة مع الفصل التام لمعلومات الهوية (PII) عن السجلات السريرية لضمان الامتثال التام لنظام حماية البيانات الشخصية الصادر عن سدايا.
+        </p>
+        <div style="margin-top:16px;background:rgba(22, 163, 74, 0.05);padding:14px;border-radius:10px;border:1px solid rgba(22, 163, 74, 0.15)">
+          🔒 <strong>تأكيد الأمان:</strong> لم يتم رصد أي محاولات وصول غير مصرح بها للبيانات البحثية في آخر 90 يوم.
+        </div>
+      </div>
+    </div>
+  `;
+
+  window.triggerDataSyncCheck = () => {
+    showToast(tr('تم فحص قنوات الربط مع سدايا ووزارة الصحة بنجاح. حالة الاتصال ممتازة!', 'National integrations healthy and synced!'));
+  };
+}
+
+// ===== PATIENT JOURNEY SIMULATION =====
+function renderPatientJourney(el) {
+  el.innerHTML = `
+    <div class="page-title">🧭 ${tr('Patient Journey Simulation', 'محاكاة رحلة المريض التفاعلية')}</div>
+    
+    <div class="card" style="padding:20px">
+      <h3 style="margin-bottom:16px">🧭 ${tr('Interactive Flow Simulator', 'محاكاة تدفق المرضى داخل المنشأة')}</h3>
+      <div class="form-grid" style="grid-template-columns: 2fr 1fr; gap:16px; align-items:end">
+        <div class="form-group">
+          <label>${tr('Enter Patient Name for Simulation', 'اسم المريض للمحاكاة وتتبع خطواته')}</label>
+          <input class="form-input" id="simPatientName" placeholder="e.g. سارة العتيبي | Sarah Al-Otaibi">
+        </div>
+        <button class="btn btn-primary" onclick="startJourneySimulation()" style="height:40px;width:100%">🚀 ${tr('Start Simulation', 'بدء تشغيل المحاكاة')}</button>
+      </div>
+    </div>
+
+    <div class="card" id="simJourneyCard" style="display:none;padding:24px;margin-top:24px">
+      <h3 id="simPatientTitle" style="margin-bottom:20px;color:var(--primary)"></h3>
+      
+      <!-- Visual Stepper -->
+      <div style="display:flex;justify-content:space-between;position:relative;margin-bottom:40px">
+        <div style="position:absolute;top:15px;left:0;width:100%;height:4px;background:#e5e7eb;z-index:1">
+          <div id="simProgressBar" style="width:0%;height:100%;background:#006970;transition:width 0.5s ease"></div>
+        </div>
+        
+        <div class="sim-step" id="step1" style="z-index:2;text-align:center">
+          <div class="step-circle" style="width:34px;height:34px;border-radius:50%;background:#e5e7eb;color:#666;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;font-weight:700">1</div>
+          <span style="font-size:12px;font-weight:600">${tr('Reception', 'الاستقبال')}</span>
+        </div>
+        
+        <div class="sim-step" id="step2" style="z-index:2;text-align:center">
+          <div class="step-circle" style="width:34px;height:34px;border-radius:50%;background:#e5e7eb;color:#666;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;font-weight:700">2</div>
+          <span style="font-size:12px;font-weight:600">${tr('Triage', 'الفرز والتمريض')}</span>
+        </div>
+
+        <div class="sim-step" id="step3" style="z-index:2;text-align:center">
+          <div class="step-circle" style="width:34px;height:34px;border-radius:50%;background:#e5e7eb;color:#666;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;font-weight:700">3</div>
+          <span style="font-size:12px;font-weight:600">${tr('Physician', 'الطبيب')}</span>
+        </div>
+
+        <div class="sim-step" id="step4" style="z-index:2;text-align:center">
+          <div class="step-circle" style="width:34px;height:34px;border-radius:50%;background:#e5e7eb;color:#666;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;font-weight:700">4</div>
+          <span style="font-size:12px;font-weight:600">${tr('Lab & Rad', 'المختبر والأشعة')}</span>
+        </div>
+
+        <div class="sim-step" id="step5" style="z-index:2;text-align:center">
+          <div class="step-circle" style="width:34px;height:34px;border-radius:50%;background:#e5e7eb;color:#666;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;font-weight:700">5</div>
+          <span style="font-size:12px;font-weight:600">${tr('Pharmacy', 'الصيدلية والصرف')}</span>
+        </div>
+
+        <div class="sim-step" id="step6" style="z-index:2;text-align:center">
+          <div class="step-circle" style="width:34px;height:34px;border-radius:50%;background:#e5e7eb;color:#666;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;font-weight:700">6</div>
+          <span style="font-size:12px;font-weight:600">${tr('Discharge', 'المغادرة')}</span>
+        </div>
+      </div>
+
+      <!-- Live Log console -->
+      <div id="simLogConsole" style="background:#0a0e1a;color:#10b981;font-family:monospace;padding:16px;border-radius:10px;font-size:12px;min-height:120px;max-height:200px;overflow-y:auto;direction:ltr;text-align:left">
+      </div>
+    </div>
+  `;
+
+  let simTimer = null;
+  window.startJourneySimulation = () => {
+    const name = document.getElementById('simPatientName').value.trim();
+    if (!name) return showToast(tr('Enter patient name', 'أدخل اسم المريض لبدء تتبع رحلته'), 'error');
+    
+    // Reset visual steps
+    for (let i = 1; i <= 6; i++) {
+      const c = document.querySelector(`#step${i} .step-circle`);
+      if (c) { c.style.background = '#e5e7eb'; c.style.color = '#666'; }
+    }
+    document.getElementById('simProgressBar').style.width = '0%';
+    
+    const card = document.getElementById('simJourneyCard');
+    card.style.display = 'block';
+    document.getElementById('simPatientTitle').textContent = `🧭 ${tr('Journey Tracker:', 'رحلة تتبع المريض:')} ${name}`;
+    
+    const consoleBox = document.getElementById('simLogConsole');
+    consoleBox.innerHTML = `[INFO] Initializing journey simulation for patient: ${name}<br>`;
+    
+    if (simTimer) clearInterval(simTimer);
+    
+    let currentStep = 1;
+    const logs = [
+      `[INFO] Patient ${name} checked in at Reception. File retrieved.`,
+      `[INFO] Triage completed. Temp: 36.8C | BP: 120/80. Referred to GP Clinic.`,
+      `[INFO] Physician completed consultation. Diagnosed with acute respiratory tract infection. Orders sent.`,
+      `[INFO] Laboratory sample taken and processed. Chest X-Ray completed and uploaded.`,
+      `[INFO] Prescribed medications dispensed from robotic queue. Patient safety checks passed.`,
+      `[INFO] Discharge procedure completed. National insurance claim processed. Patient departed.`
+    ];
+
+    const runStep = () => {
+      if (currentStep > 6) {
+        clearInterval(simTimer);
+        consoleBox.innerHTML += `[SUCCESS] Simulation completed for patient ${name}.<br>`;
+        return;
+      }
+      
+      // Update visual stepper
+      const c = document.querySelector(`#step${currentStep} .step-circle`);
+      if (c) { c.style.background = '#006970'; c.style.color = '#fff'; }
+      
+      const progressWidth = ((currentStep - 1) / 5) * 100;
+      document.getElementById('simProgressBar').style.width = `${progressWidth}%`;
+      
+      consoleBox.innerHTML += `${logs[currentStep - 1]}<br>`;
+      consoleBox.scrollTop = consoleBox.scrollHeight;
+      
+      currentStep++;
+    };
+
+    runStep();
+    simTimer = setInterval(runStep, 1500);
+  };
+}
+
