@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <title>إقرار موافقة على زراعة الشعر - Hair Transplant Consent Form</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+            padding: 25px;
+            color: #222;
+            direction: rtl;
+            line-height: 1.7;
+            font-size: 13px;
+        }
+
+        .header {
+            text-align: center;
+            border-bottom: 3px double #1a365d;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 19px;
+            color: #1a365d;
+            margin-bottom: 4px;
+        }
+
+        .header h2 {
+            font-size: 14px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .logo-area {
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
+        .hospital-name {
+            font-size: 12px;
+            color: #888;
+        }
+
+        .section {
+            margin: 14px 0;
+            padding: 14px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            page-break-inside: avoid;
+        }
+
+        .section h3 {
+            color: #1a365d;
+            font-size: 14px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 6px;
+            margin-bottom: 10px;
+        }
+
+        .section h3 span {
+            font-size: 12px;
+            color: #777;
+            font-weight: normal;
+            display: block;
+            direction: ltr;
+            text-align: left;
+        }
+
+        .field {
+            margin: 8px 0;
+        }
+
+        .field label {
+            font-weight: 700;
+            min-width: 180px;
+            display: inline-block;
+        }
+
+        .field .line {
+            border-bottom: 1px dotted #999;
+            display: inline-block;
+            min-width: 300px;
+            height: 22px;
+        }
+
+        .field-row {
+            display: flex;
+            gap: 20px;
+            margin: 8px 0;
+        }
+
+        .field-row .field {
+            flex: 1;
+        }
+
+        .risks-list li {
+            margin: 5px 0;
+            font-size: 12.5px;
+        }
+
+        .checkbox-item {
+            margin: 6px 0;
+            font-size: 13px;
+        }
+
+        .declaration {
+            background: #f7f8fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-size: 12px;
+        }
+
+        .sig-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        .sig-box {
+            text-align: center;
+        }
+
+        .sig-line {
+            border-top: 2px solid #333;
+            margin-top: 60px;
+            padding-top: 8px;
+        }
+
+        .sig-box p {
+            font-size: 11px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .bilingual {
+            color: #555;
+            font-size: 11px;
+            direction: ltr;
+            display: block;
+            text-align: left;
+            margin-top: 2px;
+            font-style: italic;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 10px;
+            color: #999;
+            border-top: 1px solid #ddd;
+            padding-top: 10px;
+        }
+
+        .info-box {
+            background: #eff6ff;
+            border: 1px solid #93c5fd;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border-right: 4px solid #3b82f6;
+        }
+
+        .warning-box {
+            background: #fef2f2;
+            border: 1px solid #fca5a5;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border-right: 4px solid #ef4444;
+        }
+
+        .treatment-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+            font-size: 12px;
+        }
+
+        .treatment-table th,
+        .treatment-table td {
+            border: 1px solid #ddd;
+            padding: 6px 10px;
+            text-align: right;
+        }
+
+        .treatment-table th {
+            background: #f0f4f8;
+            color: #1a365d;
+        }
+
+        .norwood {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
+            text-align: center;
+            font-size: 10px;
+            margin: 8px 0;
+        }
+
+        .norwood div {
+            padding: 8px 4px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+        }
+
+        @media print {
+            body {
+                padding: 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <div class="logo-area">💇‍♂️💎</div>
+        <h1>نموذج إقرار وموافقة على عملية زراعة الشعر</h1>
+        <h2>Hair Transplant (FUE/FUT) Consent Form</h2>
+        <div class="hospital-name">جمانا الطبي — jumanaMedical</div>
+    </div>
+
+    <div class="section">
+        <h3>📋 بيانات المريض <span>Patient Information</span></h3>
+        <div class="field-row">
+            <div class="field"><label>اسم المريض / Name:</label> <span class="line"></span></div>
+            <div class="field"><label>رقم الملف / File #:</label> <span class="line"></span></div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>رقم الهوية / ID #:</label> <span class="line"></span></div>
+            <div class="field"><label>العمر / Age:</label> <span class="line"></span></div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>تاريخ العائلة مع الصلع / Family History:</label> ☐ نعم Yes &nbsp; ☐ لا No</div>
+            <div class="field"><label>عمليات سابقة / Previous Transplants:</label> ☐ لا &nbsp; ☐ نعم (____ مرة)</div>
+        </div>
+        <div class="field"><label>درجة الصلع (Norwood Scale) / Baldness Grade:</label></div>
+        <div class="norwood">
+            <div>☐ I<br>طبيعي</div>
+            <div>☐ II<br>خفيف</div>
+            <div>☐ III<br>متوسط</div>
+            <div>☐ IIIa<br>الجبهة</div>
+            <div>☐ IV<br>متقدم</div>
+            <div>☐ V<br>شديد</div>
+            <div>☐ VI-VII<br>كامل</div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>🔬 تفاصيل العملية <span>Procedure Details</span></h3>
+        <div class="field"><label>تقنية الزراعة / Technique:</label>
+            ☐ FUE (اقتطاف) &nbsp; ☐ FUT (شريحة) &nbsp; ☐ DHI (قلم تشوي) &nbsp; ☐ Sapphire FUE</div>
+        <div class="field"><label>منطقة الزراعة / Recipient Area:</label>
+            ☐ مقدمة الرأس &nbsp; ☐ وسط الرأس &nbsp; ☐ التاج &nbsp; ☐ الحواجب &nbsp; ☐ اللحية &nbsp; ☐ الشارب</div>
+
+        <table class="treatment-table">
+            <tr>
+                <th>البيان / Detail</th>
+                <th>القيمة / Value</th>
+            </tr>
+            <tr>
+                <td>عدد البصيلات المقدّر / Estimated Grafts</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>المنطقة المانحة / Donor Area</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>كثافة الزراعة / Density (grafts/cm²)</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>اسم الجراح / Surgeon</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>نوع التخدير / Anesthesia</td>
+                <td>☐ موضعي Local &nbsp; ☐ تسكين Sedation</td>
+            </tr>
+            <tr>
+                <td>المدة المتوقعة / Duration</td>
+                <td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ساعة / hour(s)</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="section">
+        <h3>⚠️ المخاطر والمضاعفات المحتملة <span>Risks & Complications</span></h3>
+        <ul class="risks-list">
+            <li>🩸 <strong>نزيف / Bleeding:</strong> نزيف من المنطقة المانحة أو المزروعة — From donor or recipient area
+            </li>
+            <li>🦠 <strong>عدوى / Infection:</strong> التهاب البصيلات — Folliculitis or wound infection</li>
+            <li>🩹 <strong>تندب / Scarring:</strong> ندبات في المنطقة المانحة — Donor area scarring (خاصة FUT)</li>
+            <li>💢 <strong>خدر مؤقت / Temporary Numbness:</strong> فقدان الإحساس في فروة الرأس — Scalp numbness</li>
+            <li>📉 <strong>تساقط صدمة / Shock Loss:</strong> تساقط مؤقت للشعر الأصلي (شائع) — Temporary shedding of
+                existing hair</li>
+            <li>❌ <strong>فشل البصيلات / Graft Failure:</strong> عدم نمو بعض البصيلات المزروعة — Some grafts may not
+                grow</li>
+            <li>📐 <strong>نتائج غير مرضية / Unsatisfactory Results:</strong> كثافة أقل من المتوقع — Less density than
+                expected</li>
+            <li>⚖️ <strong>مظهر غير طبيعي / Unnatural Appearance:</strong> خط شعر غير طبيعي — Unnatural hairline</li>
+            <li>🔄 <strong>الحاجة لجلسة إضافية / Additional Session Needed:</strong> لتحقيق الكثافة المطلوبة — For
+                desired density</li>
+            <li>🤕 <strong>ألم وتورم / Pain & Swelling:</strong> في الجبهة والجفون (مؤقت) — Forehead and eyelid swelling
+            </li>
+            <li>💊 <strong>ردود فعل تخديرية / Anesthesia Reactions</strong></li>
+            <li>📉 <strong>ترقق المنطقة المانحة / Donor Area Thinning:</strong> خفة شعر المنطقة المانحة — Thinning of
+                donor area</li>
+        </ul>
+    </div>
+
+    <div class="info-box">
+        <strong>ℹ️ معلومات مهمة / Important Information:</strong><br>
+        • الشعر المزروع يتساقط خلال 2-4 أسابيع (طبيعي) ثم ينمو بعد 3-4 أشهر / Transplanted hair falls out in 2-4 weeks
+        (normal), regrows after 3-4 months<br>
+        • النتيجة النهائية تظهر بعد 12-18 شهراً / Final results appear after 12-18 months<br>
+        • نسبة النمو المتوقعة: 85-95% من البصيلات / Expected growth rate: 85-95% of grafts<br>
+        • قد تحتاج لاستخدام مينوكسيديل أو فيناسترايد للحفاظ على الشعر / Minoxidil or Finasteride may be needed
+    </div>
+
+    <div class="warning-box">
+        <strong>🚫 تنبيهات ما قبل العملية / Pre-Op Warnings:</strong><br>
+        ☐ توقفت عن التدخين قبل أسبوعين / Stopped smoking 2 weeks before<br>
+        ☐ توقفت عن مميعات الدم والأسبرين / Stopped blood thinners and aspirin<br>
+        ☐ توقفت عن المينوكسيديل قبل أسبوع / Stopped Minoxidil 1 week before<br>
+        ☐ لا أعاني من أمراض جلدية في فروة الرأس / No active scalp skin diseases
+    </div>
+
+    <div class="section">
+        <h3>📋 موافقات إضافية <span>Additional Consents</span></h3>
+        <div class="checkbox-item">☐ أوافق على التصوير قبل وبعد / I consent to before & after photography</div>
+        <div class="checkbox-item">☐ أوافق على التخدير الموضح / I consent to described anesthesia</div>
+        <div class="checkbox-item">☐ أفهم أن النتائج النهائية تستغرق 12-18 شهراً / I understand final results take 12-18
+            months</div>
+        <div class="checkbox-item">☐ أفهم أنني قد أحتاج جلسة ثانية / I understand a second session may be needed</div>
+        <div class="checkbox-item">☐ أتعهد بالالتزام بتعليمات ما بعد العملية / I commit to post-op instructions</div>
+    </div>
+
+    <div class="declaration">
+        <h3 style="color: #1a365d; margin-bottom: 10px;">📝 الإقرار / Declaration</h3>
+        <p>أقر بأنني فهمت كل ما يتعلق بعملية زراعة الشعر من حيث الإجراء والمخاطر والنتائج المتوقعة ومدة التعافي. أوافق
+            على إجراء العملية بكامل إرادتي.</p>
+        <p style="direction: ltr; text-align: left; font-style: italic;">I fully understand the hair transplant
+            procedure, risks, expected results, and recovery timeline. I consent to the procedure voluntarily.</p>
+    </div>
+
+    <div class="sig-grid">
+        <div class="sig-box">
+            <div class="sig-line"><strong>توقيع المريض</strong></div>
+            <p>Patient Signature</p>
+        </div>
+        <div class="sig-box">
+            <div class="sig-line"><strong>توقيع الجراح</strong></div>
+            <p>Surgeon Signature</p>
+        </div>
+        <div class="sig-box">
+            <div class="sig-line"><strong>توقيع الشاهد</strong></div>
+            <p>Witness Signature</p>
+        </div>
+    </div>
+
+    <div class="footer">نموذج رقم: COS-006 | الإصدار: 1.0 | جمانا الطبي — jumanaMedical | Form No: COS-006</div>
+</body>
+
+</html>

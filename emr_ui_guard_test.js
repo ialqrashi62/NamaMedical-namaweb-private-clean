@@ -1,0 +1,11 @@
+const fs=require('fs');const s=fs.readFileSync(require('path').join(__dirname,'public/js/app.js'),'utf8');
+let p=0,f=0;const ok=(c,m)=>{if(c){p++;console.log('  PASS',m)}else{f++;console.log('  FAIL',m)}};
+ok(/window\.signMedicalRecord =/.test(s),"signMedicalRecord handler");
+ok(/window\.amendMedicalRecord =/.test(s),"amendMedicalRecord handler");
+ok(/'\/api\/medical-records\/' \+ id \+ '\/sign'/.test(s),"sign calls deployed /sign endpoint");
+ok(/'\/api\/medical-records\/' \+ id \+ '\/amend'/.test(s),"amend calls deployed /amend endpoint");
+ok(/function emrStatusBadge/.test(s) && /Locked\/Signed/.test(s),"status badge (Draft/Signed/Locked)");
+ok(/emrRecordActions\(r\)/.test(s),"actions column wired into records table");
+ok(/Amendment reason \(required\)/.test(s),"amendment reason prompt (modal)");
+ok(/tr\('Status', 'الحالة'\)/.test(s) && /tr\('Actions', 'إجراءات'\)/.test(s),"Status+Actions columns added (RTL labels)");
+console.log(`\n${f===0?'ALL PASS':'FAIL'}: ${p} passed, ${f} failed`);process.exit(f===0?0:1);

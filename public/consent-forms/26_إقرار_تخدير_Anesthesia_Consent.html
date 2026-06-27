@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <title>إقرار موافقة على التخدير - Anesthesia Consent Form</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+            padding: 25px;
+            color: #222;
+            direction: rtl;
+            line-height: 1.7;
+            font-size: 13px;
+        }
+
+        .header {
+            text-align: center;
+            border-bottom: 3px double #1a365d;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            color: #1a365d;
+            margin-bottom: 4px;
+        }
+
+        .header h2 {
+            font-size: 15px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .logo-area {
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
+        .hospital-name {
+            font-size: 12px;
+            color: #888;
+        }
+
+        .section {
+            margin: 14px 0;
+            padding: 14px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            page-break-inside: avoid;
+        }
+
+        .section h3 {
+            color: #1a365d;
+            font-size: 14px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 6px;
+            margin-bottom: 10px;
+        }
+
+        .section h3 span {
+            font-size: 12px;
+            color: #777;
+            font-weight: normal;
+            display: block;
+            direction: ltr;
+            text-align: left;
+        }
+
+        .field {
+            margin: 8px 0;
+        }
+
+        .field label {
+            font-weight: 700;
+            min-width: 180px;
+            display: inline-block;
+        }
+
+        .field .line {
+            border-bottom: 1px dotted #999;
+            display: inline-block;
+            min-width: 300px;
+            height: 22px;
+        }
+
+        .field-row {
+            display: flex;
+            gap: 20px;
+            margin: 8px 0;
+        }
+
+        .field-row .field {
+            flex: 1;
+        }
+
+        .risks-list {
+            columns: 2;
+            column-gap: 30px;
+        }
+
+        .risks-list li {
+            margin: 4px 0;
+            font-size: 12px;
+        }
+
+        .checkbox-item {
+            margin: 6px 0;
+            font-size: 13px;
+        }
+
+        .declaration {
+            background: #f7f8fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-size: 12px;
+        }
+
+        .declaration p {
+            margin-bottom: 10px;
+        }
+
+        .sig-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        .sig-box {
+            text-align: center;
+        }
+
+        .sig-line {
+            border-top: 2px solid #333;
+            margin-top: 60px;
+            padding-top: 8px;
+        }
+
+        .sig-box p {
+            font-size: 11px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 10px;
+            color: #999;
+            border-top: 1px solid #ddd;
+            padding-top: 10px;
+        }
+
+        .bilingual {
+            color: #555;
+            font-size: 11px;
+            direction: ltr;
+            display: block;
+            text-align: left;
+            margin-top: 2px;
+        }
+
+        @media print {
+            body {
+                padding: 0;
+            }
+
+            .section {
+                border-color: #999;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <div class="logo-area">💉🏥</div>
+        <h1>نموذج إقرار وموافقة على التخدير</h1>
+        <h2>Anesthesia Consent Form</h2>
+        <div class="hospital-name">جمانا الطبي — jumanaMedical</div>
+    </div>
+
+    <div class="section">
+        <h3>📋 بيانات المريض <span>Patient Information</span></h3>
+        <div class="field-row">
+            <div class="field"><label>اسم المريض / Name:</label> <span class="line"></span></div>
+            <div class="field"><label>رقم الملف / File #:</label> <span class="line"></span></div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>رقم الهوية / ID #:</label> <span class="line"></span></div>
+            <div class="field"><label>العمر / Age:</label> <span class="line"></span></div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>الوزن / Weight:</label> <span class="line"></span> كغم</div>
+            <div class="field"><label>الطول / Height:</label> <span class="line"></span> سم</div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>التاريخ / Date:</label> <span class="line"></span></div>
+            <div class="field"><label>العملية المقررة / Planned Procedure:</label> <span class="line"></span></div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>💉 نوع التخدير المقترح <span>Proposed Anesthesia Type</span></h3>
+        <div class="checkbox-item">☐ تخدير عام (General Anesthesia) — يشمل فقدان الوعي الكامل والتنفس الصناعي</div>
+        <div class="checkbox-item">☐ تخدير نصفي / نخاعي (Spinal Anesthesia) — حقن في الظهر لتخدير النصف السفلي</div>
+        <div class="checkbox-item">☐ تخدير فوق الجافية (Epidural Anesthesia) — حقن مستمر عبر قسطرة في الظهر</div>
+        <div class="checkbox-item">☐ تخدير موضعي (Local Anesthesia) — تخدير المنطقة المحددة فقط</div>
+        <div class="checkbox-item">☐ تخدير ناحي / إحصار عصبي (Regional Block) — تخدير منطقة عصبية محددة</div>
+        <div class="checkbox-item">☐ تسكين واعي (Conscious Sedation) — أدوية مهدئة مع بقاء المريض واعياً جزئياً</div>
+        <div class="field" style="margin-top: 10px;"><label>ملاحظات إضافية / Additional Notes:</label> <span
+                class="line"></span></div>
+    </div>
+
+    <div class="section">
+        <h3>📋 التاريخ الطبي المتعلق بالتخدير <span>Anesthesia-Related Medical History</span></h3>
+        <div class="checkbox-item">☐ هل سبق لك إجراء تخدير؟ / Have you had anesthesia before? &nbsp; ☐ نعم Yes &nbsp; ☐
+            لا No</div>
+        <div class="checkbox-item">☐ هل حدثت مضاعفات من التخدير سابقاً؟ / Previous anesthesia complications? &nbsp; ☐
+            نعم &nbsp; ☐ لا</div>
+        <div class="checkbox-item">☐ هل لديك حساسية من أدوية؟ / Drug allergies? &nbsp; ☐ نعم &nbsp; ☐ لا — التفاصيل:
+            <span class="line" style="min-width:150px"></span></div>
+        <div class="checkbox-item">☐ هل يوجد تاريخ عائلي لمشاكل التخدير؟ / Family history of anesthesia problems? &nbsp;
+            ☐ نعم &nbsp; ☐ لا</div>
+        <div class="checkbox-item">☐ هل تعاني من مشاكل في القلب أو الرئة؟ / Heart or lung problems? &nbsp; ☐ نعم &nbsp;
+            ☐ لا</div>
+        <div class="checkbox-item">☐ هل تعاني من صعوبة في فتح الفم أو تحريك الرقبة؟ / Difficulty opening mouth or moving
+            neck? &nbsp; ☐ نعم &nbsp; ☐ لا</div>
+        <div class="checkbox-item">☐ هل أنتِ حامل أو مرضعة؟ / Are you pregnant or breastfeeding? &nbsp; ☐ نعم &nbsp; ☐
+            لا &nbsp; ☐ لا ينطبق N/A</div>
+        <div class="field"><label>تصنيف ASA / ASA Classification:</label> ☐ I &nbsp; ☐ II &nbsp; ☐ III &nbsp; ☐ IV
+            &nbsp; ☐ V</div>
+        <div class="field"><label>Mallampati Score:</label> ☐ Class I &nbsp; ☐ Class II &nbsp; ☐ Class III &nbsp; ☐
+            Class IV</div>
+    </div>
+
+    <div class="section">
+        <h3>⚠️ المخاطر والمضاعفات المحتملة <span>Risks & Potential Complications</span></h3>
+        <ul class="risks-list">
+            <li>غثيان وقيء بعد التخدير / Post-anesthesia nausea & vomiting</li>
+            <li>التهاب أو ألم في الحلق / Sore throat</li>
+            <li>صداع (خاصة التخدير النخاعي) / Headache (esp. spinal)</li>
+            <li>ردود فعل تحسسية / Allergic reactions</li>
+            <li>صعوبة التنفس / Breathing difficulty</li>
+            <li>إصابة الأسنان أو الشفاه / Dental or lip injury</li>
+            <li>بحة في الصوت / Hoarseness</li>
+            <li>ألم في الظهر (التخدير النخاعي) / Back pain</li>
+            <li>إصابة أعصاب (نادرة) / Nerve injury (rare)</li>
+            <li>هبوط ضغط الدم / Hypotension</li>
+            <li>عدم انتظام ضربات القلب / Arrhythmia</li>
+            <li>ارتفاع الحرارة الخبيث (نادر جداً) / Malignant hyperthermia (very rare)</li>
+            <li>وعي أثناء التخدير (نادر) / Awareness during anesthesia (rare)</li>
+            <li>الوفاة (نادر جداً) / Death (extremely rare)</li>
+        </ul>
+    </div>
+
+    <div class="declaration">
+        <h3 style="color: #1a365d; margin-bottom: 10px;">📝 الإقرار والتوقيع / Declaration & Signature</h3>
+        <p>
+            أقر أنا الموقع أدناه بموافقتي على إجراء التخدير اللازم للعملية / الإجراء الطبي. تم إبلاغي بنوع التخدير
+            المقترح والمخاطر والمضاعفات المحتملة والبدائل المتاحة. أقر بأنني صائم(ة) منذ ______ ساعة وأبلغت الطبيب
+            بتاريخي الطبي الكامل وجميع الأدوية التي أتناولها.
+        </p>
+        <p style="direction: ltr; text-align: left; font-style: italic;">
+            I consent to the anesthesia required for the planned procedure. The type of anesthesia, risks,
+            complications, and alternatives have been explained. I confirm I have been fasting for ______ hours and have
+            disclosed my complete medical history and medications.
+        </p>
+    </div>
+
+    <div class="sig-grid">
+        <div class="sig-box">
+            <div class="sig-line"><strong>توقيع المريض</strong></div>
+            <p>Patient Signature</p>
+            <p>الاسم / Name: _____________</p>
+        </div>
+        <div class="sig-box">
+            <div class="sig-line"><strong>توقيع طبيب التخدير</strong></div>
+            <p>Anesthesiologist Signature</p>
+            <p>الاسم / Name: _____________</p>
+        </div>
+        <div class="sig-box">
+            <div class="sig-line"><strong>توقيع الشاهد</strong></div>
+            <p>Witness Signature</p>
+            <p>الاسم / Name: _____________</p>
+        </div>
+    </div>
+
+    <div class="footer">
+        نموذج رقم: ANE-001 | الإصدار: 1.0 | التاريخ: 2026 | جمانا الطبي — jumanaMedical<br>
+        Form No: ANE-001 | Version: 1.0 | Must be completed before any anesthesia administration
+    </div>
+
+</body>
+
+</html>

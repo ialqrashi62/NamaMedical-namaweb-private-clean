@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <title>إقرار إزالة الوشم - Tattoo Removal Consent</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+            padding: 25px;
+            color: #222;
+            direction: rtl;
+            line-height: 1.7;
+            font-size: 13px
+        }
+
+        .header {
+            text-align: center;
+            border-bottom: 3px double #1a365d;
+            padding-bottom: 15px;
+            margin-bottom: 20px
+        }
+
+        .header h1 {
+            font-size: 19px;
+            color: #1a365d;
+            margin-bottom: 4px
+        }
+
+        .header h2 {
+            font-size: 14px;
+            color: #555;
+            font-weight: 500
+        }
+
+        .logo-area {
+            font-size: 28px;
+            margin-bottom: 8px
+        }
+
+        .hospital-name {
+            font-size: 12px;
+            color: #888
+        }
+
+        .section {
+            margin: 14px 0;
+            padding: 14px;
+            border: 1px solid #ccc;
+            border-radius: 8px
+        }
+
+        .section h3 {
+            color: #1a365d;
+            font-size: 14px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 6px;
+            margin-bottom: 10px
+        }
+
+        .section h3 span {
+            font-size: 12px;
+            color: #777;
+            font-weight: normal;
+            display: block;
+            direction: ltr;
+            text-align: left
+        }
+
+        .field {
+            margin: 8px 0
+        }
+
+        .field label {
+            font-weight: 700;
+            min-width: 180px;
+            display: inline-block
+        }
+
+        .field .line {
+            border-bottom: 1px dotted #999;
+            display: inline-block;
+            min-width: 250px;
+            height: 22px
+        }
+
+        .risks-list li {
+            margin: 5px 0;
+            font-size: 12.5px
+        }
+
+        .declaration {
+            background: #f7f8fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-size: 12px
+        }
+
+        .sig-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            margin-top: 30px
+        }
+
+        .sig-box {
+            text-align: center
+        }
+
+        .sig-line {
+            border-top: 2px solid #333;
+            margin-top: 60px;
+            padding-top: 8px
+        }
+
+        .sig-box p {
+            font-size: 11px;
+            color: #666;
+            margin-top: 4px
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 10px;
+            color: #999;
+            border-top: 1px solid #ddd;
+            padding-top: 10px
+        }
+
+        .warning-box {
+            background: #fef2f2;
+            border: 1px solid #fca5a5;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border-right: 4px solid #ef4444
+        }
+
+        @media print {
+            body {
+                padding: 0
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <div class="logo-area">🔫✨</div>
+        <h1>نموذج إقرار وموافقة على إزالة الوشم بالليزر</h1>
+        <h2>Laser Tattoo Removal Consent Form</h2>
+        <div class="hospital-name">جمانا الطبي — jumanaMedical</div>
+    </div>
+    <div class="section">
+        <h3>📋 بيانات المريض <span>Patient Information</span></h3>
+        <div class="field"><label>اسم المريض / Name:</label> <span class="line"></span></div>
+        <div class="field"><label>رقم الملف / File #:</label> <span class="line"></span></div>
+        <div class="field"><label>التاريخ / Date:</label> <span class="line"></span></div>
+    </div>
+    <div class="section">
+        <h3>🔬 تفاصيل الوشم والعلاج <span>Tattoo & Treatment Details</span></h3>
+        <div class="field"><label>موقع الوشم / Location:</label> <span class="line"></span></div>
+        <div class="field"><label>حجم الوشم / Size:</label> <span class="line"></span> x <span class="line"></span> سم /
+            cm</div>
+        <div class="field"><label>ألوان الوشم / Colors:</label> ☐ أسود Black ☐ أزرق Blue ☐ أحمر Red ☐ أخضر Green ☐ أصفر
+            Yellow ☐ متعدد Multi</div>
+        <div class="field"><label>نوع الوشم / Type:</label> ☐ احترافي Professional ☐ هاوي Amateur ☐ تجميلي Cosmetic
+            (Microblading)</div>
+        <div class="field"><label>عمر الوشم / Age:</label> <span class="line"></span> سنة / years</div>
+        <div class="field"><label>الجهاز / Device:</label> <span class="line"></span> (Q-Switched / Pico)</div>
+        <div class="field"><label>رقم الجلسة / Session #:</label> <span class="line"></span> من / of <span
+                class="line"></span></div>
+        <div class="field"><label>اسم الطبيب / Physician:</label> <span class="line"></span></div>
+    </div>
+    <div class="section">
+        <h3>⚠️ المخاطر <span>Risks</span></h3>
+        <ul class="risks-list">
+            <li>🔥 <strong>حروق / Burns:</strong> تقرحات أو حروق سطحية — Blistering or superficial burns</li>
+            <li>🎨 <strong>فرط تصبغ / Hyperpigmentation:</strong> اسمرار مؤقت — Temporary darkening</li>
+            <li>⚪ <strong>نقص تصبغ / Hypopigmentation:</strong> رقعة فاتحة دائمة (شائع) — Permanent light patch (common)
+            </li>
+            <li>🩹 <strong>تندب / Scarring:</strong> ندبة في مكان الوشم — Scarring at tattoo site</li>
+            <li>📐 <strong>إزالة غير كاملة / Incomplete Removal:</strong> خاصة الألوان الفاتحة — Especially lighter
+                colors</li>
+            <li>🔄 <strong>تغيير لون الوشم / Color Change:</strong> بعض الألوان قد تصبح أغمق مؤقتاً — Some colors may
+                darken temporarily</li>
+            <li>🦠 <strong>عدوى / Infection:</strong> في مكان العلاج — At treatment site</li>
+            <li>⚡ <strong>حساسية / Allergic Reaction:</strong> من تحلل حبيبات الحبر — From ink particle breakdown</li>
+        </ul>
+    </div>
+    <div class="warning-box"><strong>⚠️ معلومات مهمة:</strong><br>
+        • تحتاج 6-12 جلسة بفاصل 6-8 أسابيع / 6-12 sessions, 6-8 weeks apart<br>
+        • الإزالة الكاملة غير مضمونة / Complete removal not guaranteed<br>
+        • الألوان الفاتحة (أصفر/أخضر) أصعب في الإزالة / Lighter colors harder to remove<br>
+        • البشرة الداكنة أكثر عرضة لتغيرات اللون / Darker skin more prone to color changes</div>
+    <div class="declaration">
+        <p>أقر بأنني فهمت أن إزالة الوشم تحتاج عدة جلسات والإزالة الكاملة غير مضمونة. أوافق بكامل إرادتي.</p>
+        <p style="direction:ltr;text-align:left;font-style:italic;">I understand multiple sessions are needed and
+            complete removal is not guaranteed. I consent voluntarily.</p>
+    </div>
+    <div class="sig-grid">
+        <div class="sig-box">
+            <div class="sig-line"><strong>توقيع المريض</strong></div>
+            <p>Patient</p>
+        </div>
+        <div class="sig-box">
+            <div class="sig-line"><strong>توقيع الطبيب</strong></div>
+            <p>Physician</p>
+        </div>
+        <div class="sig-box">
+            <div class="sig-line"><strong>توقيع الشاهد</strong></div>
+            <p>Witness</p>
+        </div>
+    </div>
+    <div class="footer">نموذج رقم: COS-015 | جمانا الطبي — jumanaMedical</div>
+</body>
+
+</html>

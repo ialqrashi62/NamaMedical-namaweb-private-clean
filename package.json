@@ -1,0 +1,35 @@
+{
+  "name": "nama-medical-web",
+  "version": "1.0.0",
+  "description": "Nama Medical ERP - Web Application",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node run_all_tests.js",
+    "setup": "setup.bat",
+    "build:css": "tailwindcss -i ./tailwind-input.css -o ./public/css/tailwind-compiled.css --minify",
+    "postinstall": "node -e \"const fs=require('fs');if(!fs.existsSync('.env')&&fs.existsSync('.env.example')){fs.copyFileSync('.env.example','.env');console.log('✅ Created .env from .env.example')}\" && npm run build:css"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^11.0.0",
+    "compression": "^1.8.1",
+    "connect-redis": "^9.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.3.1",
+    "express": "^4.21.0",
+    "express-rate-limit": "^8.2.1",
+    "express-session": "^1.18.0",
+    "helmet": "^8.1.0",
+    "multer": "^2.0.2",
+    "pg": "^8.18.0",
+    "redis": "^6.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/container-queries": "^0.1.1",
+    "@tailwindcss/forms": "^0.5.7",
+    "tailwindcss": "^3.4.1"
+  }
+}

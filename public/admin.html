@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>لوحة التحكم الإدارية — Nama Admin</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box
+    }
+
+    :root {
+      --bg: #0a0e1a;
+      --bg2: #111827;
+      --bg3: #1f2937;
+      --card: rgba(30, 41, 59, 0.8);
+      --border: rgba(99, 102, 241, 0.2);
+      --primary: #6366f1;
+      --primary-glow: rgba(99, 102, 241, 0.3);
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --info: #3b82f6;
+      --text: #f1f5f9;
+      --text2: #94a3b8;
+      --text3: #64748b;
+      --grad1: linear-gradient(135deg, #6366f1, #8b5cf6);
+      --grad2: linear-gradient(135deg, #10b981, #059669);
+      --grad3: linear-gradient(135deg, #f59e0b, #d97706);
+      --grad4: linear-gradient(135deg, #ef4444, #dc2626);
+    }
+
+    body {
+      font-family: 'Tajawal', 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden
+    }
+
+    .bg-pattern {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background: radial-gradient(ellipse at 20% 50%, rgba(99, 102, 241, 0.08), transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(139, 92, 246, 0.06), transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(16, 185, 129, 0.04), transparent 50%)
+    }
+
+    /* HEADER */
+    .admin-header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(20px);
+      background: rgba(10, 14, 26, 0.85);
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between
+    }
+
+    .admin-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px
+    }
+
+    .admin-logo .icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: var(--grad1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px
+    }
+
+    .admin-logo h1 {
+      font-size: 18px;
+      font-weight: 700;
+      background: var(--grad1);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent
+    }
+
+    .admin-logo span {
+      font-size: 12px;
+      color: var(--text3);
+      display: block;
+      -webkit-text-fill-color: var(--text3)
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px
+    }
+
+    .header-actions .user-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 10px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      font-size: 13px
+    }
+
+    .header-actions .user-badge .avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: var(--grad1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700
+    }
+
+    .btn-back {
+      padding: 8px 16px;
+      border-radius: 10px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--text2);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.3s;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px
+    }
+
+    .btn-back:hover {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary)
+    }
+
+    /* TABS */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      padding: 16px 32px 0;
+      position: relative;
+      z-index: 1
+    }
+
+    .tab {
+      padding: 12px 24px;
+      border-radius: 12px 12px 0 0;
+      background: transparent;
+      border: 1px solid transparent;
+      border-bottom: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text3);
+      transition: all 0.3s;
+      font-family: inherit;
+      display: flex;
+      align-items: center;
+      gap: 8px
+    }
+
+    .tab:hover {
+      color: var(--text2);
+      background: rgba(99, 102, 241, 0.05)
+    }
+
+    .tab.active {
+      background: var(--card);
+      backdrop-filter: blur(20px);
+      border-color: var(--border);
+      color: var(--primary);
+      box-shadow: 0 -4px 20px var(--primary-glow)
+    }
+
+    .tab .badge {
+      background: var(--primary);
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700
+    }
+
+    /* CONTENT */
+    .content {
+      position: relative;
+      z-index: 1;
+      padding: 0 32px 32px;
+      margin-top: -1px
+    }
+
+    .tab-content {
+      display: none;
+      background: var(--card);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: 0 0 16px 16px;
+      padding: 24px;
+      animation: fadeIn 0.3s
+    }
+
+    .tab-content.active {
+      display: block
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0)
+      }
+    }
+
+    /* CARDS */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px
+    }
+
+    .stat-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s
+    }
+
+    .stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3)
+    }
+
+    .stat-card .icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      margin-bottom: 12px
+    }
+
+    .stat-card .label {
+      font-size: 12px;
+      color: var(--text3);
+      margin-bottom: 4px
+    }
+
+    .stat-card .value {
+      font-size: 28px;
+      font-weight: 800
+    }
+
+    .stat-card::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 80px;
+      height: 80px;
+      border-radius: 0 0 0 100%;
+      opacity: 0.1
+    }
+
+    /* TABLE */
+    .data-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 13px
+    }
+
+    .data-table thead {
+      position: sticky;
+      top: 0;
+      z-index: 1
+    }
+
+    .data-table th {
+      background: var(--bg2);
+      padding: 12px 16px;
+      text-align: right;
+      font-weight: 600;
+      color: var(--text2);
+      border-bottom: 2px solid var(--border);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px
+    }
+
+    .data-table td {
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(99, 102, 241, 0.08);
+      transition: background 0.2s
+    }
+
+    .data-table tr:hover td {
+      background: rgba(99, 102, 241, 0.04)
+    }
+
+    .data-table .ip-cell {
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      color: var(--info);
+      direction: ltr;
+      text-align: left
+    }
+
+    /* BADGES */
+    .badge {
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      display: inline-block
+    }
+
+    .badge-success {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success)
+    }
+
+    .badge-danger {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--danger)
+    }
+
+    .badge-warning {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning)
+    }
+
+    .badge-info {
+      background: rgba(59, 130, 246, 0.15);
+      color: var(--info)
+    }
+
+    .badge-primary {
+      background: rgba(99, 102, 241, 0.15);
+      color: var(--primary)
+    }
+
+    /* BUTTONS */
+    .btn {
+      padding: 8px 16px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.3s;
+      font-family: inherit;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px
+    }
+
+    .btn-primary {
+      background: var(--grad1);
+      color: #fff;
+      box-shadow: 0 4px 14px var(--primary-glow)
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px var(--primary-glow)
+    }
+
+    .btn-success {
+      background: var(--grad2);
+      color: #fff
+    }
+
+    .btn-danger {
+      background: var(--grad4);
+      color: #fff
+    }
+
+    .btn-sm {
+      padding: 5px 10px;
+      font-size: 12px;
+      border-radius: 8px
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text2)
+    }
+
+    .btn-outline:hover {
+      background: var(--bg3);
+      border-color: var(--primary);
+      color: var(--primary)
+    }
+
+    .btn-icon {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center
+    }
+
+    /* FORMS */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px
+    }
+
+    .form-group label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text2);
+      text-transform: uppercase;
+      letter-spacing: 0.3px
+    }
+
+    .form-input {
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--bg2);
+      color: var(--text);
+      font-size: 14px;
+      font-family: inherit;
+      transition: all 0.3s;
+      outline: none;
+      width: 100%
+    }
+
+    .form-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-glow)
+    }
+
+    select.form-input {
+      cursor: pointer
+    }
+
+    /* FACILITY TYPE CARDS */
+    .facility-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px
+    }
+
+    .facility-card {
+      background: var(--bg2);
+      border: 2px solid var(--border);
+      border-radius: 20px;
+      padding: 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.4s;
+      position: relative;
+      overflow: hidden
+    }
+
+    .facility-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3)
+    }
+
+    .facility-card.selected {
+      border-color: var(--primary);
+      box-shadow: 0 0 30px var(--primary-glow)
+    }
+
+    .facility-card.selected::before {
+      content: '✅';
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      font-size: 24px
+    }
+
+    .facility-card .f-icon {
+      font-size: 56px;
+      margin-bottom: 16px;
+      display: block
+    }
+
+    .facility-card .f-title {
+      font-size: 20px;
+      font-weight: 800;
+      margin-bottom: 8px
+    }
+
+    .facility-card .f-subtitle {
+      font-size: 13px;
+      color: var(--text3);
+      margin-bottom: 16px
+    }
+
+    .facility-card .f-count {
+      display: inline-block;
+      padding: 6px 16px;
+      border-radius: 20px;
+      background: rgba(99, 102, 241, 0.15);
+      color: var(--primary);
+      font-weight: 700;
+      font-size: 14px
+    }
+
+    .facility-card .dept-list {
+      text-align: right;
+      margin-top: 20px;
+      font-size: 12px;
+      color: var(--text3);
+      max-height: 200px;
+      overflow-y: auto;
+      line-height: 2
+    }
+
+    /* PERMS GRID */
+    .perms-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 8px
+    }
+
+    .perm-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: all 0.3s;
+      font-size: 13px
+    }
+
+    .perm-item:hover {
+      border-color: var(--primary)
+    }
+
+    .perm-item input {
+      accent-color: var(--primary);
+      width: 16px;
+      height: 16px
+    }
+
+    .perm-item.checked {
+      border-color: var(--primary);
+      background: rgba(99, 102, 241, 0.08)
+    }
+
+    /* SCROLLBAR */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 10px
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--primary)
+    }
+
+    /* TOAST */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 12px 24px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      z-index: 9999;
+      opacity: 0;
+      transition: all 0.3s;
+      pointer-events: none;
+      font-family: inherit
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(-8px)
+    }
+
+    .toast-success {
+      background: var(--success);
+      color: #fff;
+      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3)
+    }
+
+    .toast-error {
+      background: var(--danger);
+      color: #fff;
+      box-shadow: 0 8px 24px rgba(239, 68, 68, 0.3)
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: var(--text3)
+    }
+
+    .empty-state .icon {
+      font-size: 48px;
+      margin-bottom: 12px
+    }
+
+    /* MODAL */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(4px);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center
+    }
+
+    .modal {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 28px;
+      width: 90%;
+      max-width: 500px;
+      max-height: 80vh;
+      overflow-y: auto
+    }
+
+    .modal h3 {
+      margin-bottom: 20px;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px
+    }
+
+    @media(max-width:768px) {
+      .tabs {
+        padding: 12px 16px 0;
+        overflow-x: auto
+      }
+
+      .content {
+        padding: 0 16px 16px
+      }
+
+      .facility-grid {
+        grid-template-columns: 1fr
+      }
+
+      .form-grid {
+        grid-template-columns: 1fr
+      }
+
+      .stat-grid {
+        grid-template-columns: repeat(2, 1fr)
+      }
+
+      .admin-header {
+        padding: 0 16px
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="bg-pattern"></div>
+
+  <!-- HEADER -->
+  <header class="admin-header">
+    <div class="admin-logo">
+      <div class="icon">🛡️</div>
+      <div>
+        <h1>لوحة التحكم الإدارية</h1>
+        <span>Nama Admin Panel</span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <div class="user-badge" id="userBadge">
+        <div class="avatar" id="userAvatar">A</div>
+        <span id="userName">المدير</span>
+      </div>
+      <a href="/" class="btn-back">🏥 العودة للنظام</a>
+      <button class="btn-back" onclick="logout()">🚪 خروج</button>
+    </div>
+  </header>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('users')" id="tabUsers">
+      👥 إدارة المستخدمين <span class="badge" id="userCount">0</span>
+    </button>
+    <button class="tab" onclick="switchTab('permissions')" id="tabPermissions">
+      🔐 الصلاحيات
+    </button>
+    <button class="tab" onclick="switchTab('facility')" id="tabFacility">
+      🏥 نوع المنشأة
+    </button>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- TAB 1: USERS -->
+    <div class="tab-content active" id="contentUsers">
+      <div class="stat-grid" id="userStats"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h3 style="font-size:16px">👥 المستخدمون</h3>
+        <button class="btn btn-primary" onclick="showAddUserModal()">➕ إضافة مستخدم</button>
+      </div>
+      <div style="overflow-x:auto;border-radius:12px;border:1px solid var(--border)">
+        <table class="data-table" id="usersTable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>الاسم</th>
+              <th>المستخدم</th>
+              <th>الدور</th>
+              <th>التخصص</th>
+              <th>IP آخر دخول</th>
+              <th>الحالة</th>
+              <th>تاريخ الإنشاء</th>
+              <th>إجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="usersBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB 2: PERMISSIONS -->
+    <div class="tab-content" id="contentPermissions">
+      <div style="display:flex;gap:16px;align-items:end;margin-bottom:20px;flex-wrap:wrap">
+        <div class="form-group" style="flex:1;min-width:250px">
+          <label>اختر المستخدم</label>
+          <select class="form-input" id="permUser" onchange="loadUserPermissions()">
+            <option value="">-- اختر مستخدم --</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="savePermissions()" id="savePermBtn" style="display:none">💾 حفظ
+          الصلاحيات</button>
+        <button class="btn btn-success" onclick="selectAllPerms()" id="selectAllBtn" style="display:none">✅ تحديد
+          الكل</button>
+        <button class="btn btn-outline" onclick="deselectAllPerms()" id="deselectAllBtn" style="display:none">❌ إلغاء
+          الكل</button>
+      </div>
+      <div id="permsContainer" style="display:none">
+        <h4 style="margin-bottom:12px;color:var(--text2)">📋 الأقسام المتاحة</h4>
+        <div class="perms-grid" id="permsGrid"></div>
+      </div>
+    </div>
+
+    <!-- TAB 3: FACILITY TYPE -->
+    <div class="tab-content" id="contentFacility">
+      <h3 style="margin-bottom:8px;font-size:18px">🏥 اختر نوع المنشأة الطبية</h3>
+      <p style="color:var(--text3);margin-bottom:24px;font-size:14px">هذا الاختيار يحدد الأقسام التي تظهر في النظام.
+        يمكنك التغيير في أي وقت.</p>
+      <div class="facility-grid" id="facilityGrid"></div>
+      <div style="margin-top:24px;text-align:center">
+        <button class="btn btn-primary" onclick="saveFacilityType()" style="padding:12px 40px;font-size:16px">💾 حفظ نوع
+          المنشأة</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/admin.js"></script>
+</body>
+
+</html>

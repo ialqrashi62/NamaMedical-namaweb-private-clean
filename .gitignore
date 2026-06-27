@@ -1,0 +1,11 @@
+node_modules/
+nama_medical_web.db
+nama_medical_web.db-shm
+nama_medical_web.db-wal
+*.db-journal
+.env
+backups/
+find_lines.js
+
+# A3A PHI vault (radiology/clinical files) — never commit PHI
+phi_vault/

@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html class="scroll-smooth" dir="rtl" lang="ar">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>SaudiHealth Premium | التميز العالمي في الرعاية الصحية</title>
+    <link rel="stylesheet" href="/css/tailwind-compiled.css">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&amp;family=IBM+Plex+Sans:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(227, 209, 180, 0.25);
+        }
+        .glass-nav {
+            background: rgba(248, 249, 250, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .hero-gradient-overlay {
+            background: linear-gradient(135deg, rgba(0, 22, 41, 0.95) 0%, rgba(0, 105, 112, 0.8) 100%);
+        }
+        body {
+            font-family: 'IBM Plex Sans Arabic', 'IBM Plex Sans', sans-serif;
+            background-color: #f8f9fa;
+        }
+    </style>
+</head>
+<body class="text-on-surface antialiased overflow-x-hidden">
+
+<!-- TopNavBar -->
+<header class="fixed top-0 left-0 right-0 z-50 glass-nav border-b border-outline/10 shadow-sm h-20 flex items-center">
+    <nav class="flex justify-between items-center w-full px-margin-desktop max-w-[1440px] mx-auto">
+        <div class="flex items-center gap-xl">
+            <span class="text-title-lg font-title-lg font-extrabold text-primary flex items-center gap-2">
+                <span class="material-symbols-outlined text-secondary text-3xl">health_and_safety</span>
+                جمانا الطبي | jumanaMedical
+            </span>
+            <div class="hidden md:flex gap-md">
+                <a class="font-body-md text-body-md text-secondary font-bold border-b-2 border-secondary pb-1 hover:text-secondary transition-colors duration-200" href="#">الرئيسية</a>
+                <a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors duration-200" href="#ecosystem">الامتثال والشركاء</a>
+                <a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors duration-200" href="#dashboard-preview">لوحة العمليات</a>
+            </div>
+        </div>
+        <div class="flex items-center gap-md">
+            <button class="text-on-surface-variant font-body-md text-body-md hover:text-secondary transition-colors">English</button>
+            <button id="showLoginModalBtn" class="bg-primary text-on-primary px-lg py-2 rounded-lg font-label-md text-label-md hover:opacity-90 transition-all shadow-md flex items-center gap-2">
+                <span class="material-symbols-outlined text-sm">login</span>
+                دخول البوابة | Portal Login
+            </button>
+        </div>
+    </nav>
+</header>
+
+<main class="pt-20">
+    <!-- Hero Section -->
+    <section class="relative h-[921px] min-h-[700px] flex items-center overflow-hidden">
+        <video autoplay="" class="absolute inset-0 w-full h-full object-cover grayscale-[20%] brightness-75" loop="" muted="" playsinline="">
+            <source src="https://res.cloudinary.com/dq96svgoo/video/upload/v1781238697/kling_20260612_Image_to_Video_Create_a_s_2944_0_bnfoid.mp4" type="video/mp4"/>
+        </video>
+        <div class="absolute inset-0 hero-gradient-overlay"></div>
+        <div class="relative z-10 w-full max-w-[1440px] mx-auto px-margin-desktop grid grid-cols-1 lg:grid-cols-2 gap-xl items-center">
+            <div class="space-y-lg text-on-primary">
+                <span class="inline-block py-1 px-4 rounded-full bg-secondary-fixed/20 border border-secondary-fixed text-secondary-fixed font-label-md text-label-md">
+                    المعايير العالمية بالروح السعودية
+                </span>
+                <h1 class="font-display-lg text-display-lg leading-tight">
+                    نحول مستقبل الصحة العالمية <br/> <span class="text-secondary-fixed">بأيدٍ وطنية خبيرة.</span>
+                </h1>
+                <p class="font-body-lg text-body-lg text-surface-variant max-w-xl">
+                    نظام جمانا الطبي لإدارة المستشفيات والعيادات الكبرى والمدن الطبية، يضمن الامتثال التام مع رؤية 2030 وأعلى معايير الجودة الدولية.
+                </p>
+                <div class="flex gap-md pt-base">
+                    <button class="bg-secondary-fixed text-on-secondary-fixed font-label-md text-label-md px-xl py-4 rounded-xl shadow-lg hover:translate-y-[-2px] transition-all trigger-login-modal">ابدأ التحول الرقمي</button>
+                    <button class="border border-surface-variant text-surface-variant font-label-md text-label-md px-xl py-4 rounded-xl backdrop-blur-md hover:bg-white/10 transition-all trigger-login-modal">مشاهدة العرض التجريبي</button>
+                </div>
+            </div>
+            <!-- Facility Selector Cards -->
+            <div class="grid grid-cols-2 gap-md p-md glass-card rounded-3xl border-white/20">
+                <div class="group p-lg glass-card rounded-2xl flex flex-col items-center justify-center gap-md cursor-pointer hover:bg-primary hover:text-on-primary transition-all duration-300 transform hover:scale-[1.02] trigger-login-modal">
+                    <span class="material-symbols-outlined text-4xl" data-icon="hospital">festival</span>
+                    <span class="font-title-lg text-title-lg">مستشفى كبير</span>
+                </div>
+                <div class="group p-lg glass-card rounded-2xl flex flex-col items-center justify-center gap-md cursor-pointer hover:bg-primary hover:text-on-primary transition-all duration-300 transform hover:scale-[1.02] trigger-login-modal">
+                    <span class="material-symbols-outlined text-4xl" data-icon="location_city">location_city</span>
+                    <span class="font-title-lg text-title-lg">مدينة طبية</span>
+                </div>
+                <div class="group p-lg glass-card rounded-2xl flex flex-col items-center justify-center gap-md cursor-pointer hover:bg-primary hover:text-on-primary transition-all duration-300 transform hover:scale-[1.02] trigger-login-modal">
+                    <span class="material-symbols-outlined text-4xl" data-icon="health_and_safety">health_and_safety</span>
+                    <span class="font-title-lg text-title-lg">مركز صحي</span>
+                </div>
+                <div class="group p-lg glass-card rounded-2xl flex flex-col items-center justify-center gap-md cursor-pointer hover:bg-primary hover:text-on-primary transition-all duration-300 transform hover:scale-[1.02] trigger-login-modal">
+                    <span class="material-symbols-outlined text-4xl" data-icon="medical_services">medical_services</span>
+                    <span class="font-title-lg text-title-lg">مجمع عيادات</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Ecosystem Section -->
+    <section id="ecosystem" class="py-xl bg-surface-bright">
+        <div class="max-w-[1440px] mx-auto px-margin-desktop">
+            <div class="text-center mb-xl space-y-md">
+                <h2 class="font-headline-lg text-headline-lg text-primary">نظامنا البيئي المتكامل</h2>
+                <p class="font-body-md text-body-md text-on-surface-variant max-w-2xl mx-auto">
+                    ربط سلس مع كافة الجهات التنظيمية والخدمية في المملكة العربية السعودية لضمان تدفق البيانات والامتثال التام.
+                </p>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-md">
+                <!-- Logo Cards -->
+                <div class="bg-white p-lg rounded-2xl border border-outline/10 flex flex-col items-center justify-center gap-md shadow-sm hover:shadow-md transition-shadow grayscale hover:grayscale-0">
+                    <div class="w-16 h-16 bg-surface-container rounded-full flex items-center justify-center text-primary font-bold">CBAHI</div>
+                    <span class="font-label-md text-label-md text-on-surface-variant">سباهي</span>
+                </div>
+                <div class="bg-white p-lg rounded-2xl border border-outline/10 flex flex-col items-center justify-center gap-md shadow-sm hover:shadow-md transition-shadow grayscale hover:grayscale-0">
+                    <div class="w-16 h-16 bg-surface-container rounded-full flex items-center justify-center text-primary font-bold">HIMSS</div>
+                    <span class="font-label-md text-label-md text-on-surface-variant">هيمس</span>
+                </div>
+                <div class="bg-white p-lg rounded-2xl border border-outline/10 flex flex-col items-center justify-center gap-md shadow-sm hover:shadow-md transition-shadow grayscale hover:grayscale-0">
+                    <div class="w-16 h-16 bg-surface-container rounded-full flex items-center justify-center text-primary font-bold">Nafis</div>
+                    <span class="font-label-md text-label-md text-on-surface-variant">نفيس</span>
+                </div>
+                <div class="bg-white p-lg rounded-2xl border border-outline/10 flex flex-col items-center justify-center gap-md shadow-sm hover:shadow-md transition-shadow grayscale hover:grayscale-0">
+                    <div class="w-16 h-16 bg-surface-container rounded-full flex items-center justify-center text-primary font-bold">HESN</div>
+                    <span class="font-label-md text-label-md text-on-surface-variant">حصن</span>
+                </div>
+                <div class="bg-white p-lg rounded-2xl border border-outline/10 flex flex-col items-center justify-center gap-md shadow-sm hover:shadow-md transition-shadow grayscale hover:grayscale-0">
+                    <div class="w-16 h-16 bg-surface-container rounded-full flex items-center justify-center text-primary font-bold">RSD</div>
+                    <span class="font-label-md text-label-md text-on-surface-variant">رصد</span>
+                </div>
+                <div class="bg-white p-lg rounded-2xl border border-outline/10 flex flex-col items-center justify-center gap-md shadow-sm hover:shadow-md transition-shadow grayscale hover:grayscale-0">
+                    <div class="w-16 h-16 bg-surface-container rounded-full flex items-center justify-center text-primary font-bold">CHI</div>
+                    <span class="font-label-md text-label-md text-on-surface-variant">مجلس الضمان</span>
+                </div>
+                <div class="bg-white p-lg rounded-2xl border border-outline/10 flex flex-col items-center justify-center gap-md shadow-sm hover:shadow-md transition-shadow grayscale hover:grayscale-0">
+                    <div class="w-16 h-16 bg-surface-container rounded-full flex items-center justify-center text-primary font-bold text-center text-[10px]">TPA / INS</div>
+                    <span class="font-label-md text-label-md text-on-surface-variant">شركات التأمين</span>
+                </div>
+                <div class="bg-white p-lg rounded-2xl border border-outline/10 flex flex-col items-center justify-center gap-md shadow-sm hover:shadow-md transition-shadow grayscale hover:grayscale-0">
+                    <div class="w-16 h-16 bg-surface-container rounded-full flex items-center justify-center text-primary font-bold">Anat</div>
+                    <span class="font-label-md text-label-md text-on-surface-variant">أناة</span>
+                </div>
+                <div class="bg-white p-lg rounded-2xl border border-outline/10 flex flex-col items-center justify-center gap-md shadow-sm hover:shadow-md transition-shadow grayscale hover:grayscale-0">
+                    <div class="w-16 h-16 bg-surface-container rounded-full flex items-center justify-center text-primary font-bold">MOH</div>
+                    <span class="font-label-md text-label-md text-on-surface-variant">وزارة الصحة</span>
+                </div>
+                <div class="bg-white p-lg rounded-2xl border border-outline/10 flex flex-col items-center justify-center gap-md shadow-sm hover:shadow-md transition-shadow grayscale hover:grayscale-0">
+                    <div class="w-16 h-16 bg-surface-container rounded-full flex items-center justify-center text-primary font-bold">Mueen</div>
+                    <span class="font-label-md text-label-md text-on-surface-variant">منصة معين</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Dashboard Preview Section -->
+    <section id="dashboard-preview" class="py-xl bg-primary text-on-primary overflow-hidden relative">
+        <div class="absolute top-0 right-0 w-1/2 h-full opacity-10 pointer-events-none">
+            <div class="w-full h-full bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-secondary to-transparent"></div>
+        </div>
+        <div class="max-w-[1440px] mx-auto px-margin-desktop grid grid-cols-1 lg:grid-cols-5 gap-xl items-center relative z-10">
+            <div class="lg:col-span-2 space-y-lg">
+                <h2 class="font-headline-lg text-headline-lg">لوحة تحكم العمليات في الوقت الفعلي</h2>
+                <p class="font-body-lg text-body-lg text-primary-fixed/80">
+                    اتخذ قرارات مستنيرة بناءً على بيانات دقيقة. مراقبة تدفق المرضى، مؤشرات الأداء السريري، وحالة الامتثال التنظيمي من نافذة واحدة.
+                </p>
+                <ul class="space-y-md">
+                    <li class="flex items-center gap-md">
+                        <span class="material-symbols-outlined text-secondary-fixed">check_circle</span>
+                        <span class="font-body-md text-body-md">تنبيهات الامتثال الآلية</span>
+                    </li>
+                    <li class="flex items-center gap-md">
+                        <span class="material-symbols-outlined text-secondary-fixed">check_circle</span>
+                        <span class="font-body-md text-body-md">تحليلات تدفق المرضى بالذكاء الاصطناعي</span>
+                    </li>
+                    <li class="flex items-center gap-md">
+                        <span class="material-symbols-outlined text-secondary-fixed">check_circle</span>
+                        <span class="font-body-md text-body-md">تقارير جودة الأداء السريري</span>
+                    </li>
+                </ul>
+            </div>
+            <div class="lg:col-span-3">
+                <div class="relative p-base bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2rem] shadow-2xl overflow-hidden">
+                    <div class="bg-surface-container-low rounded-[1.5rem] p-md overflow-hidden text-on-surface">
+                        <!-- Simulated Dashboard Mockup -->
+                        <div class="grid grid-cols-3 gap-md mb-md">
+                            <div class="bg-white p-md rounded-xl shadow-sm border border-outline/5">
+                                <span class="text-on-surface-variant font-label-md text-label-md">إشغال الأسرة</span>
+                                <div class="flex justify-between items-end mt-xs">
+                                    <span class="text-primary font-headline-md text-headline-md">84%</span>
+                                    <span class="text-error font-caption text-caption flex items-center">+2%</span>
+                                </div>
+                                <div class="w-full bg-surface-container-highest h-1 rounded-full mt-sm">
+                                    <div class="bg-secondary h-full rounded-full w-[84%]"></div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-md rounded-xl shadow-sm border border-outline/5">
+                                <span class="text-on-surface-variant font-label-md text-label-md">وقت الانتظار</span>
+                                <div class="flex justify-between items-end mt-xs">
+                                    <span class="text-primary font-headline-md text-headline-md">12m</span>
+                                    <span class="text-secondary font-caption text-caption flex items-center">-4m</span>
+                                </div>
+                                <div class="w-full bg-surface-container-highest h-1 rounded-full mt-sm">
+                                    <div class="bg-secondary-container h-full rounded-full w-[40%]"></div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-md rounded-xl shadow-sm border border-outline/5">
+                                <span class="text-on-surface-variant font-label-md text-label-md">مؤشر الامتثال</span>
+                                <div class="flex justify-between items-end mt-xs">
+                                    <span class="text-primary font-headline-md text-headline-md">98.5</span>
+                                    <span class="text-secondary font-caption text-caption flex items-center">آمن</span>
+                                </div>
+                                <div class="w-full bg-surface-container-highest h-1 rounded-full mt-sm">
+                                    <div class="bg-secondary h-full rounded-full w-[98%]"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Large Chart Area -->
+                        <div class="bg-white p-lg rounded-xl shadow-sm border border-outline/5 h-64 relative">
+                            <div class="flex justify-between items-center mb-lg">
+                                <h4 class="text-primary font-title-lg text-title-lg">تدفق المرضى الأسبوعي</h4>
+                                <div class="flex gap-sm">
+                                    <span class="w-3 h-3 bg-primary rounded-full"></span>
+                                    <span class="w-3 h-3 bg-secondary rounded-full"></span>
+                                </div>
+                            </div>
+                            <img alt="Dashboard Graph" class="w-full h-32 object-cover opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuASiMkb1p5apGJcP-ERiFOSQssnfiPZD54fLWpq1d83wzfOf75twATCPr1aKpxlH_fKpK5NQ709zR_oBh8OQXaKoxKoRP4r_NJ1dRCxN9aFyCq4USjScBgfXhCtlw7h2q8AxhG-8DGd42uVfnOt7JnaMr64qz0CoRYOo_B6EBxmzmUaozuHFo1T5IiFBnKcNe-t5Ps9aLdUY07SO-vd8X8FWDBjx_hLqao8vzpdsIFT_UIMHrs_yxuZoPc9z37tfN9SqtE8x1FSPr2u"/>
+                            <div class="absolute inset-x-md bottom-md grid grid-cols-7 gap-xs text-center font-caption text-caption text-on-surface-variant">
+                                <span>الأحد</span><span>الإثنين</span><span>الثلاثاء</span><span>الأربعاء</span><span>الخميس</span><span>الجمعة</span><span>السبت</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="py-xl bg-surface-bright border-t border-outline/5">
+        <div class="max-w-4xl mx-auto px-margin-desktop text-center space-y-lg">
+            <h2 class="font-headline-lg text-headline-lg text-primary">جاهز لتغيير ملامح الرعاية الصحية في منشأتك؟</h2>
+            <p class="font-body-lg text-body-lg text-on-surface-variant">
+                انضم إلى أكبر المنظومات الصحية في المملكة التي تضع ثقتها في نظام جمانا الطبي لتقديم رعاية فائقة الجودة.
+            </p>
+            <div class="flex flex-col md:flex-row gap-md justify-center pt-md">
+                <button class="bg-primary text-on-primary font-label-md text-label-md px-xl py-4 rounded-xl hover:opacity-90 transition-all flex items-center justify-center gap-md trigger-login-modal">
+                    تواصل مع مستشار الأنظمة
+                    <span class="material-symbols-outlined">arrow_back</span>
+                </button>
+                <button class="border border-outline text-primary font-label-md text-label-md px-xl py-4 rounded-xl hover:bg-surface-container transition-all trigger-login-modal">
+                    تحميل الملف التعريفي
+                </button>
+            </div>
+        </div>
+    </section>
+</main>
+
+<!-- Footer -->
+<footer class="w-full px-margin-desktop py-xl flex flex-col md:flex-row justify-between items-center gap-md bg-primary text-on-primary">
+    <div class="flex flex-col gap-sm items-center md:items-start">
+        <span class="text-headline-md font-headline-md text-on-primary">جمانا الطبي | jumanaMedical</span>
+        <p class="font-caption text-caption text-surface-variant/70">© 2026 jumanaMedical. All Rights Reserved. Regulated by MOH &amp; CHI.</p>
+    </div>
+    <div class="flex gap-md">
+        <a class="font-caption text-caption text-surface-variant/70 hover:text-secondary-fixed transition-colors" href="#">Privacy Policy</a>
+        <a class="font-caption text-caption text-surface-variant/70 hover:text-secondary-fixed transition-colors" href="#">Compliance Standards</a>
+        <a class="font-caption text-caption text-surface-variant/70 hover:text-secondary-fixed transition-colors" href="#">Contact Support</a>
+    </div>
+</footer>
+
+<!-- Portal Login Modal (Modal-based Form) -->
+<div id="loginModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-sm hidden opacity-0 transition-all duration-300">
+    <div class="bg-white rounded-2xl w-full max-w-[420px] p-8 border border-outline-variant/30 shadow-2xl relative transform scale-95 transition-all duration-300">
+        <button id="closeLoginModalBtn" class="absolute top-4 right-4 text-on-surface-variant hover:text-primary transition-colors text-3xl font-light">&times;</button>
+        <div class="text-center mb-6">
+            <div class="w-16 h-16 bg-primary/5 rounded-xl flex items-center justify-center text-primary mx-auto mb-3">
+                <span class="material-symbols-outlined text-4xl" style="font-variation-settings: 'FILL' 1;">health_and_safety</span>
+            </div>
+            <h2 class="text-headline-md font-bold text-primary">دخول بوابة الموظفين</h2>
+            <p class="text-caption text-on-surface-variant mt-1">Staff Portal Access</p>
+        </div>
+        <form id="loginForm" class="space-y-4">
+            <div class="space-y-1">
+                <label for="username" class="block font-label-md text-label-md text-on-surface-variant">اسم المستخدم / Username</label>
+                <input type="text" id="username" class="w-full h-12 bg-surface-container-low border border-outline-variant/30 rounded-xl px-4 text-body-md text-on-surface focus:border-secondary focus:ring-1 focus:ring-secondary outline-none transition-all" placeholder="Enter username" autocomplete="username" required>
+            </div>
+            <div class="space-y-1">
+                <label for="password" class="block font-label-md text-label-md text-on-surface-variant">كلمة المرور / Password</label>
+                <input type="password" id="password" class="w-full h-12 bg-surface-container-low border border-outline-variant/30 rounded-xl px-4 text-body-md text-on-surface focus:border-secondary focus:ring-1 focus:ring-secondary outline-none transition-all" placeholder="Enter password" autocomplete="current-password" required>
+            </div>
+            <div id="errorMsg" class="p-3 bg-error/10 border border-error/20 text-error rounded-xl text-sm text-center hidden animate-pulse"></div>
+            <button type="submit" id="loginBtn" class="w-full h-12 bg-primary hover:bg-primary/90 text-on-primary rounded-xl font-label-md text-label-md transition-all shadow-md flex items-center justify-center font-bold">دخول / Sign In</button>
+        </form>
+    </div>
+</div>
+
+<script src="/js/login-ui.js"></script>
+<script src="/js/login.js"></script>
+</body>
+</html>

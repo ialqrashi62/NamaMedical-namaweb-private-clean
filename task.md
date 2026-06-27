@@ -1,0 +1,26 @@
+# Batch E Tasks - Governance, Facility & Analytics
+
+- [x] تشغيل اختبارات محرك المالية والفوترة الإلكترونية (`finance_engine`) والتحقق من سلامتها رياضياً.
+- [x] تشغيل اختبارات محرك التأمين والضمان الصحي (`e11_insurance_engine`) والتحقق من حسابات المشاركة للعام الجديد.
+- [x] تدقيق منطق الفوترة الإلكترونية (ZATCA):
+  - [x] مطابقة توليد ملف UBL XML ودقته وحظر التواقيع الوهمية.
+  - [x] مطابقة كود الاستجابة السريعة QR وتوليد الهاش.
+  - [x] مطابقة حارس اليومية والقيود المالية وحظر تعديل القيود المقفلة.
+- [x] تدقيق منطق التأمين والضمان الصحي (NPHIES):
+  - [x] مطابقة دورة طلبات الأهلية وصلاحية التحولات بين الحالات (State Machine).
+  - [x] مطابقة حساب مشاركة المريض (Patient Share) والتأكد من منع القيم الخاطئة.
+  - [x] مطابقة حارس الربط الخارجي والتأكد من إرجاع استجابة 503 عند غياب الاتصال الفعلي.
+- [x] تدقيق أمان الخصوصية وحماية البيانات السيبرانية (PDPL & NCA):
+  - [x] فحص عزل وحماية البيانات الصحية الشخصية (PHI).
+  - [x] التحقق من عزل المستأجرين (Tenant Scope) على واجهات برمجة تطبيقات ZATCA و NPHIES.
+  - [x] التحقق من فصل بيانات المصادقة الثنائية (MFA) وسجلات التدقيق التابعة للنظام.
+- [x] صياغة وإصدار تقرير تدقيق مطابقة الامتثال الوطني للمرحلة الأولى.
+- [x] تشغيل حزمة اختبارات النظام كاملة (86 ملفاً) للتأكد من خلو المشروع من التراجعات.
+- [x] Verify application in the browser using test credentials and confirm zero console errors
+- [x] Document results in reports:
+  - `docs/STITCH_BATCH_E_GOVERNANCE_FACILITY_ANALYTICS_REPORT_AR.md`
+  - `docs/STITCH_MODULE_BATCH_PROGRESS_AR.md`
+  - `docs/STITCH_DESIGN_IMPLEMENTATION_REPORT_AR.md`
+  - `task.md`
+  - `walkthrough.md`
+- [x] Create git commit for Batch E changes

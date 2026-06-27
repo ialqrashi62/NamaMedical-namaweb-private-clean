@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <title>إقرار موافقة على البوتوكس والفيلر - Botox & Filler Consent Form</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+            padding: 25px;
+            color: #222;
+            direction: rtl;
+            line-height: 1.7;
+            font-size: 13px;
+        }
+
+        .header {
+            text-align: center;
+            border-bottom: 3px double #1a365d;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            color: #1a365d;
+            margin-bottom: 4px;
+        }
+
+        .header h2 {
+            font-size: 15px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .logo-area {
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
+        .hospital-name {
+            font-size: 12px;
+            color: #888;
+        }
+
+        .section {
+            margin: 14px 0;
+            padding: 14px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            page-break-inside: avoid;
+        }
+
+        .section h3 {
+            color: #1a365d;
+            font-size: 14px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 6px;
+            margin-bottom: 10px;
+        }
+
+        .section h3 span {
+            font-size: 12px;
+            color: #777;
+            font-weight: normal;
+            display: block;
+            direction: ltr;
+            text-align: left;
+        }
+
+        .field {
+            margin: 8px 0;
+        }
+
+        .field label {
+            font-weight: 700;
+            min-width: 180px;
+            display: inline-block;
+        }
+
+        .field .line {
+            border-bottom: 1px dotted #999;
+            display: inline-block;
+            min-width: 300px;
+            height: 22px;
+        }
+
+        .field-row {
+            display: flex;
+            gap: 20px;
+            margin: 8px 0;
+        }
+
+        .field-row .field {
+            flex: 1;
+        }
+
+        .risks-list li {
+            margin: 5px 0;
+            font-size: 12.5px;
+        }
+
+        .checkbox-item {
+            margin: 6px 0;
+            font-size: 13px;
+        }
+
+        .declaration {
+            background: #f7f8fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-size: 12px;
+        }
+
+        .sig-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        .sig-box {
+            text-align: center;
+        }
+
+        .sig-line {
+            border-top: 2px solid #333;
+            margin-top: 60px;
+            padding-top: 8px;
+        }
+
+        .sig-box p {
+            font-size: 11px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .bilingual {
+            color: #555;
+            font-size: 11px;
+            direction: ltr;
+            display: block;
+            text-align: left;
+            margin-top: 2px;
+            font-style: italic;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 10px;
+            color: #999;
+            border-top: 1px solid #ddd;
+            padding-top: 10px;
+        }
+
+        .warning-box {
+            background: #fef2f2;
+            border: 1px solid #fca5a5;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border-right: 4px solid #ef4444;
+        }
+
+        .treatment-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+            font-size: 12px;
+        }
+
+        .treatment-table th,
+        .treatment-table td {
+            border: 1px solid #ddd;
+            padding: 6px 10px;
+            text-align: right;
+        }
+
+        .treatment-table th {
+            background: #f0f4f8;
+            color: #1a365d;
+        }
+
+        @media print {
+            body {
+                padding: 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <div class="logo-area">💉✨</div>
+        <h1>نموذج إقرار وموافقة على حقن البوتوكس والفيلر</h1>
+        <h2>Botox & Dermal Filler Injection Consent Form</h2>
+        <div class="hospital-name">جمانا الطبي — jumanaMedical</div>
+    </div>
+
+    <div class="section">
+        <h3>📋 بيانات المريض <span>Patient Information</span></h3>
+        <div class="field-row">
+            <div class="field"><label>اسم المريض / Name:</label> <span class="line"></span></div>
+            <div class="field"><label>رقم الملف / File #:</label> <span class="line"></span></div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>رقم الهوية / ID #:</label> <span class="line"></span></div>
+            <div class="field"><label>العمر / Age:</label> <span class="line"></span></div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>التاريخ / Date:</label> <span class="line"></span></div>
+            <div class="field"><label>الجوال / Phone:</label> <span class="line"></span></div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>💉 نوع الإجراء <span>Procedure Type</span></h3>
+        <div class="checkbox-item">☐ <strong>بوتوكس / Botox (Botulinum Toxin Type A)</strong></div>
+        <div class="checkbox-item">☐ <strong>فيلر حمض الهيالورونيك / Hyaluronic Acid Filler</strong></div>
+        <div class="checkbox-item">☐ <strong>فيلر كولاجين / Collagen Filler</strong></div>
+        <div class="checkbox-item">☐ <strong>بلازما PRP / Platelet-Rich Plasma</strong></div>
+        <div class="checkbox-item">☐ <strong>ميزوثيرابي / Mesotherapy</strong></div>
+
+        <h4 style="margin-top: 12px; color: #555;">مناطق العلاج / Treatment Areas:</h4>
+        <table class="treatment-table">
+            <tr>
+                <th>المنطقة / Area</th>
+                <th>✓</th>
+                <th>الكمية / Amount</th>
+                <th>ملاحظات / Notes</th>
+            </tr>
+            <tr>
+                <td>الجبهة / Forehead</td>
+                <td>☐</td>
+                <td></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>بين الحاجبين / Glabella (Frown Lines)</td>
+                <td>☐</td>
+                <td></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>حول العينين / Crow's Feet</td>
+                <td>☐</td>
+                <td></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>الخدين / Cheeks</td>
+                <td>☐</td>
+                <td></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>الشفاه / Lips</td>
+                <td>☐</td>
+                <td></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>الأنف / Nose</td>
+                <td>☐</td>
+                <td></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>خط الفك / Jawline</td>
+                <td>☐</td>
+                <td></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>الذقن / Chin</td>
+                <td>☐</td>
+                <td></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>الرقبة / Neck</td>
+                <td>☐</td>
+                <td></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>أخرى / Other: ________</td>
+                <td>☐</td>
+                <td></td>
+                <td></td>
+            </tr>
+        </table>
+        <div class="field"><label>اسم المنتج / Product Name:</label> <span class="line"></span></div>
+        <div class="field"><label>رقم الدفعة / Batch #:</label> <span class="line"></span></div>
+        <div class="field"><label>اسم الطبيب / Physician:</label> <span class="line"></span></div>
+    </div>
+
+    <div class="section">
+        <h3>⚠️ المخاطر والمضاعفات المحتملة <span>Risks & Potential Complications</span></h3>
+        <h4 style="color: #555; margin-bottom: 6px;">مخاطر البوتوكس / Botox Risks:</h4>
+        <ul class="risks-list">
+            <li>🔵 كدمات وتورم في مكان الحقن / Bruising and swelling at injection site</li>
+            <li>🤕 صداع مؤقت / Temporary headache</li>
+            <li>👁️ تدلي الجفن أو الحاجب مؤقتاً / Temporary eyelid or brow drooping (ptosis)</li>
+            <li>😐 ضعف مؤقت في عضلات الوجه / Temporary facial muscle weakness</li>
+            <li>🤧 أعراض شبيهة بالإنفلونزا / Flu-like symptoms</li>
+            <li>⚡ ردود فعل تحسسية نادرة / Rare allergic reactions</li>
+        </ul>
+
+        <h4 style="color: #555; margin: 10px 0 6px;">مخاطر الفيلر / Filler Risks:</h4>
+        <ul class="risks-list">
+            <li>🔵 تورم وكدمات / Swelling and bruising</li>
+            <li>🔘 تكتلات أو عدم انتظام / Lumps or irregularity</li>
+            <li>⚖️ عدم تناسق / Asymmetry</li>
+            <li>🔴 تغير لون الجلد / Skin discoloration</li>
+            <li>🦠 عدوى / Infection</li>
+            <li>⛔ انسداد وعائي (نادر جداً) / Vascular occlusion (very rare) — قد يؤدي لنخر الجلد أو فقدان البصر</li>
+            <li>🔁 هجرة المادة / Material migration</li>
+            <li>⚡ ردود فعل تحسسية / Allergic reactions</li>
+        </ul>
+    </div>
+
+    <div class="warning-box">
+        <strong>🚫 موانع الاستعمال / Contraindications:</strong><br>
+        أؤكد أنني لست حاملاً أو مرضعة، ولا أعاني من أمراض عصبية عضلية، ولا أتناول مميعات الدم، وليس لدي حساسية معروفة من
+        مكونات المنتج.
+        <span class="bilingual">I confirm I am not pregnant or breastfeeding, do not have neuromuscular diseases, am not
+            taking blood thinners, and have no known allergies to product components.</span>
+    </div>
+
+    <div class="section">
+        <h3>📝 تعليمات ما بعد الحقن <span>Post-Injection Instructions</span></h3>
+        <ul style="font-size: 12px;">
+            <li>عدم لمس أو الضغط على المنطقة المعالجة لمدة 4-6 ساعات / Do not touch or press treated area for 4-6 hours
+            </li>
+            <li>عدم الاستلقاء لمدة 4 ساعات بعد البوتوكس / Do not lie down for 4 hours after Botox</li>
+            <li>تجنب الرياضة الشاقة لمدة 24 ساعة / Avoid strenuous exercise for 24 hours</li>
+            <li>تجنب التعرض للحرارة الشديدة (ساونا، حمام ساخن) لمدة 48 ساعة / Avoid extreme heat for 48 hours</li>
+            <li>تجنب مميعات الدم والأسبرين لمدة أسبوع / Avoid blood thinners and aspirin for 1 week</li>
+            <li>استخدام الكمادات الباردة عند الحاجة / Use cold compresses as needed</li>
+        </ul>
+    </div>
+
+    <div class="declaration">
+        <h3 style="color: #1a365d; margin-bottom: 10px;">📝 الإقرار / Declaration</h3>
+        <p>أقر بأنني قد فهمت طبيعة إجراء الحقن التجميلي وجميع مخاطره ومضاعفاته المحتملة. أدرك أن النتائج مؤقتة وقد أحتاج
+            لجلسات متكررة. أوافق على الإجراء بكامل إرادتي.</p>
+        <p style="direction: ltr; text-align: left; font-style: italic;">I understand the nature of cosmetic injection,
+            all risks and complications. I acknowledge results are temporary and repeated sessions may be needed. I
+            consent voluntarily.</p>
+    </div>
+
+    <div class="sig-grid">
+        <div class="sig-box">
+            <div class="sig-line"><strong>توقيع المريض</strong></div>
+            <p>Patient Signature</p>
+        </div>
+        <div class="sig-box">
+            <div class="sig-line"><strong>توقيع الطبيب</strong></div>
+            <p>Physician Signature</p>
+        </div>
+        <div class="sig-box">
+            <div class="sig-line"><strong>توقيع الشاهد</strong></div>
+            <p>Witness Signature</p>
+        </div>
+    </div>
+
+    <div class="footer">نموذج رقم: COS-003 | الإصدار: 1.0 | جمانا الطبي — jumanaMedical | Form No: COS-003</div>
+</body>
+
+</html>

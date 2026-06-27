@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <title>إقرار رفض العلاج - Treatment Refusal Form</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+            padding: 25px;
+            color: #222;
+            direction: rtl;
+            line-height: 1.7;
+            font-size: 13px;
+        }
+
+        .header {
+            text-align: center;
+            border-bottom: 3px double #c0392b;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            color: #c0392b;
+            margin-bottom: 4px;
+        }
+
+        .header h2 {
+            font-size: 15px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .logo-area {
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
+        .hospital-name {
+            font-size: 12px;
+            color: #888;
+        }
+
+        .section {
+            margin: 14px 0;
+            padding: 14px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            page-break-inside: avoid;
+        }
+
+        .section h3 {
+            color: #1a365d;
+            font-size: 14px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 6px;
+            margin-bottom: 10px;
+        }
+
+        .section h3 span {
+            font-size: 12px;
+            color: #777;
+            font-weight: normal;
+            display: block;
+            direction: ltr;
+            text-align: left;
+        }
+
+        .field {
+            margin: 8px 0;
+        }
+
+        .field label {
+            font-weight: 700;
+            min-width: 180px;
+            display: inline-block;
+        }
+
+        .field .line {
+            border-bottom: 1px dotted #999;
+            display: inline-block;
+            min-width: 300px;
+            height: 22px;
+        }
+
+        .field-row {
+            display: flex;
+            gap: 20px;
+            margin: 8px 0;
+        }
+
+        .field-row .field {
+            flex: 1;
+        }
+
+        .checkbox-item {
+            margin: 6px 0;
+            font-size: 13px;
+        }
+
+        .declaration {
+            background: #fdf2f2;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-size: 12px;
+            border: 2px solid #e74c3c;
+        }
+
+        .declaration p {
+            margin-bottom: 10px;
+        }
+
+        .sig-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        .sig-box {
+            text-align: center;
+        }
+
+        .sig-line {
+            border-top: 2px solid #333;
+            margin-top: 60px;
+            padding-top: 8px;
+        }
+
+        .sig-box p {
+            font-size: 11px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 10px;
+            color: #999;
+            border-top: 1px solid #ddd;
+            padding-top: 10px;
+        }
+
+        .warning-box {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 12px 0;
+            font-size: 12px;
+        }
+
+        .danger-box {
+            background: #fdf2f2;
+            border: 2px solid #e74c3c;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 12px 0;
+            font-size: 13px;
+            font-weight: 700;
+            color: #c0392b;
+        }
+
+        @media print {
+            body {
+                padding: 0;
+            }
+
+            .section {
+                border-color: #999;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <div class="logo-area">⚠️🏥</div>
+        <h1>نموذج إقرار رفض العلاج / الإجراء الطبي</h1>
+        <h2>Treatment / Procedure Refusal Form</h2>
+        <div class="hospital-name">جمانا الطبي — jumanaMedical</div>
+    </div>
+
+    <div class="section">
+        <h3>📋 بيانات المريض <span>Patient Information</span></h3>
+        <div class="field-row">
+            <div class="field"><label>اسم المريض / Name:</label> <span class="line"></span></div>
+            <div class="field"><label>رقم الملف / File #:</label> <span class="line"></span></div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>رقم الهوية / ID #:</label> <span class="line"></span></div>
+            <div class="field"><label>العمر / Age:</label> <span class="line"></span></div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>التاريخ / Date:</label> <span class="line"></span></div>
+            <div class="field"><label>الوقت / Time:</label> <span class="line"></span></div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>🩺 العلاج / الإجراء المرفوض <span>Refused Treatment / Procedure</span></h3>
+        <div class="field"><label>اسم العلاج أو الإجراء المرفوض / Refused Treatment/Procedure:</label></div>
+        <div style="border: 1px solid #ddd; border-radius: 6px; min-height: 40px; padding: 8px; margin-top: 4px;"></div>
+        <div class="field" style="margin-top: 10px;"><label>الطبيب المعالج / Attending Doctor:</label> <span
+                class="line"></span></div>
+        <div class="field"><label>القسم / Department:</label> <span class="line"></span></div>
+    </div>
+
+    <div class="section">
+        <h3>📋 تفاصيل الشرح الطبي <span>Medical Explanation Details</span></h3>
+        <p style="margin-bottom: 8px;">تم شرح ما يلي للمريض / The following has been explained to the patient:</p>
+        <div class="checkbox-item">☐ طبيعة العلاج / الإجراء المقترح / Nature of the proposed treatment/procedure</div>
+        <div class="checkbox-item">☐ أسباب التوصية بالعلاج / Reasons for recommending the treatment</div>
+        <div class="checkbox-item">☐ الفوائد المتوقعة من العلاج / Expected benefits of treatment</div>
+        <div class="checkbox-item">☐ المخاطر المترتبة على رفض العلاج / Risks of refusing treatment</div>
+        <div class="checkbox-item">☐ البدائل العلاجية المتاحة / Available treatment alternatives</div>
+        <div class="checkbox-item">☐ العواقب المحتملة بما فيها تدهور الحالة أو الوفاة / Possible consequences including
+            deterioration or death</div>
+    </div>
+
+    <div class="danger-box">
+        ⚠️ تحذير هام / IMPORTANT WARNING:<br>
+        تم إبلاغي بأن رفض العلاج / الإجراء الموصى به قد يؤدي إلى: تدهور الحالة الصحية، مضاعفات خطيرة، إعاقة دائمة، أو
+        الوفاة.<br>
+        <span style="direction: ltr; display: block; text-align: left;">I have been informed that refusing the
+            recommended treatment may lead to: health deterioration, serious complications, permanent disability, or
+            death.</span>
+    </div>
+
+    <div class="section">
+        <h3>📝 المخاطر المحتملة لرفض العلاج <span>Potential Risks of Refusal</span></h3>
+        <div class="field"><label>المخاطر التي تم شرحها للمريض / Risks explained to the patient:</label></div>
+        <div style="border: 1px solid #ddd; border-radius: 6px; min-height: 80px; padding: 8px; margin-top: 4px;"></div>
+    </div>
+
+    <div class="section">
+        <h3>💬 سبب رفض المريض <span>Patient's Reason for Refusal</span></h3>
+        <div style="border: 1px solid #ddd; border-radius: 6px; min-height: 60px; padding: 8px; margin-top: 4px;"></div>
+    </div>
+
+    <div class="declaration">
+        <h3 style="color: #c0392b; margin-bottom: 10px;">📝 الإقرار والتوقيع / Declaration & Signature</h3>
+        <p>
+            أقر أنا الموقع أدناه بأنني قد رفضت العلاج / الإجراء الطبي الموصوف أعلاه بكامل إرادتي. تم شرح طبيعة العلاج
+            وفوائده والمخاطر المترتبة على رفضه بشكل واضح ومفصل من قبل الطبيب المعالج. أتفهم تماماً أن هذا الرفض قد يؤدي
+            إلى تدهور حالتي الصحية أو مضاعفات خطيرة. أتحمل كامل المسؤولية القانونية والصحية عن قراري هذا وأعفي المستشفى
+            والفريق الطبي من أي مسؤولية ناجمة عن رفض العلاج.
+        </p>
+        <p style="direction: ltr; text-align: left; font-style: italic;">
+            I, the undersigned, declare that I have refused the above-described treatment/procedure of my own free will.
+            The nature, benefits, and risks of refusal have been clearly explained by the attending physician. I fully
+            understand that this refusal may lead to deterioration or serious complications. I accept full legal and
+            medical responsibility and release the hospital and medical team from any liability arising from this
+            refusal.
+        </p>
+    </div>
+
+    <div class="sig-grid">
+        <div class="sig-box">
+            <div class="sig-line"><strong>توقيع المريض</strong></div>
+            <p>Patient Signature</p>
+            <p>الاسم / Name: _____________</p>
+        </div>
+        <div class="sig-box">
+            <div class="sig-line"><strong>توقيع الطبيب المعالج</strong></div>
+            <p>Attending Physician Signature</p>
+            <p>الاسم / Name: _____________</p>
+        </div>
+        <div class="sig-box">
+            <div class="sig-line"><strong>توقيع الشاهد</strong></div>
+            <p>Witness Signature</p>
+            <p>الاسم / Name: _____________</p>
+        </div>
+    </div>
+
+    <div class="footer">
+        نموذج رقم: REF-001 | الإصدار: 1.0 | التاريخ: 2026 | جمانا الطبي — jumanaMedical<br>
+        Form No: REF-001 | Version: 1.0 | Must be signed when patient refuses recommended treatment
+    </div>
+
+</body>
+
+</html>
