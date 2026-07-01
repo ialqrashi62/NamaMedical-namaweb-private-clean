@@ -73,12 +73,13 @@ async function initDatabase() {
     // "permission denied for schema public" under the non-superuser app role (crashing the spawned
     // server -> integration tests got ECONNREFUSED). Production always skips regardless.
     const _skipInit = ['1', 'true', 'yes'].includes(String(process.env.SKIP_DB_INIT || '').toLowerCase());
-    if (process.env.NODE_ENV === 'production' || _skipInit) {
-        console.log('[DB INFO] Production environment detected or SKIP_DB_INIT set. Skipping table initialization and seeding.');
+    if (process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging' || _skipInit) {
+        console.log('[DB INFO] Production/Staging environment detected or SKIP_DB_INIT set. Skipping table initialization and seeding.');
         return;
     }
     const client = await pool.connect();
     try {
+        const allowSeed = (process.env.NODE_ENV !== 'staging' && process.env.NODE_ENV !== 'production') || process.env.ALLOW_STAGING_SEED === 'true';
         // ===== CORE TABLES =====
         await client.query(`
 CREATE TABLE IF NOT EXISTS patients (
@@ -1164,40 +1165,44 @@ CREATE TABLE IF NOT EXISTS audit_trail (
         `);
 
         // Seed emergency beds
-        const ebCount = (await client.query('SELECT COUNT(*) as cnt FROM emergency_beds')).rows[0].cnt;
-        if (parseInt(ebCount) === 0) {
-            await client.query(`INSERT INTO emergency_beds (bed_name, bed_name_ar, zone, zone_ar, status) VALUES
-                ('ER-1', 'طوارئ-1', 'Resuscitation', 'الإنعاش', 'Available'),
-                ('ER-2', 'طوارئ-2', 'Resuscitation', 'الإنعاش', 'Available'),
-                ('ER-3', 'طوارئ-3', 'Critical', 'الحرجة', 'Available'),
-                ('ER-4', 'طوارئ-4', 'Critical', 'الحرجة', 'Available'),
-                ('ER-5', 'طوارئ-5', 'Acute', 'الحادة', 'Available'),
-                ('ER-6', 'طوارئ-6', 'Acute', 'الحادة', 'Available'),
-                ('ER-7', 'طوارئ-7', 'Observation', 'المراقبة', 'Available'),
-                ('ER-8', 'طوارئ-8', 'Observation', 'المراقبة', 'Available')
-            `);
+        if (allowSeed) {
+            const ebCount = (await client.query('SELECT COUNT(*) as cnt FROM emergency_beds')).rows[0].cnt;
+            if (parseInt(ebCount) === 0) {
+                await client.query(`INSERT INTO emergency_beds (bed_name, bed_name_ar, zone, zone_ar, status) VALUES
+                    ('ER-1', 'طوارئ-1', 'Resuscitation', 'الإنعاش', 'Available'),
+                    ('ER-2', 'طوارئ-2', 'Resuscitation', 'الإنعاش', 'Available'),
+                    ('ER-3', 'طوارئ-3', 'Critical', 'الحرجة', 'Available'),
+                    ('ER-4', 'طوارئ-4', 'Critical', 'الحرجة', 'Available'),
+                    ('ER-5', 'طوارئ-5', 'Acute', 'الحادة', 'Available'),
+                    ('ER-6', 'طوارئ-6', 'Acute', 'الحادة', 'Available'),
+                    ('ER-7', 'طوارئ-7', 'Observation', 'المراقبة', 'Available'),
+                    ('ER-8', 'طوارئ-8', 'Observation', 'المراقبة', 'Available')
+                `);
+            }
         }
 
         // Seed default wards and beds
-        const wardCount = (await client.query('SELECT COUNT(*) as cnt FROM wards')).rows[0].cnt;
-        if (parseInt(wardCount) === 0) {
-            await client.query(`INSERT INTO wards (ward_name, ward_name_ar, ward_type, floor, total_beds) VALUES
-                ('Medical Ward', 'جناح الباطنة', 'Medical', '2nd Floor', 20),
-                ('Surgical Ward', 'جناح الجراحة', 'Surgical', '3rd Floor', 20),
-                ('Pediatric Ward', 'جناح الأطفال', 'Pediatric', '4th Floor', 15),
-                ('Maternity Ward', 'جناح الولادة', 'Maternity', '4th Floor', 10),
-                ('ICU', 'العناية المركزة', 'ICU', '2nd Floor', 8),
-                ('NICU', 'عناية الأطفال المركزة', 'NICU', '4th Floor', 6),
-                ('CCU', 'عناية القلب', 'CCU', '2nd Floor', 6),
-                ('VIP Ward', 'جناح كبار الشخصيات', 'VIP', '5th Floor', 10)
-            `);
-            // Seed beds for each ward
-            const wards = (await client.query('SELECT id, total_beds, ward_type FROM wards')).rows;
-            for (const w of wards) {
-                for (let i = 1; i <= w.total_beds; i++) {
-                    const bedType = w.ward_type === 'ICU' || w.ward_type === 'NICU' || w.ward_type === 'CCU' ? 'ICU' : w.ward_type === 'VIP' ? 'VIP' : 'Standard';
-                    const room = Math.ceil(i / 2);
-                    await client.query('INSERT INTO beds (ward_id, bed_number, bed_type, room_number, status) VALUES ($1, $2, $3, $4, $5)', [w.id, `${i}`, bedType, `${room}`, 'Available']);
+        if (allowSeed) {
+            const wardCount = (await client.query('SELECT COUNT(*) as cnt FROM wards')).rows[0].cnt;
+            if (parseInt(wardCount) === 0) {
+                await client.query(`INSERT INTO wards (ward_name, ward_name_ar, ward_type, floor, total_beds) VALUES
+                    ('Medical Ward', 'جناح الباطنة', 'Medical', '2nd Floor', 20),
+                    ('Surgical Ward', 'جناح الجراحة', 'Surgical', '3rd Floor', 20),
+                    ('Pediatric Ward', 'جناح الأطفال', 'Pediatric', '4th Floor', 15),
+                    ('Maternity Ward', 'جناح الولادة', 'Maternity', '4th Floor', 10),
+                    ('ICU', 'العناية المركزة', 'ICU', '2nd Floor', 8),
+                    ('NICU', 'عناية الأطفال المركزة', 'NICU', '4th Floor', 6),
+                    ('CCU', 'عناية القلب', 'CCU', '2nd Floor', 6),
+                    ('VIP Ward', 'جناح كبار الشخصيات', 'VIP', '5th Floor', 10)
+                `);
+                // Seed beds for each ward
+                const wards = (await client.query('SELECT id, total_beds, ward_type FROM wards')).rows;
+                for (const w of wards) {
+                    for (let i = 1; i <= w.total_beds; i++) {
+                        const bedType = w.ward_type === 'ICU' || w.ward_type === 'NICU' || w.ward_type === 'CCU' ? 'ICU' : w.ward_type === 'VIP' ? 'VIP' : 'Standard';
+                        const room = Math.ceil(i / 2);
+                        await client.query('INSERT INTO beds (ward_id, bed_number, bed_type, room_number, status) VALUES ($1, $2, $3, $4, $5)', [w.id, `${i}`, bedType, `${room}`, 'Available']);
+                    }
                 }
             }
         }
@@ -1244,20 +1249,24 @@ CREATE TABLE IF NOT EXISTS audit_trail (
         await client.query(`DO $$ BEGIN ALTER TABLE patients ADD COLUMN gender TEXT DEFAULT ''; EXCEPTION WHEN duplicate_column THEN NULL; END $$;`);
 
         // Seed default operating rooms
-        const orCount = (await client.query('SELECT COUNT(*) as cnt FROM operating_rooms')).rows[0].cnt;
-        if (parseInt(orCount) === 0) {
-            await client.query(`INSERT INTO operating_rooms (room_name, room_name_ar, location, equipment, status) VALUES
-                ('OR-1', 'غرفة عمليات 1', 'الطابق الثاني', 'General Surgery Equipment', 'Available'),
-                ('OR-2', 'غرفة عمليات 2', 'الطابق الثاني', 'Orthopedic Equipment', 'Available'),
-                ('OR-3', 'غرفة عمليات 3', 'الطابق الثالث', 'Cardiac Equipment', 'Available'),
-                ('Minor OR', 'غرفة عمليات صغرى', 'الطابق الأول', 'Minor Procedures Equipment', 'Available')
-            `);
+        if (allowSeed) {
+            const orCount = (await client.query('SELECT COUNT(*) as cnt FROM operating_rooms')).rows[0].cnt;
+            if (parseInt(orCount) === 0) {
+                await client.query(`INSERT INTO operating_rooms (room_name, room_name_ar, location, equipment, status) VALUES
+                    ('OR-1', 'غرفة عمليات 1', 'الطابق الثاني', 'General Surgery Equipment', 'Available'),
+                    ('OR-2', 'غرفة عمليات 2', 'الطابق الثاني', 'Orthopedic Equipment', 'Available'),
+                    ('OR-3', 'غرفة عمليات 3', 'الطابق الثالث', 'Cardiac Equipment', 'Available'),
+                    ('Minor OR', 'غرفة عمليات صغرى', 'الطابق الأول', 'Minor Procedures Equipment', 'Available')
+                `);
+            }
         }
 
         // Default settings
-        const settingKeys = ['company_name_ar', 'company_name_en', 'tax_number', 'address', 'phone', 'logo_path', 'sample_data_inserted', 'theme'];
-        for (const key of settingKeys) {
-            await client.query('INSERT INTO company_settings (setting_key, setting_value) VALUES ($1, $2) ON CONFLICT (setting_key) DO NOTHING', [key, '']);
+        if (allowSeed) {
+            const settingKeys = ['company_name_ar', 'company_name_en', 'tax_number', 'address', 'phone', 'logo_path', 'sample_data_inserted', 'theme'];
+            for (const key of settingKeys) {
+                await client.query('INSERT INTO company_settings (setting_key, setting_value) VALUES ($1, $2) ON CONFLICT (setting_key) DO NOTHING', [key, '']);
+            }
         }
 
         // ===== MEDICAL RECORDS / HIM =====
@@ -1679,23 +1688,25 @@ CREATE TABLE IF NOT EXISTS cosmetic_followups (
         `);
 
         // Seed cosmetic procedures catalog
-        await client.query(`INSERT INTO cosmetic_procedures (name_en, name_ar, category, description, estimated_duration, anesthesia_type, average_cost, risks, recovery_days) VALUES
-            ('Rhinoplasty', 'تجميل الأنف', 'Face', 'Reshaping of the nose for aesthetic or functional purposes', 120, 'General', 15000, 'Bleeding, infection, asymmetry, breathing difficulties, numbness', 14),
-            ('Blepharoplasty', 'شد الجفون', 'Face', 'Upper and/or lower eyelid surgery to remove excess skin and fat', 90, 'Local', 8000, 'Dry eyes, blurred vision, asymmetry, scarring', 10),
-            ('Facelift (Rhytidectomy)', 'شد الوجه', 'Face', 'Lifting and tightening facial tissues to reduce sagging', 180, 'General', 25000, 'Hematoma, nerve injury, scarring, hair loss near incisions', 21),
-            ('Otoplasty', 'تجميل الأذن', 'Face', 'Reshaping or repositioning of the ears', 90, 'Local', 7000, 'Asymmetry, infection, overcorrection, scarring', 7),
-            ('Lip Augmentation', 'تكبير الشفاه', 'Face', 'Enhancement of lip volume using fillers or implants', 30, 'Local', 3000, 'Swelling, bruising, asymmetry, allergic reaction', 3),
-            ('Botox Injection', 'حقن البوتوكس', 'Non-Surgical', 'Wrinkle relaxation using botulinum toxin', 15, 'None', 1500, 'Bruising, headache, drooping, temporary weakness', 0),
-            ('Dermal Fillers', 'حقن الفيلر', 'Non-Surgical', 'Volume restoration using hyaluronic acid fillers', 30, 'Local', 2500, 'Swelling, bruising, lumps, vascular occlusion', 2),
-            ('Chemical Peel', 'التقشير الكيميائي', 'Non-Surgical', 'Chemical solution applied to improve skin texture', 45, 'None', 1000, 'Redness, peeling, pigmentation changes, scarring', 5),
-            ('Breast Augmentation', 'تكبير الثدي', 'Body', 'Enlargement using implants or fat transfer', 120, 'General', 20000, 'Capsular contracture, implant rupture, asymmetry, infection', 14),
-            ('Liposuction', 'شفط الدهون', 'Body', 'Removal of excess fat deposits from specific body areas', 120, 'General', 12000, 'Contour irregularities, fluid accumulation, numbness', 14),
-            ('Abdominoplasty', 'شد البطن', 'Body', 'Removal of excess skin and fat from the abdomen', 180, 'General', 18000, 'Seroma, wound healing issues, scarring, numbness', 21),
-            ('Laser Hair Removal', 'إزالة الشعر بالليزر', 'Laser', 'Permanent hair reduction using laser technology', 30, 'None', 500, 'Burns, pigmentation changes, paradoxical growth', 0),
-            ('Laser Skin Resurfacing', 'تقشير البشرة بالليزر', 'Laser', 'Laser treatment to improve skin texture and reduce wrinkles', 60, 'Local', 3000, 'Redness, swelling, infection, pigmentation changes', 7),
-            ('Hair Transplant (FUE)', 'زراعة الشعر', 'Hair', 'Follicular unit extraction for hair restoration', 360, 'Local', 15000, 'Infection, scarring, graft failure, temporary shock loss', 14),
-            ('PRP Therapy', 'علاج البلازما', 'Non-Surgical', 'Platelet-rich plasma injections for skin rejuvenation', 30, 'None', 1500, 'Bruising, swelling, infection, minimal pain', 1)
-        ON CONFLICT DO NOTHING`);
+        if (allowSeed) {
+            await client.query(`INSERT INTO cosmetic_procedures (name_en, name_ar, category, description, estimated_duration, anesthesia_type, average_cost, risks, recovery_days) VALUES
+                ('Rhinoplasty', 'تجميل الأنف', 'Face', 'Reshaping of the nose for aesthetic or functional purposes', 120, 'General', 15000, 'Bleeding, infection, asymmetry, breathing difficulties, numbness', 14),
+                ('Blepharoplasty', 'شد الجفون', 'Face', 'Upper and/or lower eyelid surgery to remove excess skin and fat', 90, 'Local', 8000, 'Dry eyes, blurred vision, asymmetry, scarring', 10),
+                ('Facelift (Rhytidectomy)', 'شد الوجه', 'Face', 'Lifting and tightening facial tissues to reduce sagging', 180, 'General', 25000, 'Hematoma, nerve injury, scarring, hair loss near incisions', 21),
+                ('Otoplasty', 'تجميل الأذن', 'Face', 'Reshaping or repositioning of the ears', 90, 'Local', 7000, 'Asymmetry, infection, overcorrection, scarring', 7),
+                ('Lip Augmentation', 'تكبير الشفاه', 'Face', 'Enhancement of lip volume using fillers or implants', 30, 'Local', 3000, 'Swelling, bruising, asymmetry, allergic reaction', 3),
+                ('Botox Injection', 'حقن البوتوكس', 'Non-Surgical', 'Wrinkle relaxation using botulinum toxin', 15, 'None', 1500, 'Bruising, headache, drooping, temporary weakness', 0),
+                ('Dermal Fillers', 'حقن الفيلر', 'Non-Surgical', 'Volume restoration using hyaluronic acid fillers', 30, 'Local', 2500, 'Swelling, bruising, lumps, vascular occlusion', 2),
+                ('Chemical Peel', 'التقشير الكيميائي', 'Non-Surgical', 'Chemical solution applied to improve skin texture', 45, 'None', 1000, 'Redness, peeling, pigmentation changes, scarring', 5),
+                ('Breast Augmentation', 'تكبير الثدي', 'Body', 'Enlargement using implants or fat transfer', 120, 'General', 20000, 'Capsular contracture, implant rupture, asymmetry, infection', 14),
+                ('Liposuction', 'شفط الدهون', 'Body', 'Removal of excess fat deposits from specific body areas', 120, 'General', 12000, 'Contour irregularities, fluid accumulation, numbness', 14),
+                ('Abdominoplasty', 'شد البطن', 'Body', 'Removal of excess skin and fat from the abdomen', 180, 'General', 18000, 'Seroma, wound healing issues, scarring, numbness', 21),
+                ('Laser Hair Removal', 'إزالة الشعر بالليزر', 'Laser', 'Permanent hair reduction using laser technology', 30, 'None', 500, 'Burns, pigmentation changes, paradoxical growth', 0),
+                ('Laser Skin Resurfacing', 'تقشير البشرة بالليزر', 'Laser', 'Laser treatment to improve skin texture and reduce wrinkles', 60, 'Local', 3000, 'Redness, swelling, infection, pigmentation changes', 7),
+                ('Hair Transplant (FUE)', 'زراعة الشعر', 'Hair', 'Follicular unit extraction for hair restoration', 360, 'Local', 15000, 'Infection, scarring, graft failure, temporary shock loss', 14),
+                ('PRP Therapy', 'علاج البلازما', 'Non-Surgical', 'Platelet-rich plasma injections for skin rejuvenation', 30, 'None', 1500, 'Bruising, swelling, infection, minimal pain', 1)
+            ON CONFLICT DO NOTHING`);
+        }
 
         // ===== TENANT ISOLATION FOUNDATION TABLES =====
         await client.query(`
@@ -1817,49 +1828,51 @@ CREATE TABLE IF NOT EXISTS cosmetic_followups (
         `);
 
         // ===== IDEMPOTENT SEED DATA FOR DEFAULT TENANT =====
-        // Default Tenant
-        await client.query(`
-            INSERT INTO tenants (id, name, subdomain, status, plan_type) 
-            VALUES (1, 'Nama Medical Default Tenant', 'default', 'active', 'standard') 
-            ON CONFLICT (id) DO NOTHING
-        `);
-        // Default Facility
-        await client.query(`
-            INSERT INTO facilities (id, tenant_id, name, tax_number) 
-            VALUES (1, 1, 'Default Medical Facility', '300000000000003') 
-            ON CONFLICT (id) DO NOTHING
-        `);
-        // Default Branch
-        await client.query(`
-            ALTER TABLE branches ADD COLUMN IF NOT EXISTS facility_id INTEGER;
-        `);
-        await client.query(`
-            INSERT INTO branches (id, facility_id, name, address) 
-            VALUES (1, 1, 'Main Branch', 'Riyadh, Saudi Arabia') 
-            ON CONFLICT (id) DO NOTHING
-        `);
+        if (allowSeed) {
+            // Default Tenant
+            await client.query(`
+                INSERT INTO tenants (id, name, subdomain, status, plan_type) 
+                VALUES (1, 'Nama Medical Default Tenant', 'default', 'active', 'standard') 
+                ON CONFLICT (id) DO NOTHING
+            `);
+            // Default Facility
+            await client.query(`
+                INSERT INTO facilities (id, tenant_id, name, tax_number) 
+                VALUES (1, 1, 'Default Medical Facility', '300000000000003') 
+                ON CONFLICT (id) DO NOTHING
+            `);
+            // Default Branch
+            await client.query(`
+                ALTER TABLE branches ADD COLUMN IF NOT EXISTS facility_id INTEGER;
+            `);
+            await client.query(`
+                INSERT INTO branches (id, facility_id, name, address) 
+                VALUES (1, 1, 'Main Branch', 'Riyadh, Saudi Arabia') 
+                ON CONFLICT (id) DO NOTHING
+            `);
 
-        // Synchronize sequences after manual seeding of ID 1
-        await client.query(`
-            SELECT setval(pg_get_serial_sequence('tenants', 'id'), COALESCE((SELECT MAX(id)+1 FROM tenants), 1), false);
-            SELECT setval(pg_get_serial_sequence('facilities', 'id'), COALESCE((SELECT MAX(id)+1 FROM facilities), 1), false);
-            SELECT setval(pg_get_serial_sequence('branches', 'id'), COALESCE((SELECT MAX(id)+1 FROM branches), 1), false);
-        `).catch(err => console.error('Sequence sync error:', err.message));
+            // Synchronize sequences after manual seeding of ID 1
+            await client.query(`
+                SELECT setval(pg_get_serial_sequence('tenants', 'id'), COALESCE((SELECT MAX(id)+1 FROM tenants), 1), false);
+                SELECT setval(pg_get_serial_sequence('facilities', 'id'), COALESCE((SELECT MAX(id)+1 FROM facilities), 1), false);
+                SELECT setval(pg_get_serial_sequence('branches', 'id'), COALESCE((SELECT MAX(id)+1 FROM branches), 1), false);
+            `).catch(err => console.error('Sequence sync error:', err.message));
 
-        // Default admin
-        await client.query(`INSERT INTO system_users (username, password_hash, display_name, role) VALUES ('admin', '$2b$12$G36aRwyn13/eICGIdRF4leQfi/g6xYROPVNvQ1cMrh95PDK9fbs0q', 'المدير العام', 'Admin') ON CONFLICT (username) DO NOTHING`);
+            // Default admin
+            await client.query(`INSERT INTO system_users (username, password_hash, display_name, role) VALUES ('admin', '$2b$12$G36aRwyn13/eICGIdRF4leQfi/g6xYROPVNvQ1cMrh95PDK9fbs0q', 'المدير العام', 'Admin') ON CONFLICT (username) DO NOTHING`);
 
-        // Map admin to default tenant/facility
-        await client.query(`
-            INSERT INTO user_tenants (user_id, tenant_id) 
-            VALUES ((SELECT id FROM system_users WHERE username='admin' LIMIT 1), 1) 
-            ON CONFLICT (user_id, tenant_id) DO NOTHING
-        `);
-        await client.query(`
-            INSERT INTO user_facilities (user_id, facility_id, branch_id) 
-            VALUES ((SELECT id FROM system_users WHERE username='admin' LIMIT 1), 1, 1) 
-            ON CONFLICT (user_id, facility_id, branch_id) DO NOTHING
-        `);
+            // Map admin to default tenant/facility
+            await client.query(`
+                INSERT INTO user_tenants (user_id, tenant_id) 
+                VALUES ((SELECT id FROM system_users WHERE username='admin' LIMIT 1), 1) 
+                ON CONFLICT (user_id, tenant_id) DO NOTHING
+            `);
+            await client.query(`
+                INSERT INTO user_facilities (user_id, facility_id, branch_id) 
+                VALUES ((SELECT id FROM system_users WHERE username='admin' LIMIT 1), 1, 1) 
+                ON CONFLICT (user_id, facility_id, branch_id) DO NOTHING
+            `);
+        }
 
         // ===== MIGRATIONS: Add missing columns to existing tables =====
         try {

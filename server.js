@@ -12070,7 +12070,8 @@ async function startServer() {
         // the old !== 'true' check let '1' through and ran insertSampleData() -> patients RLS violation
         // (no app.tenant_id on a restored/production-like DB). Skip seed whenever init is skipped.
         const _skipSeed = ['1', 'true', 'yes'].includes(String(process.env.SKIP_DB_INIT || '').toLowerCase());
-        if (process.env.NODE_ENV !== 'production' && !_skipSeed) {
+        const _allowSeed = (process.env.NODE_ENV !== 'staging' && process.env.NODE_ENV !== 'production') || process.env.ALLOW_STAGING_SEED === 'true';
+        if (_allowSeed && !_skipSeed) {
             await insertSampleData();
             await populateLabCatalog();
             await populateRadiologyCatalog();
