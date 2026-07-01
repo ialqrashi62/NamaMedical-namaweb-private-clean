@@ -11,7 +11,7 @@ DROP POLICY IF EXISTS tenant_checkout_sessions_policy ON saas_billing_checkout_s
 DROP POLICY IF EXISTS tenant_billing_subscriptions_policy ON saas_billing_subscriptions;
 DROP POLICY IF EXISTS tenant_billing_customers_policy ON saas_billing_customers;
 
--- Drop Tables (without CASCADE unless justified)
+-- Drop Tables cleanly
 DROP TABLE IF EXISTS saas_billing_audit_events;
 DROP TABLE IF EXISTS saas_billing_provider_accounts;
 DROP TABLE IF EXISTS saas_billing_webhook_events;

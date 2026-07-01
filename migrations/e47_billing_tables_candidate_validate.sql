@@ -1,5 +1,5 @@
--- e26_billing_tables_candidate_validate.sql
--- Read-only validation for an ISOLATED test DB after e26_up.
+-- e47_billing_tables_candidate_validate.sql
+-- Read-only validation for an ISOLATED test DB after e47_up.
 -- Returns all_ok = true iff the seven tables, key constraints, RLS, and indexes exist as designed.
 -- Absolutely NO writes.
 SELECT
