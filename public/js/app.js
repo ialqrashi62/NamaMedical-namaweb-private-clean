@@ -173,6 +173,7 @@ const NAV_ITEMS = [
   if (headerRight) {
     const oldSwitcher = document.getElementById('facilitySwitcher');
     if (oldSwitcher) oldSwitcher.remove();
+    headerRight.insertAdjacentHTML('beforeend', `
       <select id="facilitySwitcher" class="theme-select" style="background: var(--accent-glow); color: var(--accent); border: 1px solid var(--accent); margin-left: 12px; margin-right: 12px; padding: 4px 8px; border-radius: 8px; font-size: 13px; font-weight: 600;">
         <option value="medical_city" ${facilityType === 'medical_city' ? 'selected' : ''}>🏢 ${tr('Medical City', 'المدينة الطبية')}</option>
         <option value="general_hospital" ${facilityType === 'general_hospital' ? 'selected' : ''}>🏥 ${tr('General Hospital', 'المستشفى العام')}</option>
