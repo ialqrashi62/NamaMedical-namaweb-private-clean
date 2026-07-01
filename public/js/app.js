@@ -2245,6 +2245,9 @@ window.renderE1Panel = async (pid) => {
         <button class="btn btn-sm e1-tab" data-tab="cardiothoracic" onclick="e1SwitchTab('cardiothoracic',${safeId(pid)})">🫀 ${tr('Cardiothoracic', 'جراحة الصدر والأوعية')}</button>
         <button class="btn btn-sm e1-tab" data-tab="anesthesia_pain" onclick="e1SwitchTab('anesthesia_pain',${safeId(pid)})">💉 ${tr('Anesthesia & Pain', 'التخدير وعلاج الألم')}</button>
         <button class="btn btn-sm e1-tab" data-tab="pediatrics" onclick="e1SwitchTab('pediatrics',${safeId(pid)})">👶 ${tr('Pediatrics', 'طب الأطفال')}</button>
+        <button class="btn btn-sm e1-tab" data-tab="obgyn" onclick="e1SwitchTab('obgyn',${safeId(pid)})">🤰 ${tr('OBGYN', 'النساء والتوليد')}</button>
+        <button class="btn btn-sm e1-tab" data-tab="psychiatry" onclick="e1SwitchTab('psychiatry',${safeId(pid)})">🧠 ${tr('Psychiatry', 'الطب النفسي')}</button>
+        <button class="btn btn-sm e1-tab" data-tab="dermatology" onclick="e1SwitchTab('dermatology',${safeId(pid)})">🧴 ${tr('Dermatology', 'الأمراض الجلدية')}</button>
       </div>
       <div id="e1TabBody"></div>
     </div>`;
@@ -2279,6 +2282,9 @@ window.e1SwitchTab = async (tab, pid) => {
   if (tab === 'cardiothoracic') return window.e1RenderCardiothoracic(pid);
   if (tab === 'anesthesia_pain') return window.e1RenderAnesthesiaPain(pid);
   if (tab === 'pediatrics') return window.e1RenderPediatrics(pid);
+  if (tab === 'obgyn') return window.e1RenderObgyn(pid);
+  if (tab === 'psychiatry') return window.e1RenderPsychiatry(pid);
+  if (tab === 'dermatology') return window.e1RenderDermatology(pid);
 };
 
 // ---------- Problem List ----------
@@ -16595,7 +16601,6 @@ window.e1AddEntExam = async (pid) => {
     showToast(tr('Error saving ENT examination', 'خطأ في حفظ فحص الأذن والأنف والحنجرة'), 'error');
   }
 };
-};
 
 // =====================================================================
 // ===== PLASTIC & BURNS MODULE (G12) =====
@@ -16918,7 +16923,6 @@ window.e1AddClinicalPhoto = async (pid) => {
   } catch (err) {
     showToast(tr('Error registering clinical photo', 'خطأ في تسجيل بيانات الصورة السريرية'), 'error');
   }
-};
 };
 
 // =====================================================================
@@ -17372,7 +17376,6 @@ window.e1AddIcuAssessment = async (pid) => {
     showToast(tr('Error saving ICU assessment', 'خطأ في حفظ تقييم العناية المركزة'), 'error');
   }
 };
-};
 
 // =====================================================================
 // ===== ORTHOPEDICS MODULE (G10) =====
@@ -17696,7 +17699,6 @@ window.e1AddImplantRegistry = async (pid) => {
     showToast(tr('Error registering implant', 'خطأ في تسجيل وتوثيق الغرسة'), 'error');
   }
 };
-};
 
 // =====================================================================
 // ===== OPHTHALMOLOGY MODULE (G14) =====
@@ -18012,7 +18014,6 @@ window.e1AddEyeExam = async (pid) => {
   } catch (err) {
     showToast(tr('Error saving eye exam', 'خطأ في حفظ فحص العين'), 'error');
   }
-};
 };
 
 // =====================================================================
@@ -18410,7 +18411,6 @@ window.e1AddUroStudy = async (pid) => {
   } catch (err) {
     showToast(tr('Error saving study', 'خطأ في حفظ دراسة ديناميكية التبول'), 'error');
   }
-};
 };
 
 // =====================================================================
@@ -18881,5 +18881,486 @@ window.e1AddPedRecord = async (pid) => {
     window.e1CalcApgar();
   } catch (err) {
     showToast(tr('Error saving pediatric record', 'خطأ في حفظ سجل الطفل'), 'error');
+  }
+};
+
+// =====================================================================
+// ===== OBGYN MODULE (G21) =====
+// =====================================================================
+
+window.e1RenderObgyn = async (pid) => {
+  const body = document.getElementById('e1TabBody');
+  if (!body) return;
+  
+  body.innerHTML = `
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <!-- Left Column: Forms -->
+      <div style="flex:1.5;min-width:320px">
+        <h4 style="margin:0 0 12px;color:var(--primary)">🤰 ${tr('Obstetrics & Gynecology (OBGYN)', 'طب النساء والتوليد')}</h4>
+        
+        <!-- GPAL obstetrics history -->
+        <fieldset style="border:1px solid var(--border-color,#e5e7eb);border-radius:8px;padding:12px;margin-bottom:12px">
+          <legend style="padding:0 8px;font-weight:700;color:var(--primary)">📊 ${tr('Obstetric History (GPAL)', 'التاريخ التوليدي (GPAL)')}</legend>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
+            <div class="form-group">
+              <label>${tr('Gravida (G)', 'عدد مرات الحمل')}</label>
+              <input type="number" class="form-input" id="e1ObgynGravida" value="1" min="0">
+            </div>
+            <div class="form-group">
+              <label>${tr('Para (P)', 'عدد مرات الولادة')}</label>
+              <input type="number" class="form-input" id="e1ObgynPara" value="0" min="0">
+            </div>
+            <div class="form-group">
+              <label>${tr('Abortions (A)', 'عدد مرات الإجهاض')}</label>
+              <input type="number" class="form-input" id="e1ObgynAbortions" value="0" min="0">
+            </div>
+            <div class="form-group">
+              <label>${tr('Living (L)', 'الأطفال الأحياء')}</label>
+              <input type="number" class="form-input" id="e1ObgynLiving" value="0" min="0">
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- Pregnancy Calculator -->
+        <fieldset style="border:1px solid var(--border-color,#e5e7eb);border-radius:8px;padding:12px;margin-bottom:12px">
+          <legend style="padding:0 8px;font-weight:700;color:var(--primary)">📅 ${tr('Gestational Age & EDD Calculator', 'حاسبة عمر الحمل وموعد الولادة المتوقع')}</legend>
+          
+          <div class="form-group mb-8">
+            <label>${tr('Last Menstrual Period (LMP) Date', 'تاريخ آخر دورة شهرية')}</label>
+            <input type="date" class="form-input" id="e1ObgynLmp" onchange="e1ObgynCalcPregnancy()">
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+            <div style="background:var(--hover,#f8f9fa);padding:8px;border-radius:6px">
+              <div style="font-size:11px;color:var(--text-dim)">${tr('Estimated Date of Delivery (EDD)', 'موعد الولادة المتوقع')}</div>
+              <div id="e1ObgynEdd" style="font-size:14px;font-weight:700;color:var(--primary)">-</div>
+            </div>
+            <div style="background:var(--hover,#f8f9fa);padding:8px;border-radius:6px">
+              <div style="font-size:11px;color:var(--text-dim)">${tr('Gestational Age', 'عمر الحمل الحالي')}</div>
+              <div id="e1ObgynWeeks" style="font-size:14px;font-weight:700;color:var(--primary)">-</div>
+            </div>
+          </div>
+        </fieldset>
+
+        <div class="form-group mb-8">
+          <label>${tr('Clinical Notes & Antenatal Plan', 'الملاحظات السريرية وخطة رعاية الحمل')}</label>
+          <textarea class="form-input form-textarea" id="e1ObgynNotes" rows="2" placeholder="e.g., Normal fetal heart rate detected on Doppler..." style="min-height:45px"></textarea>
+        </div>
+
+        <button class="btn btn-primary btn-sm w-full" onclick="e1AddObgynPregnancy(${safeId(pid)})">💾 ${tr('Save Pregnancy Record', 'حفظ سجل الحمل')}</button>
+      </div>
+
+      <!-- Right Column: History Logs -->
+      <div style="flex:1;min-width:280px;border-right:1px solid var(--border-color,#e5e7eb);padding-right:16px">
+        <h4 style="margin:0 0 12px;color:var(--primary)">📋 ${tr('Pregnancy Records', 'السجلات السابقة')}</h4>
+        <div id="e1ObgynHistoryList">${tr('Loading...', 'جاري التحميل...')}</div>
+      </div>
+    </div>
+  `;
+  
+  window.e1LoadObgynHistory(pid);
+};
+
+window.e1ObgynCalcPregnancy = () => {
+  const lmpStr = document.getElementById('e1ObgynLmp')?.value;
+  const eddEl = document.getElementById('e1ObgynEdd');
+  const weeksEl = document.getElementById('e1ObgynWeeks');
+  
+  if (!lmpStr || !eddEl || !weeksEl) return;
+  
+  const lmp = new Date(lmpStr);
+  if (isNaN(lmp.getTime())) return;
+  
+  // Naegele's rule: LMP + 9 months + 7 days
+  const edd = new Date(lmp);
+  edd.setMonth(edd.getMonth() + 9);
+  edd.setDate(edd.getDate() + 7);
+  
+  eddEl.innerText = edd.toLocaleDateString('ar-SA');
+  
+  // Calculate Gestational Weeks: (Current Date - LMP) / 7 days
+  const diffTime = Math.abs(new Date() - lmp);
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const weeks = Math.floor(diffDays / 7);
+  const remainingDays = diffDays % 7;
+  
+  weeksEl.innerText = `${weeks} ${tr('weeks', 'أسبوع')} ${remainingDays} ${tr('days', 'يوم')}`;
+};
+
+window.e1LoadObgynHistory = async (pid) => {
+  const container = document.getElementById('e1ObgynHistoryList');
+  if (!container) return;
+  
+  try {
+    const records = await API.get('/api/obgyn/pregnancies/patient/' + pid);
+    if (!records.length) {
+      container.innerHTML = `<div style="color:var(--text-dim);font-size:13px">${tr('No pregnancy records found', 'لا توجد سجلات حمل سابقة مسجلة')}</div>`;
+    } else {
+      container.innerHTML = records.map(r => `
+        <div style="padding:10px;margin:6px 0;border-radius:8px;background:var(--hover,#f8f9fa);border-right:4px solid var(--primary);font-size:12px">
+          <div style="font-weight:700;color:var(--primary)">📅 ${new Date(r.created_at).toLocaleDateString('ar-SA')}</div>
+          <div style="margin-top:6px;font-size:11px">
+            <strong>GPAL:</strong> G${r.gravida} P${r.para} A${r.abortions} L${r.living}<br>
+            ${r.lmp_date ? `<strong>LMP:</strong> ${new Date(r.lmp_date).toLocaleDateString('ar-SA')}<br>` : ''}
+            ${r.edd_date ? `<strong>EDD:</strong> ${new Date(r.edd_date).toLocaleDateString('ar-SA')}<br>` : ''}
+            ${r.gestational_weeks ? `<strong>Weeks:</strong> ${r.gestational_weeks} weeks` : ''}
+          </div>
+          ${r.notes ? `<div style="margin-top:4px;color:var(--text-dim);font-style:italic">"${escapeHTML(r.notes)}"</div>` : ''}
+          <div style="font-size:10px;color:var(--text-dim);margin-top:4px">👨‍⚕️ ${escapeHTML(r.doctor_name || '')}</div>
+        </div>
+      `).join('');
+    }
+  } catch (err) {
+    container.innerHTML = `<div style="color:red">${tr('Error loading history', 'خطأ في تحميل السجل')}</div>`;
+  }
+};
+
+window.e1AddObgynPregnancy = async (pid) => {
+  const getVal = (id) => document.getElementById(id)?.value || '';
+  const getInt = (id) => parseInt(document.getElementById(id)?.value || 0);
+  
+  // Calculate EDD and Gestational Weeks if LMP is set
+  let eddDate = null;
+  let gestWeeks = null;
+  const lmpStr = getVal('e1ObgynLmp');
+  if (lmpStr) {
+    const lmp = new Date(lmpStr);
+    const edd = new Date(lmp);
+    edd.setMonth(edd.getMonth() + 9);
+    edd.setDate(edd.getDate() + 7);
+    eddDate = edd.toISOString().slice(0, 10);
+    
+    const diffTime = Math.abs(new Date() - lmp);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    gestWeeks = Math.floor(diffDays / 7);
+  }
+
+  try {
+    await API.post('/api/obgyn/pregnancies', {
+      patient_id: pid,
+      gravida: getInt('e1ObgynGravida'),
+      para: getInt('e1ObgynPara'),
+      abortions: getInt('e1ObgynAbortions'),
+      living: getInt('e1ObgynLiving'),
+      lmp_date: lmpStr || null,
+      edd_date: eddDate,
+      gestational_weeks: gestWeeks,
+      notes: getVal('e1ObgynNotes')
+    });
+    
+    showToast(tr('Pregnancy record saved successfully!', 'تم حفظ سجل الحمل بنجاح!'));
+    window.e1LoadObgynHistory(pid);
+    
+    document.getElementById('e1ObgynGravida').value = '1';
+    document.getElementById('e1ObgynPara').value = '0';
+    document.getElementById('e1ObgynAbortions').value = '0';
+    document.getElementById('e1ObgynLiving').value = '0';
+    document.getElementById('e1ObgynLmp').value = '';
+    document.getElementById('e1ObgynNotes').value = '';
+    document.getElementById('e1ObgynEdd').innerText = '-';
+    document.getElementById('e1ObgynWeeks').innerText = '-';
+  } catch (err) {
+    showToast(tr('Error saving pregnancy record', 'خطأ في حفظ سجل الحمل'), 'error');
+  }
+};
+
+
+// =====================================================================
+// ===== PSYCHIATRY MODULE (G24) =====
+// =====================================================================
+
+window.e1RenderPsychiatry = async (pid) => {
+  const body = document.getElementById('e1TabBody');
+  if (!body) return;
+  
+  body.innerHTML = `
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <!-- Left Column: Forms -->
+      <div style="flex:1.5;min-width:320px">
+        <h4 style="margin:0 0 12px;color:var(--primary)">🧠 ${tr('Psychiatric Evaluation & Mental Status', 'التقييم النفسي وحالة قوا العقلية')}</h4>
+        
+        <fieldset style="border:1px solid var(--border-color,#e5e7eb);border-radius:8px;padding:12px;margin-bottom:12px">
+          <legend style="padding:0 8px;font-weight:700;color:var(--primary)">🧠 ${tr('Mental Status Examination (MSE)', 'فحص الحالة العقلية')}</legend>
+          
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;font-size:12px">
+            <div class="form-group">
+              <label>${tr('Appearance & Grooming', 'المظهر والهندام')}</label>
+              <select id="e1MseAppearance" class="form-input" style="padding:2px">
+                <option value="Neat / Clean">${tr('Neat / Clean', 'نظيف ومرتب')}</option>
+                <option value="Disheveled / Unkempt">${tr('Disheveled / Unkempt', 'أشعث وهندام غير منظم')}</option>
+                <option value="Undernourished">${tr('Undernourished', 'يبدو عليه سوء التغذية')}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>${tr('Behavior & Psychomotor', 'السلوك والحركة النفسية')}</label>
+              <select id="e1MseBehavior" class="form-input" style="padding:2px">
+                <option value="Calm & Cooperative">${tr('Calm & Cooperative', 'هادئ ومتعاون')}</option>
+                <option value="Agitated / Restless">${tr('Agitated / Restless', 'مضطرب / قلق ومتوتر')}</option>
+                <option value="Withdrawn / Catatonic">${tr('Withdrawn / Catatonic', 'منعزل / خامل جداً')}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>${tr('Speech', 'الكلام')}</label>
+              <select id="e1MseSpeech" class="form-input" style="padding:2px">
+                <option value="Normal Rate & Volume">${tr('Normal Rate & Volume', 'معدل ونبرة صوت طبيعية')}</option>
+                <option value="Pressured / Rapid">${tr('Pressured / Rapid', 'كلام متسارع ومندفع')}</option>
+                <option value="Slow / Monotonous">${tr('Slow / Monotonous', 'بطيء ورتيب')}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>${tr('Mood & Affect', 'المزاج والوجدان')}</label>
+              <select id="e1MseMood" class="form-input" style="padding:2px">
+                <option value="Euthymic (Normal)">Euthymic (Normal)</option>
+                <option value="Depressed / Dysphoric">Depressed / Dysphoric</option>
+                <option value="Manic / Euphoric">Manic / Euphoric</option>
+                <option value="Anxious / Apprehensive">Anxious / Apprehensive</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>${tr('Thought Process', 'مجرى التفكير')}</label>
+              <select id="e1MseThoughtProcess" class="form-input" style="padding:2px">
+                <option value="Linear & Goal-directed">${tr('Linear & Goal-directed', 'مترابط وهادف')}</option>
+                <option value="Flight of Ideas">${tr('Flight of Ideas', 'تطاير الأفكار')}</option>
+                <option value="Tangential / Loose">${tr('Tangential / Loose', 'تفكير متباعد وغير مترابط')}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>${tr('Thought Content', 'محتوى التفكير')}</label>
+              <select id="e1MseThoughtContent" class="form-input" style="padding:2px">
+                <option value="No delusions or suicidal ideation">${tr('Normal / No suicidal ideation', 'طبيعي / لا أفكار انتحارية')}</option>
+                <option value="Delusions present">${tr('Delusions present', 'ضلالات / اعتقادات خاطئة')}</option>
+                <option value="Suicidal ideation present">${tr('Suicidal ideation present', 'أفكار انتحارية نشطة')}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>${tr('Insight', 'الاستبصار بالحالة')}</label>
+              <select id="e1MseInsight" class="form-input" style="padding:2px">
+                <option value="Good (Full awareness)">Good (Full awareness)</option>
+                <option value="Partial / Limited">Partial / Limited</option>
+                <option value="Poor (No awareness)">Poor (No awareness)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>${tr('Judgment', 'القدرة على الحكم')}</label>
+              <select id="e1MseJudgment" class="form-input" style="padding:2px">
+                <option value="Intact / Good">Intact / Good</option>
+                <option value="Impaired / Poor">Impaired / Poor</option>
+              </select>
+            </div>
+          </div>
+        </fieldset>
+
+        <div class="form-group mb-8">
+          <label>${tr('Diagnostic Summary & Management Plan', 'الملخص التشخيصي وخطة العلاج النفسي والسلوكي')}</label>
+          <textarea class="form-input form-textarea" id="e1PsychSummary" rows="2" placeholder="Describe clinical symptoms, medication adjustments..." style="min-height:45px"></textarea>
+        </div>
+
+        <button class="btn btn-primary btn-sm w-full" onclick="e1AddPsychEvaluation(${safeId(pid)})">💾 ${tr('Save Evaluation', 'حفظ التقييم النفسي')}</button>
+      </div>
+
+      <!-- Right Column: History Logs -->
+      <div style="flex:1;min-width:280px;border-right:1px solid var(--border-color,#e5e7eb);padding-right:16px">
+        <h4 style="margin:0 0 12px;color:var(--primary)">📋 ${tr('Evaluation History', 'سجل الفحوصات النفسية السابقة')}</h4>
+        <div id="e1PsychHistoryList">${tr('Loading...', 'جاري التحميل...')}</div>
+      </div>
+    </div>
+  `;
+  
+  window.e1LoadPsychHistory(pid);
+};
+
+window.e1LoadPsychHistory = async (pid) => {
+  const container = document.getElementById('e1PsychHistoryList');
+  if (!container) return;
+  
+  try {
+    const records = await API.get('/api/psychiatry/evaluations/patient/' + pid);
+    if (!records.length) {
+      container.innerHTML = `<div style="color:var(--text-dim);font-size:13px">${tr('No evaluations found', 'لا توجد فحوصات نفسية سابقة')}</div>`;
+    } else {
+      container.innerHTML = records.map(r => `
+        <div style="padding:10px;margin:6px 0;border-radius:8px;background:var(--hover,#f8f9fa);border-right:4px solid var(--primary);font-size:12px">
+          <div style="font-weight:700;color:var(--primary)">📅 ${new Date(r.evaluation_date).toLocaleDateString('ar-SA')}</div>
+          <div style="margin-top:4px;font-size:11px;line-height:1.4">
+            <strong>Appearance:</strong> ${escapeHTML(r.mse_appearance)}<br>
+            <strong>Behavior:</strong> ${escapeHTML(r.mse_behavior)}<br>
+            <strong>Mood/Affect:</strong> ${escapeHTML(r.mse_mood)} / ${escapeHTML(r.mse_affect)}<br>
+            <strong>Insight/Judgment:</strong> ${escapeHTML(r.mse_insight)} / ${escapeHTML(r.mse_judgment)}
+          </div>
+          ${r.diagnostic_summary ? `<div style="margin-top:4px;color:var(--text-dim);font-style:italic">"${escapeHTML(r.diagnostic_summary)}"</div>` : ''}
+          <div style="font-size:10px;color:var(--text-dim);margin-top:4px">👨‍⚕️ ${escapeHTML(r.doctor_name || '')}</div>
+        </div>
+      `).join('');
+    }
+  } catch (err) {
+    container.innerHTML = `<div style="color:red">${tr('Error loading history', 'خطأ في تحميل السجل')}</div>`;
+  }
+};
+
+window.e1AddPsychEvaluation = async (pid) => {
+  const getVal = (id) => document.getElementById(id)?.value || '';
+  
+  try {
+    await API.post('/api/psychiatry/evaluations', {
+      patient_id: pid,
+      mse_appearance: getVal('e1MseAppearance'),
+      mse_behavior: getVal('e1MseBehavior'),
+      mse_speech: getVal('e1MseSpeech'),
+      mse_mood: getVal('e1MseMood'),
+      mse_affect: getVal('e1MseMood'), // simplified
+      mse_thought_process: getVal('e1MseThoughtProcess'),
+      mse_thought_content: getVal('e1MseThoughtContent'),
+      mse_perception: 'Normal',
+      mse_cognition: 'Intact',
+      mse_insight: getVal('e1MseInsight'),
+      mse_judgment: getVal('e1MseJudgment'),
+      diagnostic_summary: getVal('e1PsychSummary')
+    });
+    
+    showToast(tr('Psychiatric evaluation saved successfully!', 'تم حفظ التقييم النفسي بنجاح!'));
+    window.e1LoadPsychHistory(pid);
+    
+    document.getElementById('e1MseAppearance').selectedIndex = 0;
+    document.getElementById('e1MseBehavior').selectedIndex = 0;
+    document.getElementById('e1MseSpeech').selectedIndex = 0;
+    document.getElementById('e1MseMood').selectedIndex = 0;
+    document.getElementById('e1MseThoughtProcess').selectedIndex = 0;
+    document.getElementById('e1MseThoughtContent').selectedIndex = 0;
+    document.getElementById('e1MseInsight').selectedIndex = 0;
+    document.getElementById('e1MseJudgment').selectedIndex = 0;
+    document.getElementById('e1PsychSummary').value = '';
+  } catch (err) {
+    showToast(tr('Error saving psychiatric evaluation', 'خطأ في حفظ التقييم النفسي'), 'error');
+  }
+};
+
+
+// =====================================================================
+// ===== DERMATOLOGY MODULE (G25) =====
+// =====================================================================
+
+window.e1RenderDermatology = async (pid) => {
+  const body = document.getElementById('e1TabBody');
+  if (!body) return;
+  
+  body.innerHTML = `
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <!-- Left Column: Forms -->
+      <div style="flex:1.5;min-width:320px">
+        <h4 style="margin:0 0 12px;color:var(--primary)">🧴 ${tr('Dermatology & Skin Lesion Log', 'طب الأمراض الجلدية وتتبع الآفات')}</h4>
+        
+        <fieldset style="border:1px solid var(--border-color,#e5e7eb);border-radius:8px;padding:12px;margin-bottom:12px">
+          <legend style="padding:0 8px;font-weight:700;color:var(--primary)">🔎 ${tr('Skin Lesion Examination', 'فحص وتوثيق الآفة الجلدية')}</legend>
+          
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+            <div class="form-group">
+              <label>${tr('Anatomical Site / Location', 'الموقع التشريحي في الجسم')}</label>
+              <input type="text" class="form-input" id="e1DermSite" placeholder="e.g. Left forearm">
+            </div>
+            <div class="form-group">
+              <label>${tr('Lesion Type', 'نوع الآفة الجلدية')}</label>
+              <select id="e1DermType" class="form-input" style="padding:2px">
+                <option value="Macule">${tr('Macule', 'بقعة مسطحة')}</option>
+                <option value="Papule">${tr('Papule', 'حطاطة بارزة')}</option>
+                <option value="Nodule">${tr('Nodule', 'عقيدة صلبة')}</option>
+                <option value="Vesicle">${tr('Vesicle', 'حويصلة مائية')}</option>
+                <option value="Plaque">${tr('Plaque', 'لوحة جلدية')}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>${tr('Color', 'اللون')}</label>
+              <input type="text" class="form-input" id="e1DermColor" placeholder="e.g. Erythematous (Red)">
+            </div>
+            <div class="form-group">
+              <label>${tr('Size (mm)', 'الحجم (بالمليمتر)')}</label>
+              <input type="number" step="0.1" class="form-input" id="e1DermSize" value="5.0">
+            </div>
+            <div class="form-group">
+              <label>${tr('Distribution / Pattern', 'توزيع الآفة على الجسم')}</label>
+              <input type="text" class="form-input" id="e1DermDist" placeholder="e.g. Asymmetrical / Isolated">
+            </div>
+            <div class="form-group" style="display:flex;align-items:center;margin-top:20px">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                <input type="checkbox" id="e1DermBiopsy">
+                <span><strong>${tr('Skin Biopsy Taken', 'تم أخذ خزعة جلدية')}</strong></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group mb-8">
+            <label>${tr('Morphology Description & Treatment Plan', 'توصيف شكل الآفة وخطة العلاج')}</label>
+            <textarea class="form-input form-textarea" id="e1DermNotes" rows="2" placeholder="e.g., Margins are well-defined, mild scaling present..." style="min-height:45px"></textarea>
+          </div>
+
+          <button class="btn btn-primary btn-sm w-full" onclick="e1AddDermLesion(${safeId(pid)})">💾 ${tr('Save Lesion Record', 'حفظ سجل الآفة')}</button>
+        </fieldset>
+      </div>
+
+      <!-- Right Column: History Logs -->
+      <div style="flex:1;min-width:280px;border-right:1px solid var(--border-color,#e5e7eb);padding-right:16px">
+        <h4 style="margin:0 0 12px;color:var(--primary)">📋 ${tr('Skin Lesion History', 'سجل الآفات الجلدية السابقة')}</h4>
+        <div id="e1DermHistoryList">${tr('Loading...', 'جاري التحميل...')}</div>
+      </div>
+    </div>
+  `;
+  
+  window.e1LoadDermHistory(pid);
+};
+
+window.e1LoadDermHistory = async (pid) => {
+  const container = document.getElementById('e1DermHistoryList');
+  if (!container) return;
+  
+  try {
+    const records = await API.get('/api/dermatology/lesions/patient/' + pid);
+    if (!records.length) {
+      container.innerHTML = `<div style="color:var(--text-dim);font-size:13px">${tr('No skin lesions logged', 'لا توجد سجلات آفات جلدية مسجلة')}</div>`;
+    } else {
+      container.innerHTML = records.map(r => `
+        <div style="padding:10px;margin:6px 0;border-radius:8px;background:var(--hover,#f8f9fa);border-right:4px solid var(--primary);font-size:12px">
+          <div style="font-weight:700;color:var(--primary)">📅 ${new Date(r.exam_date).toLocaleDateString('ar-SA')}</div>
+          <div style="margin-top:6px;font-size:11px">
+            <strong>Site:</strong> ${escapeHTML(r.body_site)}<br>
+            <strong>Type:</strong> ${escapeHTML(r.lesion_type)} (${r.size_mm} mm)<br>
+            <strong>Color:</strong> ${escapeHTML(r.color)} | <strong>Pattern:</strong> ${escapeHTML(r.distribution)}<br>
+            ${r.biopsy_taken ? `<span class="badge badge-warning" style="margin-top:4px;display:inline-block">${tr('Biopsy Performed', 'تم أخذ خزعة')}</span>` : ''}
+          </div>
+          ${r.notes ? `<div style="margin-top:4px;color:var(--text-dim);font-style:italic">"${escapeHTML(r.notes)}"</div>` : ''}
+          <div style="font-size:10px;color:var(--text-dim);margin-top:4px">👨‍⚕️ ${escapeHTML(r.doctor_name || '')}</div>
+        </div>
+      `).join('');
+    }
+  } catch (err) {
+    container.innerHTML = `<div style="color:red">${tr('Error loading history', 'خطأ في تحميل السجل')}</div>`;
+  }
+};
+
+window.e1AddDermLesion = async (pid) => {
+  const getVal = (id) => document.getElementById(id)?.value || '';
+  
+  try {
+    await API.post('/api/dermatology/lesions', {
+      patient_id: pid,
+      body_site: getVal('e1DermSite'),
+      lesion_type: getVal('e1DermType'),
+      color: getVal('e1DermColor'),
+      size_mm: parseFloat(document.getElementById('e1DermSize')?.value || 0),
+      distribution: getVal('e1DermDist'),
+      biopsy_taken: document.getElementById('e1DermBiopsy').checked,
+      notes: getVal('e1DermNotes')
+    });
+    
+    showToast(tr('Skin lesion record saved successfully!', 'تم حفظ سجل الآفة الجلدية بنجاح!'));
+    window.e1LoadDermHistory(pid);
+    
+    document.getElementById('e1DermSite').value = '';
+    document.getElementById('e1DermType').selectedIndex = 0;
+    document.getElementById('e1DermColor').value = '';
+    document.getElementById('e1DermSize').value = '5.0';
+    document.getElementById('e1DermDist').value = '';
+    document.getElementById('e1DermBiopsy').checked = false;
+    document.getElementById('e1DermNotes').value = '';
+  } catch (err) {
+    showToast(tr('Error saving skin lesion record', 'خطأ في حفظ سجل الآفة الجلدية'), 'error');
   }
 };

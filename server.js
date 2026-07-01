@@ -4831,6 +4831,210 @@ app.get('/api/pediatrics/growth/patient/:patient_id', requireAuth, requireRole('
     }
 });
 
+// ===== OBGYN DEPARTMENT (G21) =====
+app.post('/api/obgyn/pregnancies', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+    try {
+        const { 
+            patient_id, lmp_date, edd_date, gravida, para, abortions, living, gestational_weeks, notes 
+        } = req.body;
+        const { tenantId, facilityId } = getRequestTenantContext(req);
+        
+        if (!patient_id) {
+            return res.status(400).json({ error: 'Patient ID is required' });
+        }
+        
+        const result = await pool.query(
+            `INSERT INTO obgyn_pregnancies 
+             (patient_id, doctor_id, lmp_date, edd_date, gravida, para, abortions, living, gestational_weeks, notes, tenant_id, facility_id) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+            [
+                patient_id,
+                req.session.user?.id || null,
+                lmp_date || null,
+                edd_date || null,
+                gravida === undefined ? 0 : parseInt(gravida),
+                para === undefined ? 0 : parseInt(para),
+                abortions === undefined ? 0 : parseInt(abortions),
+                living === undefined ? 0 : parseInt(living),
+                gestational_weeks === undefined ? null : parseInt(gestational_weeks),
+                notes || '',
+                tenantId || 1,
+                facilityId || null
+            ]
+        );
+        
+        logAudit(req.session.user?.id, req.session.user?.display_name, 'CREATE_OBGYN_PREGNANCY', 'OBGYN',
+            `Recorded pregnancy details for patient #${patient_id}`, req.ip);
+            
+        res.json({ id: result.rows[0].id, success: true });
+    } catch (e) {
+        console.error('[OBGYN Pregnancy Create Error]', e);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.get('/api/obgyn/pregnancies/patient/:patient_id', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+    try {
+        const { patient_id } = req.params;
+        const { tenantId } = getRequestTenantContext(req);
+        const tenantCheck = tenantId ? ' AND tenant_id=$2' : '';
+        const tenantParams = tenantId ? [patient_id, tenantId] : [patient_id];
+        
+        const result = await pool.query(
+            `SELECT op.*, su.display_name as doctor_name 
+             FROM obgyn_pregnancies op 
+             LEFT JOIN system_users su ON op.doctor_id = su.id 
+             WHERE op.patient_id=$1${tenantCheck} 
+             ORDER BY op.id DESC`,
+            tenantParams
+        );
+        
+        res.json(result.rows);
+    } catch (e) {
+        console.error('[OBGYN Pregnancy Get Error]', e);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// ===== PSYCHIATRY DEPARTMENT (G24) =====
+app.post('/api/psychiatry/evaluations', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+    try {
+        const { 
+            patient_id, evaluation_date, mse_appearance, mse_behavior, mse_speech, mse_mood, mse_affect,
+            mse_thought_process, mse_thought_content, mse_perception, mse_cognition, mse_insight, mse_judgment,
+            diagnostic_summary
+        } = req.body;
+        const { tenantId, facilityId } = getRequestTenantContext(req);
+        
+        if (!patient_id) {
+            return res.status(400).json({ error: 'Patient ID is required' });
+        }
+        
+        const result = await pool.query(
+            `INSERT INTO psychiatric_evaluations 
+             (patient_id, doctor_id, evaluation_date, mse_appearance, mse_behavior, mse_speech, mse_mood, mse_affect,
+              mse_thought_process, mse_thought_content, mse_perception, mse_cognition, mse_insight, mse_judgment,
+              diagnostic_summary, tenant_id, facility_id) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id`,
+            [
+                patient_id,
+                req.session.user?.id || null,
+                evaluation_date || new Date().toISOString().slice(0, 10),
+                mse_appearance || '',
+                mse_behavior || '',
+                mse_speech || '',
+                mse_mood || '',
+                mse_affect || '',
+                mse_thought_process || '',
+                mse_thought_content || '',
+                mse_perception || '',
+                mse_cognition || '',
+                mse_insight || '',
+                mse_judgment || '',
+                diagnostic_summary || '',
+                tenantId || 1,
+                facilityId || null
+            ]
+        );
+        
+        logAudit(req.session.user?.id, req.session.user?.display_name, 'CREATE_PSYCHIATRIC_EVALUATION', 'Psychiatry',
+            `Recorded psychiatric evaluation for patient #${patient_id}`, req.ip);
+            
+        res.json({ id: result.rows[0].id, success: true });
+    } catch (e) {
+        console.error('[Psychiatric Evaluation Create Error]', e);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.get('/api/psychiatry/evaluations/patient/:patient_id', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+    try {
+        const { patient_id } = req.params;
+        const { tenantId } = getRequestTenantContext(req);
+        const tenantCheck = tenantId ? ' AND tenant_id=$2' : '';
+        const tenantParams = tenantId ? [patient_id, tenantId] : [patient_id];
+        
+        const result = await pool.query(
+            `SELECT pe.*, su.display_name as doctor_name 
+             FROM psychiatric_evaluations pe 
+             LEFT JOIN system_users su ON pe.doctor_id = su.id 
+             WHERE pe.patient_id=$1${tenantCheck} 
+             ORDER BY pe.id DESC`,
+            tenantParams
+        );
+        
+        res.json(result.rows);
+    } catch (e) {
+        console.error('[Psychiatric Evaluation Get Error]', e);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// ===== DERMATOLOGY DEPARTMENT (G25) =====
+app.post('/api/dermatology/lesions', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+    try {
+        const { 
+            patient_id, exam_date, body_site, lesion_type, color, size_mm, distribution, biopsy_taken, notes 
+        } = req.body;
+        const { tenantId, facilityId } = getRequestTenantContext(req);
+        
+        if (!patient_id) {
+            return res.status(400).json({ error: 'Patient ID is required' });
+        }
+        
+        const result = await pool.query(
+            `INSERT INTO dermatology_lesions 
+             (patient_id, doctor_id, exam_date, body_site, lesion_type, color, size_mm, distribution, biopsy_taken, notes, tenant_id, facility_id) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+            [
+                patient_id,
+                req.session.user?.id || null,
+                exam_date || new Date().toISOString().slice(0, 10),
+                body_site || '',
+                lesion_type || '',
+                color || '',
+                size_mm === undefined ? 0.0 : parseFloat(size_mm),
+                distribution || '',
+                !!biopsy_taken,
+                notes || '',
+                tenantId || 1,
+                facilityId || null
+            ]
+        );
+        
+        logAudit(req.session.user?.id, req.session.user?.display_name, 'CREATE_DERMATOLOGY_LESION', 'Dermatology',
+            `Recorded dermatology lesion for patient #${patient_id}`, req.ip);
+            
+        res.json({ id: result.rows[0].id, success: true });
+    } catch (e) {
+        console.error('[Dermatology Lesion Create Error]', e);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.get('/api/dermatology/lesions/patient/:patient_id', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+    try {
+        const { patient_id } = req.params;
+        const { tenantId } = getRequestTenantContext(req);
+        const tenantCheck = tenantId ? ' AND tenant_id=$2' : '';
+        const tenantParams = tenantId ? [patient_id, tenantId] : [patient_id];
+        
+        const result = await pool.query(
+            `SELECT dl.*, su.display_name as doctor_name 
+             FROM dermatology_lesions dl 
+             LEFT JOIN system_users su ON dl.doctor_id = su.id 
+             WHERE dl.patient_id=$1${tenantCheck} 
+             ORDER BY dl.id DESC`,
+            tenantParams
+        );
+        
+        res.json(result.rows);
+    } catch (e) {
+        console.error('[Dermatology Lesion Get Error]', e);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
 // ===== ENT (OTOLARYNGOLOGY) DEPARTMENT =====
 app.post('/api/ent/audiograms', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
     try {
