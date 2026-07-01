@@ -20,7 +20,7 @@ console.log('Running Facility Switcher & Department Workspace Core Tests...');
 
 // 1. Filter facilities by medical city
 const kfmcFacilities = global.window.getFacilitiesByMedicalCity(1);
-assert.strictEqual(kfmcFacilities.length, 4, 'KFMC should have 4 facilities');
+assert.strictEqual(kfmcFacilities.length, 5, 'KFMC should have 5 facilities');
 assert.ok(kfmcFacilities.some(f => f.name_en.includes('General Hospital')), 'KFMC should contain General Hospital');
 console.log('✓ Facility Catalog filtering passed.');
 

@@ -34,9 +34,21 @@ let facilityType = 'general_hospital';
 const FACILITY_ALLOWED = {
   medical_city: null, // all allowed
   general_hospital: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 30, 33, 34, 42],
+  specialized_hospital: [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 13, 14, 15, 17, 18, 20, 34, 42],
+  tertiary_hospital: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 30, 33, 34, 42],
   polyclinic: [0, 1, 2, 3, 4, 6, 8, 9, 13, 14, 15, 20, 34, 42],
   phc: [0, 1, 2, 3, 4, 6, 14, 15, 33, 34],
-  health_unit: [0, 1, 2, 3, 14, 15, 33]
+  specialty_center: [0, 1, 2, 3, 4, 6, 8, 14, 15, 20, 34],
+  diagnostic_center: [3, 4, 14, 15],
+  rehabilitation_center: [0, 1, 2, 14, 15, 24],
+  dialysis_center: [0, 1, 2, 14, 15, 20],
+  dental_center: [0, 1, 2, 14, 15, 21],
+  mental_health_center: [0, 1, 2, 14, 15, 22],
+  home_healthcare_unit: [0, 1, 2, 14, 15, 33],
+  mobile_clinic: [0, 1, 2, 14, 15, 33],
+  virtual_clinic: [0, 1, 2, 14, 15, 33],
+  health_unit: [0, 1, 2, 3, 14, 15, 33],
+  emergency_center: [0, 1, 2, 3, 14, 15, 19]
 };
 
 const tr = (en, ar) => isArabic ? ar : en;
@@ -161,13 +173,24 @@ const NAV_ITEMS = [
   if (headerRight) {
     const oldSwitcher = document.getElementById('facilitySwitcher');
     if (oldSwitcher) oldSwitcher.remove();
-    headerRight.insertAdjacentHTML('afterbegin', `
       <select id="facilitySwitcher" class="theme-select" style="background: var(--accent-glow); color: var(--accent); border: 1px solid var(--accent); margin-left: 12px; margin-right: 12px; padding: 4px 8px; border-radius: 8px; font-size: 13px; font-weight: 600;">
-        <option value="medical_city" ${facilityType === 'medical_city' ? 'selected' : ''}>🏥 ${tr('Medical City', 'المدينة الطبية')}</option>
+        <option value="medical_city" ${facilityType === 'medical_city' ? 'selected' : ''}>🏢 ${tr('Medical City', 'المدينة الطبية')}</option>
         <option value="general_hospital" ${facilityType === 'general_hospital' ? 'selected' : ''}>🏥 ${tr('General Hospital', 'المستشفى العام')}</option>
-        <option value="polyclinic" ${facilityType === 'polyclinic' ? 'selected' : ''}>⚕️ ${tr('Polyclinic', 'مجمع العيادات')}</option>
+        <option value="specialized_hospital" ${facilityType === 'specialized_hospital' ? 'selected' : ''}>🏥 ${tr('Specialized Hospital', 'المستشفى التخصصي')}</option>
+        <option value="tertiary_hospital" ${facilityType === 'tertiary_hospital' ? 'selected' : ''}>🏥 ${tr('Tertiary Hospital', 'المستشفى المرجعي')}</option>
+        <option value="polyclinic" ${facilityType === 'polyclinic' ? 'selected' : ''}>⚕️ ${tr('Polyclinic / Complex', 'مجمع العيادات / المستوصف')}</option>
         <option value="phc" ${facilityType === 'phc' ? 'selected' : ''}>🩺 ${tr('Primary Care (PHC)', 'الرعاية الأولية')}</option>
+        <option value="specialty_center" ${facilityType === 'specialty_center' ? 'selected' : ''}>🏆 ${tr('Specialty Center', 'المركز التخصصي')}</option>
+        <option value="diagnostic_center" ${facilityType === 'diagnostic_center' ? 'selected' : ''}>🔬 ${tr('Diagnostic Center', 'المركز التشخيصي')}</option>
+        <option value="rehabilitation_center" ${facilityType === 'rehabilitation_center' ? 'selected' : ''}>🏋️ ${tr('Rehabilitation Center', 'مركز التأهيل الطبي')}</option>
+        <option value="dialysis_center" ${facilityType === 'dialysis_center' ? 'selected' : ''}>🩺 ${tr('Dialysis Center', 'مركز غسيل الكلى')}</option>
+        <option value="dental_center" ${facilityType === 'dental_center' ? 'selected' : ''}>🦷 ${tr('Dental Center', 'مركز أسنان')}</option>
+        <option value="mental_health_center" ${facilityType === 'mental_health_center' ? 'selected' : ''}>🧠 ${tr('Mental Health Center', 'مركز الصحة النفسية')}</option>
+        <option value="home_healthcare_unit" ${facilityType === 'home_healthcare_unit' ? 'selected' : ''}>🏠 ${tr('Home Healthcare Unit', 'رعاية صحية منزلية')}</option>
+        <option value="mobile_clinic" ${facilityType === 'mobile_clinic' ? 'selected' : ''}>🚑 ${tr('Mobile Clinic', 'العيادة المتنقلة')}</option>
+        <option value="virtual_clinic" ${facilityType === 'virtual_clinic' ? 'selected' : ''}>📹 ${tr('Virtual Clinic', 'العيادة الافتراضية')}</option>
         <option value="health_unit" ${facilityType === 'health_unit' ? 'selected' : ''}>🏠 ${tr('Health Unit', 'الوحدة الصحية')}</option>
+        <option value="emergency_center" ${facilityType === 'emergency_center' ? 'selected' : ''}>🚨 ${tr('Emergency Center', 'مركز طوارئ وإسعاف')}</option>
       </select>
     `);
     
@@ -357,8 +380,21 @@ function renderPublicHomepage() {
     { id: 'all', en: 'All Facility Types', ar: 'جميع أنواع المنشآت' },
     { id: 'medical_city', en: 'Medical City', ar: 'مدينة طبية' },
     { id: 'general_hospital', en: 'General Hospital', ar: 'مستشفى عام' },
+    { id: 'specialized_hospital', en: 'Specialized Hospital', ar: 'مستشفى تخصصي' },
+    { id: 'tertiary_hospital', en: 'Tertiary Hospital', ar: 'مستشفى مرجعي' },
     { id: 'polyclinic', en: 'Polyclinic / Complex', ar: 'مجمع عيادات / مستوصف' },
-    { id: 'health_unit', en: 'Primary Care Unit', ar: 'وحدة صحية / رعاية أولية' }
+    { id: 'phc', en: 'Primary Healthcare Center', ar: 'مركز رعاية صحية أولية' },
+    { id: 'specialty_center', en: 'Specialty Center', ar: 'مركز تخصصي' },
+    { id: 'diagnostic_center', en: 'Diagnostic Center', ar: 'مركز تشخيصي' },
+    { id: 'rehabilitation_center', en: 'Rehabilitation Center', ar: 'مركز تأهيل طبي' },
+    { id: 'dialysis_center', en: 'Dialysis Center', ar: 'مركز غسيل الكلى' },
+    { id: 'dental_center', en: 'Dental Center', ar: 'مركز أسنان' },
+    { id: 'mental_health_center', en: 'Mental Health Center', ar: 'مركز صحة نفسية' },
+    { id: 'home_healthcare_unit', en: 'Home Healthcare Unit', ar: 'رعاية صحية منزلية' },
+    { id: 'mobile_clinic', en: 'Mobile Clinic', ar: 'العيادة المتنقلة' },
+    { id: 'virtual_clinic', en: 'Virtual Clinic', ar: 'العيادة الافتراضية' },
+    { id: 'health_unit', en: 'Health Unit', ar: 'الوحدة الصحية' },
+    { id: 'emergency_center', en: 'Emergency Center', ar: 'مركز طوارئ وإسعاف' }
   ];
 
   // Render HTML structure
@@ -493,13 +529,43 @@ function renderPublicHomepage() {
       filtered = filtered.filter(f => f.type === type);
     }
 
-    const typeIcons = { medical_city: '🏥', general_hospital: '🏥', specialized_hospital: '🏥', polyclinic: '⚕️', health_unit: '🏠' };
+    const typeIcons = {
+      medical_city: '🏢',
+      general_hospital: '🏥',
+      specialized_hospital: '🏥',
+      tertiary_hospital: '🏥',
+      polyclinic: '⚕️',
+      phc: '🩺',
+      specialty_center: '🏆',
+      diagnostic_center: '🔬',
+      rehabilitation_center: '🏋️',
+      dialysis_center: '🩺',
+      dental_center: '🦷',
+      mental_health_center: '🧠',
+      home_healthcare_unit: '🏠',
+      mobile_clinic: '🚑',
+      virtual_clinic: '📹',
+      health_unit: '🏠',
+      emergency_center: '🚨'
+    };
     const typeLabels = {
       medical_city: { en: 'Medical City', ar: 'مدينة طبية' },
       general_hospital: { en: 'General Hospital', ar: 'مستشفى عام' },
       specialized_hospital: { en: 'Specialized Hospital', ar: 'مستشفى تخصصي' },
-      polyclinic: { en: 'Polyclinic', ar: 'مجمع عيادات' },
-      health_unit: { en: 'Primary Care Unit', ar: 'وحدة صحية' }
+      tertiary_hospital: { en: 'Tertiary Hospital', ar: 'مستشفى مرجعي' },
+      polyclinic: { en: 'Polyclinic / Complex', ar: 'مجمع عيادات / مستوصف' },
+      phc: { en: 'Primary Healthcare Center', ar: 'مركز رعاية صحية أولية' },
+      specialty_center: { en: 'Specialty Center', ar: 'مركز تخصصي' },
+      diagnostic_center: { en: 'Diagnostic Center', ar: 'مركز تشخيصي' },
+      rehabilitation_center: { en: 'Rehabilitation Center', ar: 'مركز تأهيل طبي' },
+      dialysis_center: { en: 'Dialysis Center', ar: 'مركز غسيل الكلى' },
+      dental_center: { en: 'Dental Center', ar: 'مركز أسنان' },
+      mental_health_center: { en: 'Mental Health Center', ar: 'مركز صحة نفسية' },
+      home_healthcare_unit: { en: 'Home Healthcare Unit', ar: 'رعاية صحية منزلية' },
+      mobile_clinic: { en: 'Mobile Clinic', ar: 'العيادة المتنقلة' },
+      virtual_clinic: { en: 'Virtual Clinic', ar: 'العيادة الافتراضية' },
+      health_unit: { en: 'Health Unit', ar: 'الوحدة الصحية' },
+      emergency_center: { en: 'Emergency Center', ar: 'مركز طوارئ وإسعاف' }
     };
 
     container.innerHTML = filtered.map(f => {
