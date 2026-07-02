@@ -12,7 +12,7 @@ const EMAIL_PROVIDER = process.env.EMAIL_PROVIDER || 'mock';
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY || '';
 const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY || '';
 const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || '';
-const FROM_EMAIL = process.env.FROM_EMAIL || 'no-reply@alfaisal-erp.com';
+const FROM_EMAIL = process.env.FROM_EMAIL || 'no-reply@jumanasoft.com';
 const FROM_NAME = process.env.FROM_NAME || 'Nama Medical | مجمع نما الطبي';
 
 const LOG_FILE = path.join(__dirname, 'backups', 'email_sent.log');

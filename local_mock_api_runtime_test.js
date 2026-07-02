@@ -46,7 +46,7 @@ assert.ok(!uiContent.includes('XMLHttpRequest'), 'local-api-preview-ui.js must n
 console.log('✓ Network-free constraints verified (No fetch/XHR).');
 
 // 4. Security Boundary Verifications (No production/staging URLs, no secrets, no PHI)
-assert.ok(!runtimeContent.includes('alfaisal-erp.com') || runtimeContent.includes('localhost'), 'No production URLs allowed in mock runtime');
+assert.ok(!runtimeContent.includes('jumanasoft.com') || runtimeContent.includes('localhost'), 'No production URLs allowed in mock runtime');
 assert.ok(!runtimeContent.includes('DB_PASSWORD') || runtimeContent.includes('__CHANGE_ME__'), 'No database passwords allowed');
 
 // Check mock data for PHI
