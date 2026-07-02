@@ -2632,6 +2632,452 @@ UPDATE maintenance_equipment SET tenant_id = 1 WHERE tenant_id IS NULL;
             console.log('  ✅ Phase B tables created (nphies_remittance_advice, nphies_claim_status_inquiry, zatca_credit_notes, hr_credentialing, hr_gosi_records, hr_wps_files, hr_nitaqat_records)');
         } catch (e) { console.error('Phase B tables migration error:', e.message); }
 
+        // ===== PHASE C — CLINICAL QUALITY (C1-C4) =====
+        try {
+            await client.query(`
+                -- C1: Controlled Substances (مراقبة المخدرات والمؤثرات العقلية)
+                CREATE TABLE IF NOT EXISTS pharmacy_controlled_substances (
+                    id SERIAL PRIMARY KEY,
+                    drug_name TEXT NOT NULL,
+                    drug_code TEXT DEFAULT '',              -- local formulary code
+                    schedule_class VARCHAR(10) DEFAULT '2' -- Saudi Schedule II/III/IV/V (مادة خاضعة)
+                        CHECK (schedule_class IN ('2','3','4','5','H','N')),
+                    dosage_form VARCHAR(50) DEFAULT '',
+                    strength TEXT DEFAULT '',
+                    unit VARCHAR(20) DEFAULT 'Tablet',
+                    opening_balance NUMERIC(10,3) DEFAULT 0,
+                    received_qty NUMERIC(10,3) DEFAULT 0,
+                    dispensed_qty NUMERIC(10,3) DEFAULT 0,
+                    wasted_qty NUMERIC(10,3) DEFAULT 0,
+                    closing_balance NUMERIC(10,3) DEFAULT 0,
+                    discrepancy NUMERIC(10,3) DEFAULT 0,
+                    record_date DATE NOT NULL DEFAULT CURRENT_DATE,
+                    location VARCHAR(100) DEFAULT '',      -- Ward/Pharmacy/ICU
+                    witnessed_by TEXT DEFAULT '',          -- الشاهد الثاني (double-witness)
+                    verified_by TEXT DEFAULT '',
+                    notes TEXT DEFAULT '',
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    UNIQUE(drug_code, record_date, location, tenant_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_cs_drug ON pharmacy_controlled_substances(drug_name, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_cs_date ON pharmacy_controlled_substances(record_date, tenant_id);
+
+                -- C1b: Controlled Substance Transactions (individual dispensing events)
+                CREATE TABLE IF NOT EXISTS pharmacy_cs_transactions (
+                    id SERIAL PRIMARY KEY,
+                    cs_id INTEGER REFERENCES pharmacy_controlled_substances(id),
+                    prescription_id INTEGER REFERENCES pharmacy_prescriptions(id),
+                    patient_id INTEGER REFERENCES patients(id),
+                    patient_name TEXT DEFAULT '',
+                    admission_id INTEGER,
+                    transaction_type VARCHAR(20) DEFAULT 'Dispense'
+                        CHECK (transaction_type IN ('Receive','Dispense','Waste','Return','Transfer','Count')),
+                    quantity NUMERIC(8,3) NOT NULL DEFAULT 0,
+                    balance_after NUMERIC(10,3) DEFAULT 0,
+                    witness1_name TEXT DEFAULT '',          -- الشاهد الأول (pharmacist)
+                    witness2_name TEXT DEFAULT '',          -- الشاهد الثاني (nurse/second pharmacist)
+                    witness1_id INTEGER,
+                    witness2_id INTEGER,
+                    administered_by TEXT DEFAULT '',
+                    administered_at TIMESTAMPTZ,
+                    reason TEXT DEFAULT '',
+                    waste_amount NUMERIC(8,3) DEFAULT 0,
+                    waste_reason TEXT DEFAULT '',
+                    is_signed BOOLEAN DEFAULT FALSE,       -- double-signed
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_cst_cs ON pharmacy_cs_transactions(cs_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_cst_patient ON pharmacy_cs_transactions(patient_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_cst_date ON pharmacy_cs_transactions(created_at, tenant_id);
+
+                -- C2: Medication Reconciliation (مطابقة الأدوية)
+                CREATE TABLE IF NOT EXISTS medication_reconciliations (
+                    id SERIAL PRIMARY KEY,
+                    patient_id INTEGER NOT NULL REFERENCES patients(id),
+                    admission_id INTEGER,
+                    reconciliation_type VARCHAR(20) NOT NULL DEFAULT 'Admission'
+                        CHECK (reconciliation_type IN ('Admission','Discharge','Transfer')),
+                    performed_by INTEGER,                  -- pharmacist/physician user_id
+                    performed_by_name TEXT DEFAULT '',
+                    performed_at TIMESTAMPTZ DEFAULT NOW(),
+                    status VARCHAR(20) DEFAULT 'Draft'
+                        CHECK (status IN ('Draft','Completed','Reviewed','Approved')),
+                    reviewed_by TEXT DEFAULT '',
+                    reviewed_at TIMESTAMPTZ,
+                    home_medications JSONB,                -- [{name, dose, route, frequency, last_taken}]
+                    hospital_medications JSONB,            -- [{name, dose, route, frequency, status: Continue/Hold/Modify/Discontinue}]
+                    discrepancies JSONB,                   -- [{drug, issue, action, resolved}]
+                    allergy_verified BOOLEAN DEFAULT FALSE,
+                    high_alert_checked BOOLEAN DEFAULT FALSE,
+                    patient_counselled BOOLEAN DEFAULT FALSE,
+                    notes TEXT DEFAULT '',
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_medrec_patient ON medication_reconciliations(patient_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_medrec_type ON medication_reconciliations(reconciliation_type, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_medrec_status ON medication_reconciliations(status, tenant_id);
+
+                -- C3a: Lab Microbiology (زراعة ومضادات حيوية)
+                CREATE TABLE IF NOT EXISTS lab_microbiology (
+                    id SERIAL PRIMARY KEY,
+                    order_id INTEGER REFERENCES lab_radiology_orders(id),
+                    patient_id INTEGER NOT NULL REFERENCES patients(id),
+                    admission_id INTEGER,
+                    specimen_type VARCHAR(50) DEFAULT '', -- Blood/Urine/Sputum/Wound/CSF/Stool
+                    collection_date DATE,
+                    collection_time TIME,
+                    collection_site TEXT DEFAULT '',
+                    gram_stain TEXT DEFAULT '',            -- Gram-positive cocci / Gram-negative rods
+                    preliminary_result TEXT DEFAULT '',
+                    final_result TEXT DEFAULT '',
+                    organism_identified TEXT DEFAULT '',   -- E. coli / Klebsiella / Staph aureus
+                    colony_count TEXT DEFAULT '',          -- >100,000 CFU/mL
+                    sensitivity_results JSONB,             -- [{antibiotic, mic, interpretation: S/I/R}]
+                    antibiogram_profile TEXT DEFAULT '',   -- MRSA/ESBL/VRE/CRE flag
+                    report_status VARCHAR(20) DEFAULT 'Pending'
+                        CHECK (report_status IN ('Pending','Preliminary','Final','Verified')),
+                    reported_by TEXT DEFAULT '',
+                    reported_at TIMESTAMPTZ,
+                    verified_by TEXT DEFAULT '',
+                    verified_at TIMESTAMPTZ,
+                    critical_value BOOLEAN DEFAULT FALSE,
+                    critical_notified_to TEXT DEFAULT '',
+                    critical_notified_at TIMESTAMPTZ,
+                    loinc_code VARCHAR(20) DEFAULT '',     -- LOINC for culture type
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_micro_patient ON lab_microbiology(patient_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_micro_order ON lab_microbiology(order_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_micro_organism ON lab_microbiology(organism_identified, tenant_id);
+
+                -- C3b: LOINC Code Reference table
+                CREATE TABLE IF NOT EXISTS lab_loinc_codes (
+                    id SERIAL PRIMARY KEY,
+                    loinc_code VARCHAR(20) UNIQUE NOT NULL,
+                    short_name TEXT DEFAULT '',
+                    long_name TEXT DEFAULT '',
+                    component TEXT DEFAULT '',             -- Analyte
+                    property TEXT DEFAULT '',              -- MCnc/SCnc/Prid
+                    time_aspect VARCHAR(20) DEFAULT '',    -- Pt/24H
+                    system TEXT DEFAULT '',                -- Bld/Urine/Ser/Plas
+                    scale VARCHAR(20) DEFAULT '',          -- Qn/Ord/Nom
+                    method TEXT DEFAULT '',
+                    class_name TEXT DEFAULT '',            -- CHEM/MICRO/COAG
+                    panel_name TEXT DEFAULT '',
+                    specimen_type TEXT DEFAULT '',
+                    unit TEXT DEFAULT '',
+                    normal_range_male TEXT DEFAULT '',
+                    normal_range_female TEXT DEFAULT '',
+                    is_active BOOLEAN DEFAULT TRUE,
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_loinc_code ON lab_loinc_codes(loinc_code);
+                CREATE INDEX IF NOT EXISTS idx_loinc_class ON lab_loinc_codes(class_name, tenant_id);
+
+                -- C4: Problem List ICD-10 (قائمة المشكلات مرتبطة بـ ICD-10)
+                CREATE TABLE IF NOT EXISTS patient_problem_list (
+                    id SERIAL PRIMARY KEY,
+                    patient_id INTEGER NOT NULL REFERENCES patients(id),
+                    admission_id INTEGER,
+                    icd10_code VARCHAR(20) NOT NULL DEFAULT '',
+                    icd10_description TEXT DEFAULT '',
+                    snomed_code VARCHAR(30) DEFAULT '',
+                    problem_name TEXT NOT NULL DEFAULT '',
+                    problem_type VARCHAR(30) DEFAULT 'Chronic'
+                        CHECK (problem_type IN ('Chronic','Acute','Historical','Surgical','Allergy','Social','Family')),
+                    onset_date DATE,
+                    resolved_date DATE,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    severity VARCHAR(20) DEFAULT 'Moderate'
+                        CHECK (severity IN ('Mild','Moderate','Severe','Critical')),
+                    status VARCHAR(20) DEFAULT 'Active'
+                        CHECK (status IN ('Active','Resolved','Inactive','Recurrent')),
+                    added_by TEXT DEFAULT '',
+                    added_by_id INTEGER,
+                    last_updated_by TEXT DEFAULT '',
+                    encounter_id INTEGER,
+                    notes TEXT DEFAULT '',
+                    principal_diagnosis BOOLEAN DEFAULT FALSE,  -- PDx flag
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_ppl_patient ON patient_problem_list(patient_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_ppl_icd10 ON patient_problem_list(icd10_code, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_ppl_active ON patient_problem_list(is_active, tenant_id);
+
+                -- C4b: ICD-10 Code Reference (quick lookup)
+                CREATE TABLE IF NOT EXISTS icd10_codes (
+                    id SERIAL PRIMARY KEY,
+                    code VARCHAR(20) UNIQUE NOT NULL,
+                    description_en TEXT NOT NULL DEFAULT '',
+                    description_ar TEXT DEFAULT '',
+                    category VARCHAR(10) DEFAULT '',       -- A00-B99 / J00-J99...
+                    chapter TEXT DEFAULT '',
+                    is_billable BOOLEAN DEFAULT TRUE,
+                    is_valid BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_icd10_code ON icd10_codes(code);
+                CREATE INDEX IF NOT EXISTS idx_icd10_desc ON icd10_codes(description_en);
+            `);
+            console.log('  ✅ Phase C tables created (pharmacy_controlled_substances, pharmacy_cs_transactions, medication_reconciliations, lab_microbiology, lab_loinc_codes, patient_problem_list, icd10_codes)');
+        } catch (e) { console.error('Phase C tables migration error:', e.message); }
+
+        // ===== PHASE D — FINANCE & OPERATIONS (D1-D3) =====
+        try {
+            await client.query(`
+                -- D1a: Accounts Payable (الذمم الدائنة)
+                CREATE TABLE IF NOT EXISTS finance_accounts_payable (
+                    id SERIAL PRIMARY KEY,
+                    vendor_id INTEGER,                     -- FK to vendors table
+                    vendor_name TEXT NOT NULL DEFAULT '',
+                    invoice_number TEXT NOT NULL DEFAULT '',
+                    invoice_date DATE NOT NULL DEFAULT CURRENT_DATE,
+                    due_date DATE,
+                    po_reference TEXT DEFAULT '',          -- Purchase Order ref
+                    description TEXT DEFAULT '',
+                    subtotal NUMERIC(14,2) DEFAULT 0,
+                    vat_amount NUMERIC(14,2) DEFAULT 0,
+                    total_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+                    paid_amount NUMERIC(14,2) DEFAULT 0,
+                    balance_due NUMERIC(14,2) GENERATED ALWAYS AS (total_amount - paid_amount) STORED,
+                    payment_status VARCHAR(20) DEFAULT 'Unpaid'
+                        CHECK (payment_status IN ('Unpaid','Partial','Paid','Overdue','Disputed','Cancelled')),
+                    payment_method VARCHAR(30) DEFAULT '',
+                    payment_date DATE,
+                    payment_reference TEXT DEFAULT '',
+                    gl_account_code VARCHAR(20) DEFAULT '', -- GL mapping
+                    cost_center VARCHAR(50) DEFAULT '',
+                    approved_by TEXT DEFAULT '',
+                    approved_at TIMESTAMPTZ,
+                    attachment_url TEXT DEFAULT '',
+                    notes TEXT DEFAULT '',
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_ap_vendor ON finance_accounts_payable(vendor_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_ap_due ON finance_accounts_payable(due_date, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_ap_status ON finance_accounts_payable(payment_status, tenant_id);
+
+                -- D1b: Accounts Receivable (الذمم المدينة)
+                CREATE TABLE IF NOT EXISTS finance_accounts_receivable (
+                    id SERIAL PRIMARY KEY,
+                    patient_id INTEGER REFERENCES patients(id),
+                    patient_name TEXT DEFAULT '',
+                    payer_type VARCHAR(20) DEFAULT 'Patient'
+                        CHECK (payer_type IN ('Patient','Insurance','Government','Corporate','Other')),
+                    payer_id INTEGER,                      -- insurance_company_id or corporate_id
+                    payer_name TEXT DEFAULT '',
+                    invoice_number TEXT NOT NULL DEFAULT '',
+                    visit_id INTEGER,
+                    admission_id INTEGER,
+                    invoice_date DATE NOT NULL DEFAULT CURRENT_DATE,
+                    due_date DATE,
+                    subtotal NUMERIC(14,2) DEFAULT 0,
+                    discount_amount NUMERIC(14,2) DEFAULT 0,
+                    insurance_share NUMERIC(14,2) DEFAULT 0,
+                    patient_share NUMERIC(14,2) DEFAULT 0,
+                    vat_amount NUMERIC(14,2) DEFAULT 0,
+                    total_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+                    collected_amount NUMERIC(14,2) DEFAULT 0,
+                    balance_due NUMERIC(14,2) GENERATED ALWAYS AS (total_amount - collected_amount) STORED,
+                    collection_status VARCHAR(20) DEFAULT 'Outstanding'
+                        CHECK (collection_status IN ('Outstanding','Partial','Collected','WriteOff','Disputed','Referred')),
+                    last_payment_date DATE,
+                    last_payment_amount NUMERIC(14,2) DEFAULT 0,
+                    aging_bucket VARCHAR(20) DEFAULT 'Current', -- Current/30d/60d/90d/120d+
+                    write_off_amount NUMERIC(14,2) DEFAULT 0,
+                    write_off_reason TEXT DEFAULT '',
+                    notes TEXT DEFAULT '',
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_ar_patient ON finance_accounts_receivable(patient_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_ar_payer ON finance_accounts_receivable(payer_type, payer_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_ar_status ON finance_accounts_receivable(collection_status, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_ar_due ON finance_accounts_receivable(due_date, tenant_id);
+
+                -- D2: Vendor Management (إدارة الموردين)
+                CREATE TABLE IF NOT EXISTS vendors (
+                    id SERIAL PRIMARY KEY,
+                    vendor_code TEXT UNIQUE,
+                    vendor_name_ar TEXT NOT NULL DEFAULT '',
+                    vendor_name_en TEXT DEFAULT '',
+                    vendor_type VARCHAR(30) DEFAULT 'Supplier'
+                        CHECK (vendor_type IN ('Supplier','Contractor','Consultant','Laboratory','Pharmaceutical','Medical Equipment','Maintenance','Other')),
+                    contact_person TEXT DEFAULT '',
+                    phone TEXT DEFAULT '',
+                    email TEXT DEFAULT '',
+                    address TEXT DEFAULT '',
+                    city TEXT DEFAULT 'Riyadh',
+                    country TEXT DEFAULT 'Saudi Arabia',
+                    vat_number TEXT DEFAULT '',            -- رقم ضريبة القيمة المضافة
+                    commercial_register TEXT DEFAULT '',   -- السجل التجاري
+                    iban TEXT DEFAULT '',
+                    bank_name TEXT DEFAULT '',
+                    payment_terms INTEGER DEFAULT 30,      -- أيام الدفع
+                    currency VARCHAR(5) DEFAULT 'SAR',
+                    credit_limit NUMERIC(14,2) DEFAULT 0,
+                    total_outstanding NUMERIC(14,2) DEFAULT 0,
+                    rating INTEGER DEFAULT 3               -- 1-5 نجوم
+                        CHECK (rating BETWEEN 1 AND 5),
+                    is_approved BOOLEAN DEFAULT FALSE,
+                    approved_by TEXT DEFAULT '',
+                    approved_at TIMESTAMPTZ,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    contract_start DATE,
+                    contract_end DATE,
+                    notes TEXT DEFAULT '',
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_vendor_name ON vendors(vendor_name_ar, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_vendor_type ON vendors(vendor_type, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_vendor_active ON vendors(is_active, tenant_id);
+
+                -- D3: Financial Reports snapshots (تقارير مالية مُجمَّعة)
+                CREATE TABLE IF NOT EXISTS finance_report_snapshots (
+                    id SERIAL PRIMARY KEY,
+                    report_type VARCHAR(50) NOT NULL,      -- PL/BalanceSheet/CashFlow/AR_Aging/AP_Aging/Revenue
+                    report_period_start DATE NOT NULL,
+                    report_period_end DATE NOT NULL,
+                    generated_by TEXT DEFAULT '',
+                    generated_at TIMESTAMPTZ DEFAULT NOW(),
+                    report_data JSONB NOT NULL DEFAULT '{}',  -- full P&L / BS data
+                    total_revenue NUMERIC(16,2) DEFAULT 0,
+                    total_expenses NUMERIC(16,2) DEFAULT 0,
+                    net_income NUMERIC(16,2) DEFAULT 0,
+                    total_assets NUMERIC(16,2) DEFAULT 0,
+                    total_liabilities NUMERIC(16,2) DEFAULT 0,
+                    total_equity NUMERIC(16,2) DEFAULT 0,
+                    status VARCHAR(20) DEFAULT 'Draft'
+                        CHECK (status IN ('Draft','Final','Approved','Audited')),
+                    approved_by TEXT DEFAULT '',
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_fin_rep_type ON finance_report_snapshots(report_type, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_fin_rep_period ON finance_report_snapshots(report_period_start, tenant_id);
+            `);
+            console.log('  ✅ Phase D tables created (finance_accounts_payable, finance_accounts_receivable, vendors, finance_report_snapshots)');
+        } catch (e) { console.error('Phase D tables migration error:', e.message); }
+
+        // ===== PHASE E — INTEGRATION & AI (E1-E3) =====
+        try {
+            await client.query(`
+                -- E1: FHIR Resource Store (FHIR R4 resource cache/log)
+                CREATE TABLE IF NOT EXISTS fhir_resources (
+                    id SERIAL PRIMARY KEY,
+                    resource_type VARCHAR(50) NOT NULL,    -- Patient/Observation/Condition/MedicationRequest...
+                    resource_id TEXT NOT NULL DEFAULT '',  -- FHIR logical id
+                    version_id TEXT DEFAULT '1',
+                    resource_json JSONB NOT NULL,
+                    last_updated TIMESTAMPTZ DEFAULT NOW(),
+                    source_system VARCHAR(50) DEFAULT 'NamaMedical',
+                    source_reference TEXT DEFAULT '',      -- internal record reference
+                    is_active BOOLEAN DEFAULT TRUE,
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    UNIQUE(resource_type, resource_id, tenant_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_fhir_type ON fhir_resources(resource_type, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_fhir_id ON fhir_resources(resource_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_fhir_updated ON fhir_resources(last_updated, tenant_id);
+
+                -- E2: HL7 Message Log (HL7 v2.x ADT/ORM/ORU messages)
+                CREATE TABLE IF NOT EXISTS hl7_messages (
+                    id SERIAL PRIMARY KEY,
+                    message_type VARCHAR(20) NOT NULL,     -- ADT^A01 / ORM^O01 / ORU^R01 / DFT^P03
+                    message_control_id TEXT DEFAULT '',
+                    sending_application TEXT DEFAULT 'NamaMedical',
+                    receiving_application TEXT DEFAULT '',
+                    sending_facility TEXT DEFAULT '',
+                    message_datetime TIMESTAMPTZ DEFAULT NOW(),
+                    patient_id INTEGER REFERENCES patients(id),
+                    message_body TEXT NOT NULL DEFAULT '', -- raw HL7 pipe-delimited
+                    parsed_json JSONB,                     -- parsed segments
+                    processing_status VARCHAR(20) DEFAULT 'Queued'
+                        CHECK (processing_status IN ('Queued','Processing','Sent','Acknowledged','Failed','Rejected')),
+                    ack_message TEXT DEFAULT '',
+                    error_message TEXT DEFAULT '',
+                    retry_count INTEGER DEFAULT 0,
+                    direction VARCHAR(10) DEFAULT 'Outbound'
+                        CHECK (direction IN ('Inbound','Outbound')),
+                    interface_name TEXT DEFAULT '',        -- LIS/RIS/Analyzer/PACS
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_hl7_type ON hl7_messages(message_type, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_hl7_patient ON hl7_messages(patient_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_hl7_status ON hl7_messages(processing_status, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_hl7_datetime ON hl7_messages(message_datetime, tenant_id);
+
+                -- E3: AI Clinical Decision Support Log
+                CREATE TABLE IF NOT EXISTS ai_cds_log (
+                    id SERIAL PRIMARY KEY,
+                    patient_id INTEGER REFERENCES patients(id),
+                    user_id INTEGER,
+                    user_name TEXT DEFAULT '',
+                    context_type VARCHAR(50) DEFAULT '',   -- Differential/DoseCheck/LabInterpretation/RiskScore
+                    input_data JSONB,                      -- clinical context sent to AI
+                    ai_model TEXT DEFAULT '',              -- gemini-pro / gpt-4 / claude
+                    ai_response JSONB,                     -- structured AI response
+                    recommendations TEXT DEFAULT '',
+                    accepted_by_clinician BOOLEAN,
+                    override_reason TEXT DEFAULT '',
+                    processing_time_ms INTEGER DEFAULT 0,
+                    tokens_used INTEGER DEFAULT 0,
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_ai_patient ON ai_cds_log(patient_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_ai_context ON ai_cds_log(context_type, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_ai_date ON ai_cds_log(created_at, tenant_id);
+
+                -- E3b: AI Voice Dictation sessions
+                CREATE TABLE IF NOT EXISTS ai_voice_sessions (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    user_name TEXT DEFAULT '',
+                    patient_id INTEGER REFERENCES patients(id),
+                    session_type VARCHAR(30) DEFAULT 'Clinical Note'
+                        CHECK (session_type IN ('Clinical Note','Discharge Summary','Referral Letter','Prescription','Radiology Report','Operative Note')),
+                    audio_duration_sec INTEGER DEFAULT 0,
+                    transcript_raw TEXT DEFAULT '',
+                    transcript_structured JSONB,           -- SOAP / structured output
+                    ai_model TEXT DEFAULT '',
+                    confidence_score NUMERIC(5,4) DEFAULT 0,
+                    draft_text TEXT DEFAULT '',
+                    final_text TEXT DEFAULT '',
+                    is_finalized BOOLEAN DEFAULT FALSE,
+                    finalized_at TIMESTAMPTZ,
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_voice_user ON ai_voice_sessions(user_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_voice_patient ON ai_voice_sessions(patient_id, tenant_id);
+            `);
+            console.log('  ✅ Phase E tables created (fhir_resources, hl7_messages, ai_cds_log, ai_voice_sessions)');
+        } catch (e) { console.error('Phase E tables migration error:', e.message); }
+
         console.log('  ✅ PostgreSQL tables created');
     } finally {
         client.release();

@@ -21706,6 +21706,8 @@ window.resetDicom = () => {
   if (meta) meta.textContent = 'WL: 40 / WW: 400';
 };
 
+};
+
 window.applyRadReportTemplate = (val) => {
   const findings = document.getElementById('rrFindings');
   const impression = document.getElementById('rrImpression');
@@ -21723,3 +21725,976 @@ window.applyRadReportTemplate = (val) => {
     if (birads) birads.value = '';
   }
 };
+
+// ============================================================================
+// ==================== PHASE B & C & D & E UI MODULES ====================
+// ============================================================================
+
+// ─── PHASE B: SAUDI COMPLIANCE UI ───────────────────────────────────────────
+window.renderNphiesRemittance = async function(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  try {
+    const summary = await API.get('/api/nphies/remittance/summary').catch(() => ({}));
+    const list = await API.get('/api/nphies/remittance').catch(() => []);
+    el.innerHTML = `
+      <div class="card p-20 mb-16">
+        <h3 class="card-title text-primary">💵 ${tr('NPHIES Remittance Advice (RA)','إشعارات تسوية تأمين نافيس')}</h3>
+        <div class="grid grid-cols-4 gap-12 mb-16">
+          <div class="card p-12 bg-primary-container text-center">
+            <div class="text-xs text-on-surface-variant">${tr('Total Paid','إجمالي المبالغ المسددة')}</div>
+            <div class="text-xl font-bold text-primary">SAR ${parseFloat(summary.total_paid||0).toFixed(2)}</div>
+          </div>
+          <div class="card p-12 bg-secondary-container text-center">
+            <div class="text-xs text-on-surface-variant">${tr('Total Adjustments','التسويات')}</div>
+            <div class="text-xl font-bold text-secondary">SAR ${parseFloat(summary.total_adjusted||0).toFixed(2)}</div>
+          </div>
+          <div class="card p-12 bg-error-container text-center">
+            <div class="text-xs text-on-surface-variant">${tr('Total Denied','المرفوضات')}</div>
+            <div class="text-xl font-bold text-error">SAR ${parseFloat(summary.total_denied||0).toFixed(2)}</div>
+          </div>
+          <div class="card p-12 bg-surface-variant text-center">
+            <div class="text-xs text-on-surface-variant">${tr('Unposted Approved','معتمد غير مرحّل')}</div>
+            <div class="text-xl font-bold">${summary.unposted_approved||0}</div>
+          </div>
+        </div>
+        
+        <h4 class="font-bold mb-8">📜 ${tr('Remittance Transactions','سجل معاملات التسوية')}</h4>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-surface-variant">
+                <th class="p-8 text-right">${tr('Claim ID','رقم المطالبة')}</th>
+                <th class="p-8 text-right">${tr('Payer','الجهة الضامنة')}</th>
+                <th class="p-8 text-right">${tr('Payment Date','تاريخ الدفع')}</th>
+                <th class="p-8 text-right">${tr('Reference','رقم المرجع')}</th>
+                <th class="p-8 text-right">${tr('Paid Amount','المسدد')}</th>
+                <th class="p-8">${tr('Status','الحالة')}</th>
+                <th class="p-8">${tr('Actions','الإجراءات')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${list.map(r => `
+                <tr class="border-b">
+                  <td class="p-8 font-medium">${r.claim_number || r.claim_id}</td>
+                  <td class="p-8">${escapeHTML(r.patient_name || 'Insurance Payer')}</td>
+                  <td class="p-8">${r.payment_date ? new Date(r.payment_date).toLocaleDateString('ar-SA') : '-'}</td>
+                  <td class="p-8 text-xs font-mono">${escapeHTML(r.payment_reference || '')}</td>
+                  <td class="p-8 font-bold text-primary">SAR ${parseFloat(r.payment_amount).toFixed(2)}</td>
+                  <td class="p-8">${r.adjudication_status === 'approved' ? '<span class="badge bg-secondary-container">Approved</span>' : '<span class="badge bg-error-container">Denied</span>'}</td>
+                  <td class="p-8">
+                    ${r.posted_to_gl ? `<span class="text-xs text-secondary">✓ Posted</span>` : `<button class="btn btn-sm btn-primary" onclick="postRemittanceToAR(${r.id}, '${containerId}')">🏦 Post to AR</button>`}
+                  </td>
+                </tr>
+              `).join('') || `<tr><td colspan="7" class="text-center p-8 text-on-surface-variant">${tr('No records found','لا توجد سجلات تسوية')}</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  } catch (err) { el.innerHTML = `<div class="card p-20 text-error">Error: ${err.message}</div>`; }
+};
+
+window.postRemittanceToAR = async function(id, containerId) {
+  try {
+    await API.post(`/api/nphies/remittance/${id}/post-to-ar`);
+    showToast(tr('Remittance posted to Accounts Receivable','تم ترحيل التسوية إلى الحسابات المدينة'));
+    renderNphiesRemittance(containerId);
+  } catch (e) { showToast(e.message || 'Error', 'error'); }
+};
+
+window.renderZatcaCreditNote = async function(containerId, invoiceId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  try {
+    const cnList = await API.get('/api/zatca/credit-notes').catch(() => []);
+    const chainInfo = await API.get('/api/zatca/invoice-chain').catch(() => ({}));
+    el.innerHTML = `
+      <div class="card p-20 mb-16">
+        <h3 class="card-title text-primary">📑 ${tr('ZATCA Credit Notes & Chaining','الإشعارات الدائنة وتأكيد السلسلة لزكاة وضريبة')}</h3>
+        <div class="mb-16 p-12 rounded ${chainInfo.chain_valid ? 'bg-secondary-container/20 text-secondary' : 'bg-error-container/20 text-error'}">
+          <strong>🔒 ${tr('Invoice Chain Status:','حالة ترابط سلسلة الفواتير:')}</strong>
+          ${chainInfo.chain_valid ? tr('Valid (All invoice hashes cryptographically chained)','سليمة (جميع هاشات الفواتير مترابطة مشفراً)') : tr('Chain Break Detected','يوجد انقطاع في ترابط السلسلة')}
+        </div>
+        
+        <div class="grid grid-cols-2 gap-16 mb-16">
+          <div class="card p-16">
+            <h4 class="font-bold mb-8">➕ ${tr('Generate Credit Note','إنشاء إشعار خصم/ائتمان')}</h4>
+            <div class="space-y-8">
+              <div>
+                <label class="label">${tr('Invoice reference ID','رقم الفاتورة الأصلية')}</label>
+                <input id="cnInvoiceId" class="input w-full" type="number" placeholder="e.g. 1" value="${invoiceId||''}">
+              </div>
+              <div>
+                <label class="label">${tr('Reason for credit','سبب الخصم')}</label>
+                <select id="cnReasonCode" class="input w-full">
+                  <option value="CANCEL">إلغاء فاتورة</option>
+                  <option value="RETURN">إرجاع بضائع/خدمات</option>
+                  <option value="DISCOUNT">خصم إضافي</option>
+                  <option value="ERROR">تصحيح خطأ فوترة</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">${tr('Reason description','وصف السبب تفصيلياً')}</label>
+                <input id="cnReasonDesc" class="input w-full" placeholder="e.g. Patient discharged early">
+              </div>
+              <button class="btn btn-primary mt-8" onclick="submitCreditNote('${containerId}')">⚡ Generate Note</button>
+            </div>
+          </div>
+          
+          <div class="card p-16">
+            <h4 class="font-bold mb-8">📃 ${tr('Recent Credit Notes','الإشعارات الأخيرة')}</h4>
+            <div class="overflow-y-auto max-h-200 space-y-8">
+              ${cnList.map(c => `
+                <div class="p-8 border-b text-xs flex justify-between items-center">
+                  <div>
+                    <strong>${escapeHTML(c.credit_note_number)}</strong> (Orig: #${c.original_invoice_id})<br>
+                    <span class="text-on-surface-variant">${escapeHTML(c.credit_reason)}</span>
+                  </div>
+                  <div>
+                    <span class="font-bold">SAR ${parseFloat(c.total_with_vat).toFixed(2)}</span>
+                    ${c.submission_status === 'Submitted_Mock' || c.submission_status === 'RECORDED' ? `<span class="badge bg-secondary-container ml-4">✓ Cleared</span>` : `<button class="btn btn-xs btn-outline ml-4" onclick="submitCnToZatca(${c.id}, '${containerId}')">Submit</button>`}
+                  </div>
+                </div>
+              `).join('') || `<p class="text-on-surface-variant">${tr('No credit notes','لا توجد إشعارات دائنة')}</p>`}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (err) { el.innerHTML = `<div class="card p-20 text-error">Error: ${err.message}</div>`; }
+};
+
+window.submitCreditNote = async function(containerId) {
+  const invoice_id = document.getElementById('cnInvoiceId')?.value;
+  const credit_reason = document.getElementById('cnReasonCode')?.value;
+  const credit_reason_description = document.getElementById('cnReasonDesc')?.value;
+  if (!invoice_id) { showToast('Invoice ID required', 'error'); return; }
+  try {
+    await API.post('/api/zatca/credit-note', { invoice_id, credit_reason, credit_reason_description });
+    showToast(tr('Credit note created successfully','تم إنشاء الإشعار الدائن بنجاح'));
+    renderZatcaCreditNote(containerId);
+  } catch (e) { showToast(e.message||'Error', 'error'); }
+};
+
+window.submitCnToZatca = async function(id, containerId) {
+  try {
+    await API.post(`/api/zatca/credit-note/${id}/submit`);
+    showToast(tr('Submitted & cleared by ZATCA sandbox','تم الإرسال والفسح عبر منصة فاتورة تجريبياً'));
+    renderZatcaCreditNote(containerId);
+  } catch (e) { showToast(e.message||'Error', 'error'); }
+};
+
+window.renderHrSaudi = async function(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  try {
+    const listCred = await API.get('/api/hr/credentialing').catch(() => []);
+    const nitaqat = await API.get('/api/hr/nitaqat').catch(() => []);
+    el.innerHTML = `
+      <div class="card p-20 mb-16">
+        <h3 class="card-title text-primary">🇸🇦 ${tr('HR Saudi Localization (GOSI, WPS, Nitaqat, Credentials)','نظام التوطين والموارد البشرية السعودي')}</h3>
+        
+        <div class="grid grid-cols-3 gap-16 mb-16">
+          <div class="card p-16">
+            <h4 class="font-bold text-secondary mb-8">📊 ${tr('Nitaqat & Saudization','شريط نطاقات ونسب التوطين')}</h4>
+            <div class="mb-12">
+              <label class="label">Required Saudization %</label>
+              <input id="nitaqatReq" class="input w-full mb-8" type="number" value="25">
+              <button class="btn btn-sm btn-primary" onclick="calculateNitaqat('${containerId}')">Recalculate Band</button>
+            </div>
+            ${nitaqat.length ? `
+              <div class="p-12 bg-primary-container text-center rounded">
+                <div class="text-xs">Current Saudization</div>
+                <div class="text-xl font-bold">${parseFloat(nitaqat[0].saudization_pct).toFixed(2)}%</div>
+                <div class="text-xs mt-4">Nitaqat Band: <strong>${escapeHTML(nitaqat[0].nitaqat_band)}</strong></div>
+              </div>
+            ` : '<p class="text-xs text-on-surface-variant">No snapshot calculated yet</p>'}
+          </div>
+
+          <div class="card p-16">
+            <h4 class="font-bold text-secondary mb-8">💳 ${tr('GOSI Monthly Contribution','اشتراكات التأمينات الاجتماعية GOSI')}</h4>
+            <div class="mb-12">
+              <label class="label">Select Month</label>
+              <input id="gosiMonth" class="input w-full mb-8" type="date" value="${new Date().toISOString().slice(0,7)}-01">
+              <button class="btn btn-sm btn-primary" onclick="calculateGosi('${containerId}')">Calculate GOSI</button>
+            </div>
+            <div id="gosiCalcResult" class="text-xs"></div>
+          </div>
+
+          <div class="card p-16">
+            <h4 class="font-bold text-secondary mb-8">🗂️ ${tr('WPS (Wage Protection SIF)','نظام حماية الأجور — ملفات SIF')}</h4>
+            <div class="mb-12">
+              <label class="label">WPS SIF Month</label>
+              <input id="wpsMonth" class="input w-full mb-8" type="date" value="${new Date().toISOString().slice(0,7)}-01">
+              <button class="btn btn-sm btn-primary" onclick="generateWps('${containerId}')">Generate SIF File</button>
+            </div>
+            <div id="wpsResult" class="text-xs"></div>
+          </div>
+        </div>
+
+        <div class="card p-16">
+          <h4 class="font-bold mb-8">🩺 ${tr('Physician Credentialing & Medical Licenses','تراخيص الهيئة الطبية والامتيازات')}</h4>
+          <div class="grid grid-cols-4 gap-8 mb-12">
+            <input id="credEmpId" class="input w-full" type="number" placeholder="Employee ID">
+            <input id="credNumber" class="input w-full" placeholder="License Number">
+            <input id="credType" class="input w-full" placeholder="Type (e.g. SCFHS License)">
+            <input id="credExpiry" class="input w-full" type="date">
+          </div>
+          <button class="btn btn-primary btn-sm mb-12" onclick="saveCredential('${containerId}')">Add Credential</button>
+          
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="bg-surface-variant">
+                  <th class="p-8 text-right">Physician</th>
+                  <th class="p-8 text-right">License</th>
+                  <th class="p-8 text-right">Expiry Date</th>
+                  <th class="p-8">Verification Status</th>
+                  <th class="p-8">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${listCred.map(c => `
+                  <tr class="border-b">
+                    <td class="p-8">${escapeHTML(c.employee_name)}</td>
+                    <td class="p-8">${escapeHTML(c.credential_type)} (#${escapeHTML(c.credential_number)})</td>
+                    <td class="p-8 font-bold text-error">${c.expiry_date ? new Date(c.expiry_date).toLocaleDateString('ar-SA') : ''}</td>
+                    <td class="p-8"><span class="badge ${c.verification_status==='verified'?'bg-secondary-container':'bg-error-container'}">${c.verification_status}</span></td>
+                    <td class="p-8">
+                      ${c.verification_status !== 'verified' ? `<button class="btn btn-xs btn-outline" onclick="verifyCred(${c.id}, '${containerId}')">Verify</button>` : ''}
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (err) { el.innerHTML = `<div class="card p-20 text-error">Error: ${err.message}</div>`; }
+};
+
+window.calculateNitaqat = async function(containerId) {
+  const req_pct = document.getElementById('nitaqatReq')?.value;
+  try {
+    await API.post('/api/hr/nitaqat/calculate', { required_pct: req_pct });
+    showToast(tr('Nitaqat snapshot generated','تم إصدار تحديث نطاقات'));
+    renderHrSaudi(containerId);
+  } catch (e) { showToast(e.message, 'error'); }
+};
+
+window.calculateGosi = async function(containerId) {
+  const month_year = document.getElementById('gosiMonth')?.value;
+  if (!month_year) return;
+  try {
+    const res = await API.post('/api/hr/gosi/calculate', { month_year });
+    document.getElementById('gosiCalcResult').innerHTML = `
+      <div class="mt-8 bg-surface-variant/40 p-8 rounded">
+        <strong>✓ Calculated!</strong><br>
+        Employees: ${res.employee_count}<br>
+        Total Contribution: SAR ${parseFloat(res.total_contributions).toFixed(2)}
+      </div>
+    `;
+  } catch (e) { showToast(e.message, 'error'); }
+};
+
+window.generateWps = async function(containerId) {
+  const payroll_month = document.getElementById('wpsMonth')?.value;
+  if (!payroll_month) return;
+  try {
+    const res = await API.post('/api/hr/wps/generate', { payroll_month });
+    document.getElementById('wpsResult').innerHTML = `
+      <div class="mt-8 bg-surface-variant/40 p-8 rounded font-mono text-xs">
+        <strong>✓ File SIF Ref: ${res.wps_file.file_reference}</strong><br>
+        <pre class="overflow-x-auto max-w-full">${escapeHTML(res.preview.join('\n'))}</pre>
+      </div>
+    `;
+  } catch (e) { showToast(e.message, 'error'); }
+};
+
+window.saveCredential = async function(containerId) {
+  const employee_id = document.getElementById('credEmpId')?.value;
+  const credential_number = document.getElementById('credNumber')?.value;
+  const credential_type = document.getElementById('credType')?.value;
+  const expiry_date = document.getElementById('credExpiry')?.value;
+  if (!employee_id || !credential_number) return;
+  try {
+    await API.post('/api/hr/credentialing', { employee_id, credential_number, credential_type, expiry_date });
+    showToast(tr('Credential added','تم إضافة الترخيص بنجاح'));
+    renderHrSaudi(containerId);
+  } catch (e) { showToast(e.message, 'error'); }
+};
+
+window.verifyCred = async function(id, containerId) {
+  try {
+    await API.put(`/api/hr/credentialing/${id}/verify`, { verification_status: 'verified' });
+    showToast(tr('Credential verified','تم تأكيد الترخيص بنجاح'));
+    renderHrSaudi(containerId);
+  } catch (e) { showToast(e.message, 'error'); }
+};
+
+
+// ─── PHASE C: CLINICAL QUALITY UI ───────────────────────────────────────────
+window.renderControlledSubstances = async function(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  try {
+    const csList = await API.get('/api/pharmacy/controlled-substances').catch(() => []);
+    el.innerHTML = `
+      <div class="card p-20 mb-16">
+        <h3 class="card-title text-primary">💊 ${tr('Controlled Substances Safe Ledger','سجل صيدلية المخدرات والمؤثرات العقلية')}</h3>
+        
+        <div class="grid grid-cols-2 gap-16 mb-16">
+          <div class="card p-16">
+            <h4 class="font-bold text-secondary mb-8">🖋️ ${tr('Double-Witness Dispensing','صرف مادة خاضعة للرقابة (شاهد ثنائي)')}</h4>
+            <div class="space-y-8">
+              <div>
+                <label class="label">Select Controlled Drug</label>
+                <select id="dispenseCsId" class="input w-full">
+                  ${csList.map(c => `<option value="${c.id}">${escapeHTML(c.drug_name)} (Bal: ${c.closing_balance} ${c.unit})</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label class="label">Patient ID</label>
+                <input id="dispensePatId" class="input w-full" type="number">
+              </div>
+              <div>
+                <label class="label">Dispensing Quantity</label>
+                <input id="dispenseQty" class="input w-full" type="number" value="1">
+              </div>
+              <div class="p-8 bg-surface-variant/40 rounded">
+                <span class="text-xs text-secondary-container">🔒 Double-Witness Authentication</span>
+                <div class="grid grid-cols-2 gap-8 mt-4">
+                  <input id="dispenseWitnessName" class="input w-full text-xs" placeholder="Witness Nurse Name">
+                  <input id="dispenseWitnessId" class="input w-full text-xs" type="number" placeholder="Witness User ID">
+                </div>
+              </div>
+              <button class="btn btn-primary mt-8" onclick="dispenseControlledDrug('${containerId}')">🖋️ Double-Sign & Dispense</button>
+            </div>
+          </div>
+
+          <div class="card p-16">
+            <h4 class="font-bold text-secondary mb-8">📉 ${tr('Safe Reconciliation Audit','تسوية الخزنة والمطابقة')}</h4>
+            <div class="space-y-8">
+              <input id="reconDrugName" class="input w-full" placeholder="Drug Name">
+              <input id="reconDrugCode" class="input w-full" placeholder="Drug Formulary Code">
+              <input id="reconClosing" class="input w-full" type="number" placeholder="Physical Count">
+              <button class="btn btn-outline mt-8" onclick="reconcileControlledDrug('${containerId}')">Audit safe count</button>
+            </div>
+          </div>
+        </div>
+
+        <h4 class="font-bold mb-8">📋 ${tr('Current Controlled Stock Ledger','جدول رصيد المواد المخدرة الحالي')}</h4>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="bg-surface-variant">
+                <th class="p-8 text-right">Substance</th>
+                <th class="p-8 text-right">Schedule</th>
+                <th class="p-8 text-right">Physical Count</th>
+                <th class="p-8 text-right">Discrepancy</th>
+                <th class="p-8 text-right">Witnessed By</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${csList.map(c => `
+                <tr class="border-b">
+                  <td class="p-8 font-medium">${escapeHTML(c.drug_name)}</td>
+                  <td class="p-8"><span class="badge bg-error-container">Class ${c.schedule_class}</span></td>
+                  <td class="p-8 font-bold">${c.closing_balance} ${c.unit}</td>
+                  <td class="p-8 ${parseFloat(c.discrepancy)!==0?'text-error font-bold':''}">${c.discrepancy}</td>
+                  <td class="p-8 text-xs">${escapeHTML(c.witnessed_by||'')}</td>
+                </tr>
+              `).join('') || `<tr><td colspan="5" class="text-center p-8 text-on-surface-variant">${tr('No controlled stock recorded today','لا توجد مواد مسجلة اليوم')}</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  } catch (err) { el.innerHTML = `<div class="card p-20 text-error">Error: ${err.message}</div>`; }
+};
+
+window.dispenseControlledDrug = async function(containerId) {
+  const cs_id = document.getElementById('dispenseCsId')?.value;
+  const quantity = document.getElementById('dispenseQty')?.value;
+  const patient_id = document.getElementById('dispensePatId')?.value;
+  const witness2_name = document.getElementById('dispenseWitnessName')?.value;
+  const witness2_id = document.getElementById('dispenseWitnessId')?.value;
+  if (!cs_id || !quantity || !witness2_name) { showToast('Controlled drug, quantity, and witness required', 'error'); return; }
+  try {
+    await API.post('/api/pharmacy/controlled-substances/dispense', { cs_id, quantity, patient_id, witness2_name, witness2_id });
+    showToast(tr('Controlled Drug Dispensed & Logged','تم صرف الدواء المخدر وتوثيق الشاهد بنجاح'));
+    renderControlledSubstances(containerId);
+  } catch (e) { showToast(e.message, 'error'); }
+};
+
+window.reconcileControlledDrug = async function(containerId) {
+  const drug_name = document.getElementById('reconDrugName')?.value;
+  const drug_code = document.getElementById('reconDrugCode')?.value;
+  const closing_balance = document.getElementById('reconClosing')?.value;
+  if (!drug_name || !drug_code || !closing_balance) return;
+  try {
+    await API.post('/api/pharmacy/controlled-substances/reconcile', { drug_name, drug_code, closing_balance });
+    showToast(tr('Safe audit logged','تم تسجيل تسوية المطابقة المخبرية'));
+    renderControlledSubstances(containerId);
+  } catch (e) { showToast(e.message, 'error'); }
+};
+
+window.renderMedicationReconciliation = async function(containerId, patientId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  try {
+    const list = patientId ? await API.get('/api/clinical/medication-reconciliation/' + patientId).catch(() => []) : [];
+    el.innerHTML = `
+      <div class="card p-20 mb-16">
+        <h3 class="card-title text-primary">🔄 ${tr('Medication Reconciliation','مطابقة الأدوية للمريض')}</h3>
+        ${patientId ? `
+          <div class="grid grid-cols-2 gap-16 mb-16">
+            <div class="card p-16">
+              <h4 class="font-bold mb-8">📝 Record Med Rec</h4>
+              <div class="space-y-8">
+                <div>
+                  <label class="label">Type</label>
+                  <select id="mrType" class="input w-full">
+                    <option value="Admission">Admission (دخول)</option>
+                    <option value="Discharge">Discharge (خروج)</option>
+                    <option value="Transfer">Transfer (نقل)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="label">Home Medications List (JSON format)</label>
+                  <textarea id="mrHome" class="input w-full" rows="3" placeholder='[{"name":"Aspirin","dose":"100mg"}]'></textarea>
+                </div>
+                <div class="flex items-center space-x-12 mt-8">
+                  <label class="flex items-center"><input id="mrAllergy" type="checkbox" class="mr-4"> Allergy Verified</label>
+                  <label class="flex items-center ml-12"><input id="mrHighAlert" type="checkbox" class="mr-4"> High Alert Checked</label>
+                </div>
+                <button class="btn btn-primary mt-8 w-full" onclick="saveMedRecon(${patientId}, '${containerId}')">Save Med Reconciliation</button>
+              </div>
+            </div>
+            
+            <div class="card p-16">
+              <h4 class="font-bold mb-8">📜 Reconciliation History</h4>
+              <div class="overflow-y-auto max-h-250 space-y-8">
+                ${list.map(l => `
+                  <div class="p-12 border rounded bg-surface-variant/20 text-xs">
+                    <div class="flex justify-between font-bold">
+                      <span>${l.reconciliation_type}</span>
+                      <span>${new Date(l.performed_at).toLocaleDateString('ar-SA')}</span>
+                    </div>
+                    <div class="text-on-surface-variant mt-4">By: ${escapeHTML(l.performed_by_name)}</div>
+                    <div class="mt-4">Home Meds: ${JSON.stringify(l.home_medications)}</div>
+                  </div>
+                `).join('') || '<p class="text-on-surface-variant">No history found</p>'}
+              </div>
+            </div>
+          </div>
+        ` : `<p class="text-on-surface-variant text-center">${tr('Please select a patient to view Medication Reconciliation','يرجى اختيار مريض للبدء بمطابقة الأدوية')}</p>`}
+      </div>
+    `;
+  } catch (err) { el.innerHTML = `<div class="card p-20 text-error">Error: ${err.message}</div>`; }
+};
+
+window.saveMedRecon = async function(patientId, containerId) {
+  const reconciliation_type = document.getElementById('mrType')?.value;
+  const homeText = document.getElementById('mrHome')?.value || '[]';
+  const allergy_verified = document.getElementById('mrAllergy')?.checked;
+  const high_alert_checked = document.getElementById('mrHighAlert')?.checked;
+  
+  let home_medications = [];
+  try { home_medications = JSON.parse(homeText); } catch (_) { showToast('Invalid home meds JSON', 'error'); return; }
+  
+  try {
+    await API.post('/api/clinical/medication-reconciliation', {
+      patient_id: patientId, reconciliation_type, home_medications, allergy_verified, high_alert_checked
+    });
+    showToast(tr('Medication reconciliation saved','تم حفظ مطابقة الأدوية'));
+    renderMedicationReconciliation(containerId, patientId);
+  } catch (e) { showToast(e.message, 'error'); }
+};
+
+window.renderLabMicrobiology = async function(containerId, patientId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  try {
+    const list = patientId ? await API.get('/api/lab/microbiology/' + patientId).catch(() => []) : [];
+    el.innerHTML = `
+      <div class="card p-20 mb-16">
+        <h3 class="card-title text-primary">🔬 ${tr('Lab Microbiology & Culture Sensitivity','قسم الأحياء الدقيقة والمزارع')}</h3>
+        ${patientId ? `
+          <div class="grid grid-cols-2 gap-16">
+            <div class="card p-16">
+              <h4 class="font-bold mb-8">🧪 Record Culture Result</h4>
+              <div class="space-y-8">
+                <input id="micSpecimen" class="input w-full" placeholder="Specimen Type (e.g. Blood)">
+                <input id="micOrganism" class="input w-full" placeholder="Organism Identified (e.g. E. coli)">
+                <textarea id="micSensitivity" class="input w-full" rows="3" placeholder='Sensitivities [{"antibiotic":"Amoxicillin","mic":"<=2","interpretation":"S"}]'></textarea>
+                <div class="flex items-center mt-8">
+                  <label class="flex items-center text-error font-bold">
+                    <input id="micCritical" type="checkbox" class="mr-4"> Critical Pathogen / Urgent Alert
+                  </label>
+                </div>
+                <button class="btn btn-primary w-full mt-8" onclick="saveMicroResult(${patientId}, '${containerId}')">Submit Culture Report</button>
+              </div>
+            </div>
+            
+            <div class="card p-16">
+              <h4 class="font-bold mb-8">📜 Result History</h4>
+              <div class="overflow-y-auto max-h-250 space-y-8">
+                ${list.map(l => `
+                  <div class="p-12 border rounded ${l.critical_value ? 'border-error bg-error-container/10' : 'bg-surface-variant/20'} text-xs">
+                    <div class="flex justify-between font-bold">
+                      <span>${escapeHTML(l.specimen_type)}</span>
+                      <span>${new Date(l.collection_date).toLocaleDateString('ar-SA')}</span>
+                    </div>
+                    <div class="mt-4">Organism: <strong>${escapeHTML(l.organism_identified)}</strong></div>
+                    <div class="text-on-surface-variant mt-4">Sensitivities: ${JSON.stringify(l.sensitivity_results)}</div>
+                  </div>
+                `).join('') || '<p class="text-on-surface-variant">No reports found</p>'}
+              </div>
+            </div>
+          </div>
+        ` : `<p class="text-on-surface-variant text-center">${tr('Please select a patient to view Microbiology','يرجى اختيار مريض')}</p>`}
+      </div>
+    `;
+  } catch (e) { el.innerHTML = `<div class="card p-20 text-error">Error: ${e.message}</div>`; }
+};
+
+window.saveMicroResult = async function(patientId, containerId) {
+  const specimen_type = document.getElementById('micSpecimen')?.value;
+  const organism_identified = document.getElementById('micOrganism')?.value;
+  const sensText = document.getElementById('micSensitivity')?.value || '[]';
+  const critical_value = document.getElementById('micCritical')?.checked;
+  
+  let sensitivity_results = [];
+  try { sensitivity_results = JSON.parse(sensText); } catch (_) { showToast('Invalid sensitivities JSON', 'error'); return; }
+  
+  try {
+    await API.post('/api/lab/microbiology', {
+      patient_id: patientId, specimen_type, organism_identified, sensitivity_results, critical_value
+    });
+    showToast(tr('Microbiology report submitted','تم تسجيل تقرير المزرعة بنجاح'));
+    renderLabMicrobiology(containerId, patientId);
+  } catch (e) { showToast(e.message, 'error'); }
+};
+
+window.renderProblemListIcd10 = async function(containerId, patientId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  try {
+    const list = patientId ? await API.get('/api/clinical/problem-list/' + patientId).catch(() => []) : [];
+    el.innerHTML = `
+      <div class="card p-20 mb-16">
+        <h3 class="card-title text-primary">📋 ${tr('EMR Problem List (ICD-10 Chapter linked)','قائمة المشكلات الصحية النشطة (مرتبطة بـ ICD-10)')}</h3>
+        ${patientId ? `
+          <div class="grid grid-cols-2 gap-16">
+            <div class="card p-16">
+              <h4 class="font-bold mb-8">➕ Add Problem</h4>
+              <div class="space-y-8">
+                <div>
+                  <label class="label">ICD-10 Code Lookup</label>
+                  <input id="probIcd10" class="input w-full" placeholder="e.g. J45.9" onkeyup="lookupIcd10Dropdown(this.value)">
+                  <div id="icd10Dropdown" class="bg-surface border rounded max-h-120 overflow-y-auto hidden absolute z-10 w-250"></div>
+                </div>
+                <div>
+                  <label class="label">Problem Name</label>
+                  <input id="probName" class="input w-full" placeholder="Asthma / Diabetes...">
+                </div>
+                <div class="flex items-center mt-8">
+                  <label class="flex items-center">
+                    <input id="probPDx" type="checkbox" class="mr-4"> Principal Diagnosis (PDx)
+                  </label>
+                </div>
+                <button class="btn btn-primary w-full mt-8" onclick="addPatientProblem(${patientId}, '${containerId}')">Add to List</button>
+              </div>
+            </div>
+            
+            <div class="card p-16">
+              <h4 class="font-bold mb-8">🩺 Active & Resolved Problems</h4>
+              <div class="space-y-8">
+                ${list.map(p => `
+                  <div class="p-8 border-b text-xs flex justify-between items-center">
+                    <div>
+                      <strong>${escapeHTML(p.problem_name)}</strong> 
+                      ${p.icd10_code ? `<span class="badge bg-primary-container ml-4">${escapeHTML(p.icd10_code)}</span>` : ''}
+                      ${p.principal_diagnosis ? `<span class="badge bg-error-container ml-4">PDx</span>` : ''}
+                    </div>
+                    <span class="badge ${p.status==='Active'?'bg-secondary-container':'bg-surface-variant'}">${p.status}</span>
+                  </div>
+                `).join('') || '<p class="text-on-surface-variant">No active problems</p>'}
+              </div>
+            </div>
+          </div>
+        ` : `<p class="text-on-surface-variant text-center">${tr('Select patient to view Problem List','اختر مريض لعرض قائمة المشكلات')}</p>`}
+      </div>
+    `;
+  } catch(e) { el.innerHTML = `<div class="card p-20 text-error">Error: ${e.message}</div>`; }
+};
+
+window.lookupIcd10Dropdown = async function(val) {
+  const dd = document.getElementById('icd10Dropdown');
+  if (!dd) return;
+  if (val.length < 2) { dd.classList.add('hidden'); return; }
+  try {
+    const res = await API.get('/api/clinical/icd10?query=' + encodeURIComponent(val)).catch(() => []);
+    if (!res.length) { dd.classList.add('hidden'); return; }
+    dd.classList.remove('hidden');
+    dd.innerHTML = res.map(i => `
+      <div class="p-8 hover:bg-surface-variant cursor-pointer text-xs" onclick="selectIcd10Code('${i.code}', '${escapeHTML(i.description_en)}')">
+        <strong>${i.code}</strong> - ${escapeHTML(i.description_en)}
+      </div>
+    `).join('');
+  } catch(_) {}
+};
+
+window.selectIcd10Code = function(code, desc) {
+  const icdEl = document.getElementById('probIcd10');
+  const nameEl = document.getElementById('probName');
+  if (icdEl) icdEl.value = code;
+  if (nameEl) nameEl.value = desc;
+  const dd = document.getElementById('icd10Dropdown');
+  if (dd) dd.classList.add('hidden');
+};
+
+window.addPatientProblem = async function(patientId, containerId) {
+  const icd10_code = document.getElementById('probIcd10')?.value;
+  const problem_name = document.getElementById('probName')?.value;
+  const principal_diagnosis = document.getElementById('probPDx')?.checked;
+  if (!problem_name) return;
+  try {
+    await API.post('/api/clinical/problem-list', { patient_id: patientId, icd10_code, problem_name, principal_diagnosis });
+    showToast(tr('Problem added to list','تمت إضافة المشكلة للقائمة بنجاح'));
+    renderProblemListIcd10(containerId, patientId);
+  } catch (e) { showToast(e.message, 'error'); }
+};
+
+
+// ─── PHASE D: FINANCE & OPERATIONS UI ───────────────────────────────────────
+window.renderAccountsPayableReceivable = async function(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  try {
+    const apList = await API.get('/api/finance/ap').catch(() => []);
+    const arList = await API.get('/api/finance/ar').catch(() => []);
+    el.innerHTML = `
+      <div class="card p-20 mb-16">
+        <h3 class="card-title text-primary">📊 ${tr('Subledger Accounts (AP & AR)','الحسابات الفرعية — الذمم الدائنة والمدينة')}</h3>
+        
+        <div class="grid grid-cols-2 gap-16">
+          <div class="card p-16">
+            <h4 class="font-bold text-error mb-8">🔻 Accounts Payable (AP - الموردين)</h4>
+            <div class="overflow-y-auto max-h-250 space-y-8 text-xs">
+              ${apList.map(a => `
+                <div class="p-8 border rounded flex justify-between items-center bg-surface-variant/20">
+                  <div>
+                    <strong>${escapeHTML(a.vendor_name)}</strong> (Inv: #${escapeHTML(a.invoice_number)})<br>
+                    Due: ${a.due_date ? new Date(a.due_date).toLocaleDateString('ar-SA') : ''}
+                  </div>
+                  <div class="text-right">
+                    <span class="font-bold block">SAR ${parseFloat(a.balance_due||a.total_amount).toFixed(2)}</span>
+                    ${a.payment_status === 'Paid' ? '<span class="text-secondary font-bold">✓ Paid</span>' : `<button class="btn btn-xs btn-error mt-4" onclick="payApInvoice(${a.id}, ${a.total_amount}, '${containerId}')">Pay</button>`}
+                  </div>
+                </div>
+              `).join('') || '<p class="text-on-surface-variant">No AP invoices outstanding</p>'}
+            </div>
+          </div>
+          
+          <div class="card p-16">
+            <h4 class="font-bold text-secondary mb-8">💚 Accounts Receivable (AR - المرضى والتأمين)</h4>
+            <div class="overflow-y-auto max-h-250 space-y-8 text-xs">
+              ${arList.map(a => `
+                <div class="p-8 border rounded flex justify-between items-center bg-surface-variant/20">
+                  <div>
+                    <strong>${escapeHTML(a.patient_name || a.payer_name)}</strong> (Inv: #${escapeHTML(a.invoice_number)})<br>
+                    Payer Type: ${a.payer_type}
+                  </div>
+                  <div class="text-right">
+                    <span class="font-bold block">SAR ${parseFloat(a.balance_due||a.total_amount).toFixed(2)}</span>
+                    ${a.collection_status === 'Collected' ? '<span class="text-secondary font-bold">✓ Collected</span>' : `<button class="btn btn-xs btn-primary mt-4" onclick="collectArInvoice(${a.id}, ${a.total_amount}, '${containerId}')">Collect</button>`}
+                  </div>
+                </div>
+              `).join('') || '<p class="text-on-surface-variant">No AR balances outstanding</p>'}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (e) { el.innerHTML = `<div class="card p-20 text-error">Error: ${e.message}</div>`; }
+};
+
+window.payApInvoice = async function(id, total, containerId) {
+  try {
+    await API.post(`/api/finance/ap/${id}/pay`, { payment_amount: total });
+    showToast(tr('AP invoice paid and journal ledger posted','تم سداد الفاتورة المورد وتثبيت القيد اليومي'));
+    renderAccountsPayableReceivable(containerId);
+  } catch (e) { showToast(e.message, 'error'); }
+};
+
+window.collectArInvoice = async function(id, total, containerId) {
+  try {
+    await API.post(`/api/finance/ar/${id}/collect`, { collection_amount: total });
+    showToast(tr('AR balance collected','تم تحصيل رصيد العميل بنجاح'));
+    renderAccountsPayableReceivable(containerId);
+  } catch (e) { showToast(e.message, 'error'); }
+};
+
+window.renderVendors = async function(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  try {
+    const list = await API.get('/api/vendors').catch(() => []);
+    el.innerHTML = `
+      <div class="card p-20 mb-16">
+        <h3 class="card-title text-primary">🏢 ${tr('Approved Vendor Register','سجل الموردين المعتمدين والمستودع')}</h3>
+        
+        <div class="grid grid-cols-2 gap-16 mb-16">
+          <div class="card p-16">
+            <h4 class="font-bold mb-8">➕ Add New Vendor</h4>
+            <div class="space-y-8">
+              <input id="vendName" class="input w-full" placeholder="Vendor Name (Arabic)">
+              <input id="vendVat" class="input w-full" placeholder="VAT Number (3xxxxxxxxxxxxx)">
+              <input id="vendCR" class="input w-full" placeholder="Commercial Register (CR)">
+              <input id="vendIBAN" class="input w-full" placeholder="IBAN (SAxxxxxxxxxxxxxxxxxxxx)">
+              <button class="btn btn-primary mt-8 w-full" onclick="saveVendor('${containerId}')">Add Approved Vendor</button>
+            </div>
+          </div>
+          
+          <div class="card p-16">
+            <h4 class="font-bold mb-8">📜 Vendor Directory</h4>
+            <div class="overflow-y-auto max-h-200 space-y-8 text-xs">
+              ${list.map(v => `
+                <div class="p-8 border-b">
+                  <strong>${escapeHTML(v.vendor_name_ar)}</strong> (Code: ${escapeHTML(v.vendor_code)})<br>
+                  VAT: ${escapeHTML(v.vat_number)} | CR: ${escapeHTML(v.commercial_register)}
+                </div>
+              `).join('') || '<p class="text-on-surface-variant">No vendors registered</p>'}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (e) { el.innerHTML = `<div class="card p-20 text-error">Error: ${e.message}</div>`; }
+};
+
+window.saveVendor = async function(containerId) {
+  const vendor_name_ar = document.getElementById('vendName')?.value;
+  const vat_number = document.getElementById('vendVat')?.value;
+  const commercial_register = document.getElementById('vendCR')?.value;
+  const iban = document.getElementById('vendIBAN')?.value;
+  if (!vendor_name_ar) return;
+  try {
+    await API.post('/api/vendors', { vendor_name_ar, vat_number, commercial_register, iban });
+    showToast(tr('Vendor registered','تم تسجيل المورد بنجاح'));
+    renderVendors(containerId);
+  } catch (e) { showToast(e.message, 'error'); }
+};
+
+window.renderFinancialReportsSnapshots = async function(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  try {
+    const list = await API.get('/api/finance/reports/snapshots').catch(() => []);
+    el.innerHTML = `
+      <div class="card p-20 mb-16">
+        <h3 class="card-title text-primary">📈 ${tr('Financial Statement Snapshots (Profit & Loss / Balance Sheet)','تقارير القوائم المالية والأرباح والخسائر')}</h3>
+        
+        <div class="grid grid-cols-2 gap-16">
+          <div class="card p-16">
+            <h4 class="font-bold mb-8">⚙️ ${tr('Generate New Statement Snapshot','إصدار قائمة جديدة')}</h4>
+            <div class="space-y-8">
+              <div>
+                <label class="label">Report Type</label>
+                <select id="fsType" class="input w-full">
+                  <option value="PL">Profit & Loss (الأرباح والخسائر)</option>
+                  <option value="BS">Balance Sheet (الميزانية العمومية)</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Start Date</label>
+                <input id="fsStart" class="input w-full" type="date" value="${new Date().toISOString().slice(0,4)}-01-01">
+              </div>
+              <div>
+                <label class="label">End Date</label>
+                <input id="fsEnd" class="input w-full" type="date" value="${new Date().toISOString().slice(0,10)}">
+              </div>
+              <button class="btn btn-primary w-full mt-8" onclick="generateFinancialReport('${containerId}')">Generate Statement</button>
+            </div>
+          </div>
+          
+          <div class="card p-16">
+            <h4 class="font-bold mb-8">📜 ${tr('Generated Report Archive','أرشيف التقارير المصدرة')}</h4>
+            <div class="overflow-y-auto max-h-250 space-y-8 text-xs">
+              ${list.map(s => `
+                <div class="p-12 border rounded bg-surface-variant/20">
+                  <div class="flex justify-between font-bold">
+                    <span>${s.report_type === 'PL' ? 'Profit & Loss' : 'Balance Sheet'}</span>
+                    <span>${new Date(s.generated_at).toLocaleDateString('ar-SA')}</span>
+                  </div>
+                  <div class="mt-4">Period: ${new Date(s.report_period_start).toLocaleDateString('ar-SA')} to ${new Date(s.report_period_end).toLocaleDateString('ar-SA')}</div>
+                  <div class="mt-8 grid grid-cols-3 gap-4 text-center">
+                    <div class="bg-primary-container p-4 rounded"><div class="text-xs">Revenue</div><strong>SAR ${parseFloat(s.total_revenue).toFixed(0)}</strong></div>
+                    <div class="bg-error-container/10 p-4 rounded"><div class="text-xs">Expenses</div><strong>SAR ${parseFloat(s.total_expenses).toFixed(0)}</strong></div>
+                    <div class="bg-secondary-container p-4 rounded"><div class="text-xs">Net Income</div><strong>SAR ${parseFloat(s.net_income).toFixed(0)}</strong></div>
+                  </div>
+                </div>
+              `).join('') || '<p class="text-on-surface-variant">No report snapshots yet</p>'}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (e) { el.innerHTML = `<div class="card p-20 text-error">Error: ${e.message}</div>`; }
+};
+
+window.generateFinancialReport = async function(containerId) {
+  const report_type = document.getElementById('fsType')?.value;
+  const period_start = document.getElementById('fsStart')?.value;
+  const period_end = document.getElementById('fsEnd')?.value;
+  if (!period_start || !period_end) return;
+  try {
+    await API.post('/api/finance/reports/generate', { report_type, period_start, period_end });
+    showToast(tr('Financial report snapshot compiled','تم تكوين تقرير القائمة المالية وتحديث الأرشيف'));
+    renderFinancialReportsSnapshots(containerId);
+  } catch (e) { showToast(e.message, 'error'); }
+};
+
+
+// ─── PHASE E: INTEGRATION & AI UI ───────────────────────────────────────────
+window.renderFhirResourceStore = async function(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = `
+    <div class="card p-20 mb-16">
+      <h3 class="card-title text-primary">🌐 ${tr('FHIR R4 Resource Store Inspector','مستودع الموارد الطبية الموحدة FHIR R4')}</h3>
+      <div class="grid grid-cols-3 gap-8 mb-12">
+        <input id="fhirType" class="input w-full" placeholder="Resource Type (e.g. Patient)" value="Patient">
+        <input id="fhirId" class="input w-full" placeholder="Resource Logical ID" value="dummy-patient">
+        <button class="btn btn-primary" onclick="inspectFhirResource()">Inspect Resource JSON</button>
+      </div>
+      <div id="fhirInspectResult" class="bg-surface-variant/30 p-12 rounded font-mono text-xs overflow-x-auto max-h-200">
+        JSON Output will appear here...
+      </div>
+    </div>
+  `;
+};
+
+window.inspectFhirResource = async function() {
+  const t = document.getElementById('fhirType')?.value;
+  const id = document.getElementById('fhirId')?.value;
+  if (!t || !id) return;
+  try {
+    const res = await API.get(`/api/fhir/${t}/${id}`);
+    document.getElementById('fhirInspectResult').innerHTML = `<pre>${escapeHTML(JSON.stringify(res, null, 2))}</pre>`;
+  } catch (e) {
+    document.getElementById('fhirInspectResult').innerHTML = `<span class="text-error">Resource not found or access denied</span>`;
+  }
+};
+
+window.renderHl7MessageLog = async function(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  try {
+    const list = await API.get('/api/hl7/messages').catch(() => []);
+    el.innerHTML = `
+      <div class="card p-20 mb-16">
+        <h3 class="card-title text-primary">📡 ${tr('HL7 v2.x Message Interface Log','سجل ربط رسائل الأجهزة الطبية والمختبر HL7')}</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="bg-surface-variant">
+                <th class="p-8 text-right">Message Control ID</th>
+                <th class="p-8 text-right">Type</th>
+                <th class="p-8 text-right">Direction</th>
+                <th class="p-8 text-right">Status</th>
+                <th class="p-8 text-right">Timestamp</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${list.map(m => `
+                <tr class="border-b">
+                  <td class="p-8 font-mono">${escapeHTML(m.message_control_id)}</td>
+                  <td class="p-8 font-bold">${escapeHTML(m.message_type)}</td>
+                  <td class="p-8">${m.direction}</td>
+                  <td class="p-8"><span class="badge bg-secondary-container">${m.processing_status}</span></td>
+                  <td class="p-8 text-on-surface-variant">${new Date(m.message_datetime).toLocaleString('ar-SA')}</td>
+                </tr>
+              `).join('') || `<tr><td colspan="5" class="text-center p-8 text-on-surface-variant">No HL7 messages logged</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  } catch (e) { el.innerHTML = `<div class="card p-20 text-error">Error: ${e.message}</div>`; }
+};
+
+window.renderAiClinicalDictation = async function(containerId, patientId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = `
+    <div class="card p-20 mb-16">
+      <h3 class="card-title text-primary">🤖 ${tr('AI Voice Dictation & CDS hooks Co-pilot','مساعد الإملاء الصوتي السريري والذكاء الاصطناعي')}</h3>
+      
+      <div class="grid grid-cols-2 gap-16">
+        <div class="card p-16">
+          <h4 class="font-bold text-secondary mb-8">🎙️ ${tr('Voice Dictation to SOAP Note','تحويل الإملاء الصوتي لتقرير SOAP')}</h4>
+          <div class="space-y-8">
+            <textarea id="aiRawAudioText" class="input w-full" rows="4" placeholder="Type or paste simulated patient spoken notes here... e.g. Patient complains of chest pain since 6 AM, pulse is 88, ECG completed."></textarea>
+            <button id="btnVoiceFinalize" class="btn btn-primary w-full" onclick="simulateVoiceFinalize(${patientId})">🤖 Process Dictation (AI Structure)</button>
+          </div>
+          <div id="aiVoiceResult" class="mt-12 bg-surface-variant/40 p-12 rounded text-xs hidden"></div>
+        </div>
+
+        <div class="card p-16">
+          <h4 class="font-bold text-secondary mb-8">🧠 ${tr('Clinical Decision Hooks CDS','محفزات دعم القرار السريري')}</h4>
+          <div class="space-y-8">
+            <select id="cdsContext" class="input w-full">
+              <option value="Differential">Differential Diagnosis</option>
+              <option value="DoseCheck">Pediatric Weight Dosing Alert</option>
+            </select>
+            <button class="btn btn-outline w-full" onclick="triggerCdsHooks(${patientId})">⚡ Run CDS Hooks Check</button>
+          </div>
+          <div id="aiCdsResult" class="mt-12 bg-surface-variant/40 p-12 rounded text-xs hidden"></div>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+window.simulateVoiceFinalize = async function(patientId) {
+  const transcript_raw = document.getElementById('aiRawAudioText')?.value;
+  if (!transcript_raw) return;
+  try {
+    // Start session
+    const startRes = await API.post('/api/ai/voice-dictation/start', { patient_id: patientId, session_type: 'Clinical Note' });
+    const sessionId = startRes.session.id;
+    // Finalize
+    const res = await API.post(`/api/ai/voice-dictation/${sessionId}/finalize`, { transcript_raw });
+    const div = document.getElementById('aiVoiceResult');
+    div.classList.remove('hidden');
+    div.innerHTML = `
+      <h5 class="font-bold text-secondary mb-4">Structured SOAP Note Output (AI mapped):</h5>
+      <pre class="bg-surface p-8 rounded font-mono overflow-x-auto max-h-150">${escapeHTML(res.session.final_text)}</pre>
+      <div class="text-xs text-on-surface-variant mt-4">Confidence Score: ${res.session.confidence_score * 100}%</div>
+    `;
+    showToast(tr('Voice note structured successfully','تم ترميز الإملاء الصوتي بنجاح'));
+  } catch (e) { showToast(e.message, 'error'); }
+};
+
+window.triggerCdsHooks = async function(patientId) {
+  if (!patientId) { showToast('Select a patient first', 'error'); return; }
+  const context_type = document.getElementById('cdsContext')?.value;
+  try {
+    const res = await API.post('/api/ai/cds-hooks', { patient_id: patientId, context_type, input_data: { symptoms: ['chest pain', 'shortness of breath'] } });
+    const div = document.getElementById('aiCdsResult');
+    div.classList.remove('hidden');
+    div.innerHTML = `
+      <div class="p-8 border-l-4 border-error bg-error-container/10">
+        <strong>${escapeHTML(res.cards[0].summary)}</strong><br>
+        <p class="mt-4">${escapeHTML(res.cards[0].detail)}</p>
+        <span class="text-xxs text-on-surface-variant block mt-4">Source: ${escapeHTML(res.cards[0].source.label)}</span>
+      </div>
+    `;
+  } catch (e) { showToast(e.message, 'error'); }
+};
+

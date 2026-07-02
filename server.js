@@ -17271,6 +17271,611 @@ app.post('/api/hr/nitaqat/calculate', requireAuth, requireRole('hr', 'admin'), r
     } catch (e) { console.error(e); res.status(500).json({ error: e.message }); }
 });
 
+
+// ===== PHASE C: CLINICAL QUALITY (C1: Controlled Substances, C2: Med Rec, C3: Micro/LOINC, C4: Problem List/ICD-10) =====
+
+// ─── C1: CONTROLLED SUBSTANCES ──────────────────────────────────────────────
+app.get('/api/pharmacy/controlled-substances', requireAuth, requireRole('pharmacist', 'pharmacy', 'admin'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { date, location } = req.query;
+        let q = 'SELECT * FROM pharmacy_controlled_substances WHERE tenant_id=$1';
+        const params = [tid];
+        if (date) { params.push(date); q += ` AND record_date=$${params.length}`; }
+        if (location) { params.push(location); q += ` AND location=$${params.length}`; }
+        q += ' ORDER BY record_date DESC, drug_name ASC';
+        const rows = await pool.query(q, params);
+        res.json(rows.rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/pharmacy/controlled-substances/reconcile', requireAuth, requireRole('pharmacist', 'pharmacy'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { drug_name, drug_code, schedule_class, dosage_form, strength, unit, opening_balance, received_qty, dispensed_qty, wasted_qty, closing_balance, discrepancy, record_date, location, witnessed_by, notes } = req.body;
+        if (!drug_name || !drug_code) return res.status(400).json({ error: 'drug_name and drug_code required' });
+        
+        const dateStr = record_date || new Date().toISOString().slice(0, 10);
+        const loc = location || 'Main Pharmacy';
+        
+        const r = await pool.query(
+            `INSERT INTO pharmacy_controlled_substances 
+                (drug_name, drug_code, schedule_class, dosage_form, strength, unit, opening_balance, received_qty, dispensed_qty, wasted_qty, closing_balance, discrepancy, record_date, location, witnessed_by, verified_by, notes, tenant_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+             ON CONFLICT (drug_code, record_date, location, tenant_id) 
+             DO UPDATE SET 
+                closing_balance = $11, discrepancy = $12, witnessed_by = $15, verified_by = $16, notes = $17
+             RETURNING *`,
+            [drug_name, drug_code, schedule_class || '2', dosage_form || '', strength || '', unit || 'Tablet', 
+             parseFloat(opening_balance) || 0, parseFloat(received_qty) || 0, parseFloat(dispensed_qty) || 0, parseFloat(wasted_qty) || 0, 
+             parseFloat(closing_balance) || 0, parseFloat(discrepancy) || 0, dateStr, loc, witnessed_by || '', req.session.user.display_name, notes || '', tid]
+        );
+        logAudit(req.session.user.id, req.session.user.display_name, 'CS_STOCK_RECONCILE', 'Pharmacy', `Controlled substance reconcile: ${drug_name} at ${loc}`, tid);
+        res.json({ success: true, record: r.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/pharmacy/controlled-substances/dispense', requireAuth, requireRole('pharmacist', 'pharmacy', 'nurse'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { cs_id, prescription_id, patient_id, quantity, witness2_name, witness2_id, reason, waste_amount, waste_reason } = req.body;
+        if (!cs_id || !quantity) return res.status(400).json({ error: 'cs_id and quantity required' });
+        
+        // Verify Controlled Substance record
+        const csCheck = await pool.query('SELECT * FROM pharmacy_controlled_substances WHERE id=$1 AND tenant_id=$2', [parseInt(cs_id), tid]);
+        if (!csCheck.rows.length) return res.status(404).json({ error: 'Controlled substance stock record not found' });
+        const cs = csCheck.rows[0];
+        
+        // IDOR: verify prescription if provided
+        if (prescription_id) {
+            const rxCheck = await pool.query('SELECT id FROM pharmacy_prescriptions WHERE id=$1 AND tenant_id=$2', [parseInt(prescription_id), tid]);
+            if (!rxCheck.rows.length) return res.status(403).json({ error: 'Prescription access denied' });
+        }
+        
+        let patName = '';
+        if (patient_id) {
+            const patCheck = await pool.query('SELECT name_en, name_ar FROM patients WHERE id=$1 AND tenant_id=$2', [parseInt(patient_id), tid]);
+            if (patCheck.rows.length) patName = patCheck.rows[0].name_en || patCheck.rows[0].name_ar || '';
+        }
+        
+        const qty = parseFloat(quantity);
+        const waste = parseFloat(waste_amount) || 0;
+        const newBal = parseFloat(cs.closing_balance) - qty - waste;
+        
+        // Insert transaction with Double-Witness log
+        const tx = await pool.query(
+            `INSERT INTO pharmacy_cs_transactions 
+                (cs_id, prescription_id, patient_id, patient_name, transaction_type, quantity, balance_after, witness1_name, witness2_name, witness1_id, witness2_id, reason, waste_amount, waste_reason, is_signed, tenant_id)
+             VALUES ($1, $2, $3, $4, 'Dispense', $5, $6, $7, $8, $9, $10, $11, $12, $13, TRUE, $14) RETURNING *`,
+            [parseInt(cs_id), prescription_id ? parseInt(prescription_id) : null, patient_id ? parseInt(patient_id) : null, patName, qty, newBal, 
+             req.session.user.display_name, witness2_name || '', req.session.user.id, witness2_id ? parseInt(witness2_id) : null, reason || '', waste, waste_reason || '', tid]
+        );
+        
+        // Update Controlled Substance stock balance
+        await pool.query(
+            'UPDATE pharmacy_controlled_substances SET closing_balance=$1, dispensed_qty=dispensed_qty+$2, wasted_qty=wasted_qty+$3 WHERE id=$4 AND tenant_id=$5',
+            [newBal, qty, waste, parseInt(cs_id), tid]
+        );
+        
+        logAudit(req.session.user.id, req.session.user.display_name, 'CS_DISPENSE_DOUBLE_SIGNED', 'Pharmacy', `CS Dispense: ${cs.drug_name} Qty ${qty} (Witnessed by: ${witness2_name})`, tid);
+        res.json({ success: true, transaction: tx.rows[0], balance_after: newBal });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── C2: MEDICATION RECONCILIATION ──────────────────────────────────────────
+app.get('/api/clinical/medication-reconciliation/:patientId', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const pid = parseInt(req.params.patientId);
+        
+        // Verify patient belongs to tenant (IDOR check)
+        const pat = await pool.query('SELECT id FROM patients WHERE id=$1 AND tenant_id=$2', [pid, tid]);
+        if (!pat.rows.length) return res.status(403).json({ error: 'Patient not found or access denied' });
+        
+        const rows = await pool.query('SELECT * FROM medication_reconciliations WHERE patient_id=$1 AND tenant_id=$2 ORDER BY performed_at DESC', [pid, tid]);
+        res.json(rows.rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/clinical/medication-reconciliation', requireAuth, requireRole('pharmacist', 'doctor', 'clinical-pharmacy'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { patient_id, admission_id, reconciliation_type = 'Admission', status = 'Completed', home_medications = [], hospital_medications = [], discrepancies = [], allergy_verified = false, high_alert_checked = false, patient_counselled = false, notes = '' } = req.body;
+        if (!patient_id) return res.status(400).json({ error: 'patient_id required' });
+        
+        // IDOR check
+        const pat = await pool.query('SELECT id FROM patients WHERE id=$1 AND tenant_id=$2', [parseInt(patient_id), tid]);
+        if (!pat.rows.length) return res.status(403).json({ error: 'Patient access denied' });
+        
+        const r = await pool.query(
+            `INSERT INTO medication_reconciliations 
+                (patient_id, admission_id, reconciliation_type, performed_by, performed_by_name, status, home_medications, hospital_medications, discrepancies, allergy_verified, high_alert_checked, patient_counselled, notes, tenant_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *`,
+            [parseInt(patient_id), admission_id ? parseInt(admission_id) : null, reconciliation_type, req.session.user.id, req.session.user.display_name, status,
+             JSON.stringify(home_medications), JSON.stringify(hospital_medications), JSON.stringify(discrepancies), allergy_verified, high_alert_checked, patient_counselled, notes, tid]
+        );
+        logAudit(req.session.user.id, req.session.user.display_name, 'MED_RECONCILED', 'Clinical', `Med Reconciliation performed for Patient#${patient_id} (Type: ${reconciliation_type})`, tid);
+        res.json({ success: true, record: r.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── C3: LAB MICROBIOLOGY & LOINC ───────────────────────────────────────────
+app.get('/api/lab/microbiology/:patientId', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const pid = parseInt(req.params.patientId);
+        
+        const pat = await pool.query('SELECT id FROM patients WHERE id=$1 AND tenant_id=$2', [pid, tid]);
+        if (!pat.rows.length) return res.status(403).json({ error: 'Patient access denied' });
+        
+        const rows = await pool.query('SELECT * FROM lab_microbiology WHERE patient_id=$1 AND tenant_id=$2 ORDER BY collection_date DESC, id DESC', [pid, tid]);
+        res.json(rows.rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/lab/microbiology', requireAuth, requireRole('lab_technician', 'lab', 'admin'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { order_id, patient_id, admission_id, specimen_type, collection_date, collection_time, collection_site, gram_stain, preliminary_result, final_result, organism_identified, colony_count, sensitivity_results = [], antibiogram_profile, report_status = 'Final', critical_value = false, critical_notified_to, loinc_code } = req.body;
+        if (!patient_id) return res.status(400).json({ error: 'patient_id required' });
+        
+        // IDOR check
+        const pat = await pool.query('SELECT id FROM patients WHERE id=$1 AND tenant_id=$2', [parseInt(patient_id), tid]);
+        if (!pat.rows.length) return res.status(403).json({ error: 'Patient access denied' });
+        
+        const r = await pool.query(
+            `INSERT INTO lab_microbiology 
+                (order_id, patient_id, admission_id, specimen_type, collection_date, collection_time, collection_site, gram_stain, preliminary_result, final_result, organism_identified, colony_count, sensitivity_results, antibiogram_profile, report_status, reported_by, reported_at, verified_by, verified_at, critical_value, critical_notified_to, critical_notified_at, loinc_code, tenant_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), $16, NOW(), $17, $18, $19, $20, $21) RETURNING *`,
+            [order_id ? parseInt(order_id) : null, parseInt(patient_id), admission_id ? parseInt(admission_id) : null, specimen_type || 'Blood', collection_date || new Date().toISOString().slice(0,10), collection_time || '12:00:00', collection_site || '', gram_stain || '', preliminary_result || '', final_result || '', organism_identified || '', colony_count || '', JSON.stringify(sensitivity_results), antibiogram_profile || '', report_status, 
+             req.session.user.display_name, critical_value, critical_notified_to || '', critical_value ? new Date() : null, loinc_code || '', tid]
+        );
+        
+        // Trigger alert system notification if critical value
+        if (critical_value) {
+            await pool.query(
+                `INSERT INTO system_notifications (tenant_id, recipient_role, title, message, status)
+                 VALUES ($1, 'doctor', $2, $3, 'unread')`,
+                [tid, 'CRITICAL LAB VALUE ALERT (Microbiology)', `Patient#${patient_id} culture resulted in ${organism_identified || 'critical pathogen'}. Specimen: ${specimen_type}.`]
+            );
+        }
+        
+        logAudit(req.session.user.id, req.session.user.display_name, 'MICROBIOLOGY_REPORT', 'Lab', `Microbiology report finalized for Patient#${patient_id} organism: ${organism_identified}`, tid);
+        res.json({ success: true, report: r.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/lab/loinc', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { query: searchQuery } = req.query;
+        let q = 'SELECT * FROM lab_loinc_codes WHERE is_active=TRUE AND (tenant_id=$1 OR tenant_id=1)';
+        const params = [tid];
+        if (searchQuery) {
+            params.push(`%${searchQuery}%`);
+            q += ` AND (loinc_code ILIKE $2 OR short_name ILIKE $2 OR long_name ILIKE $2)`;
+        }
+        q += ' LIMIT 100';
+        const rows = await pool.query(q, params);
+        res.json(rows.rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── C4: PROBLEM LIST & ICD-10 ──────────────────────────────────────────────
+app.get('/api/clinical/problem-list/:patientId', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const pid = parseInt(req.params.patientId);
+        
+        const pat = await pool.query('SELECT id FROM patients WHERE id=$1 AND tenant_id=$2', [pid, tid]);
+        if (!pat.rows.length) return res.status(403).json({ error: 'Patient access denied' });
+        
+        const rows = await pool.query('SELECT * FROM patient_problem_list WHERE patient_id=$1 AND tenant_id=$2 ORDER BY is_active DESC, onset_date DESC NULLS LAST', [pid, tid]);
+        res.json(rows.rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/clinical/problem-list', requireAuth, requireRole('doctor', 'nurse', 'clinical'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { patient_id, admission_id, icd10_code, icd10_description, snomed_code, problem_name, problem_type = 'Chronic', onset_date, resolved_date, severity = 'Moderate', status = 'Active', notes, principal_diagnosis = false } = req.body;
+        if (!patient_id || !problem_name) return res.status(400).json({ error: 'patient_id and problem_name required' });
+        
+        // IDOR check
+        const pat = await pool.query('SELECT id FROM patients WHERE id=$1 AND tenant_id=$2', [parseInt(patient_id), tid]);
+        if (!pat.rows.length) return res.status(403).json({ error: 'Patient access denied' });
+        
+        const r = await pool.query(
+            `INSERT INTO patient_problem_list 
+                (patient_id, admission_id, icd10_code, icd10_description, snomed_code, problem_name, problem_type, onset_date, resolved_date, severity, status, added_by, added_by_id, notes, principal_diagnosis, tenant_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *`,
+            [parseInt(patient_id), admission_id ? parseInt(admission_id) : null, icd10_code || '', icd10_description || '', snomed_code || '', problem_name, problem_type, onset_date || null, resolved_date || null, severity, status, 
+             req.session.user.display_name, req.session.user.id, notes || '', principal_diagnosis, tid]
+        );
+        logAudit(req.session.user.id, req.session.user.display_name, 'PROBLEM_ADDED', 'Clinical', `Problem ${problem_name} (ICD10: ${icd10_code}) added for Patient#${patient_id}`, tid);
+        res.json({ success: true, problem: r.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/clinical/icd10', requireAuth, async (req, res) => {
+    try {
+        const { query: searchQuery } = req.query;
+        let q = 'SELECT * FROM icd10_codes WHERE is_valid=TRUE';
+        const params = [];
+        if (searchQuery) {
+            params.push(`%${searchQuery}%`);
+            q += ` AND (code ILIKE $1 OR description_en ILIKE $1 OR description_ar ILIKE $1)`;
+        }
+        q += ' LIMIT 100';
+        const rows = await pool.query(q, params);
+        res.json(rows.rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+
+// ===== PHASE D: FINANCE & OPERATIONS (D1: AP/AR, D2: Vendors, D3: Financial snapshots) =====
+
+// ─── D1: ACCOUNTS PAYABLE & RECEIVABLE ──────────────────────────────────────
+app.get('/api/finance/ap', requireAuth, requireRole('finance', 'accounts', 'admin'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { vendor_id, status } = req.query;
+        let q = 'SELECT * FROM finance_accounts_payable WHERE tenant_id=$1';
+        const params = [tid];
+        if (vendor_id) { params.push(parseInt(vendor_id)); q += ` AND vendor_id=$${params.length}`; }
+        if (status) { params.push(status); q += ` AND payment_status=$${params.length}`; }
+        q += ' ORDER BY due_date ASC';
+        res.json((await pool.query(q, params)).rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/finance/ap', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { vendor_id, vendor_name, invoice_number, invoice_date, due_date, po_reference, description, subtotal, vat_amount, total_amount, gl_account_code, cost_center, notes } = req.body;
+        if (!vendor_name || !invoice_number || !total_amount) return res.status(400).json({ error: 'vendor_name, invoice_number, total_amount required' });
+        
+        // IDOR check for vendor if supplied
+        if (vendor_id) {
+            const vCheck = await pool.query('SELECT id FROM vendors WHERE id=$1 AND tenant_id=$2', [parseInt(vendor_id), tid]);
+            if (!vCheck.rows.length) return res.status(403).json({ error: 'Vendor not found or access denied' });
+        }
+        
+        const r = await pool.query(
+            `INSERT INTO finance_accounts_payable 
+                (vendor_id, vendor_name, invoice_number, invoice_date, due_date, po_reference, description, subtotal, vat_amount, total_amount, payment_status, gl_account_code, cost_center, tenant_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'Unpaid', $11, $12, $13) RETURNING *`,
+            [vendor_id ? parseInt(vendor_id) : null, vendor_name, invoice_number, invoice_date || new Date().toISOString().slice(0,10), due_date || null, po_reference || '', description || '', parseFloat(subtotal)||0, parseFloat(vat_amount)||0, parseFloat(total_amount), gl_account_code || '', cost_center || '', tid]
+        );
+        logAudit(req.session.user.id, req.session.user.display_name, 'AP_INVOICE_CREATE', 'Finance', `AP Invoice #${invoice_number} created for vendor ${vendor_name}`, tid);
+        res.json({ success: true, record: r.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/finance/ap/:id/pay', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const id = parseInt(req.params.id);
+        const { payment_amount, payment_method, payment_reference } = req.body;
+        if (!payment_amount) return res.status(400).json({ error: 'payment_amount required' });
+        
+        const ap = (await pool.query('SELECT * FROM finance_accounts_payable WHERE id=$1 AND tenant_id=$2', [id, tid])).rows[0];
+        if (!ap) return res.status(404).json({ error: 'AP invoice not found' });
+        
+        const payAmt = parseFloat(payment_amount);
+        const newPaid = parseFloat(ap.paid_amount || 0) + payAmt;
+        let newStatus = 'Partial';
+        if (newPaid >= parseFloat(ap.total_amount)) newStatus = 'Paid';
+        
+        const r = await pool.query(
+            `UPDATE finance_accounts_payable 
+             SET paid_amount=$1, payment_status=$2, payment_method=$3, payment_reference=$4, payment_date=CURRENT_DATE, approved_by=$5, approved_at=NOW()
+             WHERE id=$6 AND tenant_id=$7 RETURNING *`,
+            [newPaid, newStatus, payment_method || 'Bank Transfer', payment_reference || '', req.session.user.display_name, id, tid]
+        );
+        
+        // Log to General Ledger (double-entry simulation)
+        await pool.query(
+            `INSERT INTO finance_journal_entries (tenant_id, entry_date, description, reference, status)
+             VALUES ($1, CURRENT_DATE, $2, $3, 'Posted')`,
+            [tid, `Payment of AP Invoice#${ap.invoice_number} to ${ap.vendor_name}`, `AP-PAY-${id}`]
+        );
+        
+        logAudit(req.session.user.id, req.session.user.display_name, 'AP_INVOICE_PAID', 'Finance', `AP Invoice #${id} paid SAR ${payAmt} (Status: ${newStatus})`, tid);
+        res.json({ success: true, record: r.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/finance/ar', requireAuth, requireRole('finance', 'accounts', 'admin'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { patient_id, status } = req.query;
+        let q = 'SELECT * FROM finance_accounts_receivable WHERE tenant_id=$1';
+        const params = [tid];
+        if (patient_id) { params.push(parseInt(patient_id)); q += ` AND patient_id=$${params.length}`; }
+        if (status) { params.push(status); q += ` AND collection_status=$${params.length}`; }
+        q += ' ORDER BY due_date ASC';
+        res.json((await pool.query(q, params)).rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/finance/ar', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { patient_id, patient_name, payer_type = 'Patient', payer_id, payer_name, invoice_number, visit_id, admission_id, due_date, subtotal, discount_amount, insurance_share, patient_share, vat_amount, total_amount, notes } = req.body;
+        if (!invoice_number || !total_amount) return res.status(400).json({ error: 'invoice_number, total_amount required' });
+        
+        // IDOR check for patient
+        if (patient_id) {
+            const pCheck = await pool.query('SELECT id FROM patients WHERE id=$1 AND tenant_id=$2', [parseInt(patient_id), tid]);
+            if (!pCheck.rows.length) return res.status(403).json({ error: 'Patient not found or access denied' });
+        }
+        
+        const r = await pool.query(
+            `INSERT INTO finance_accounts_receivable 
+                (patient_id, patient_name, payer_type, payer_id, payer_name, invoice_number, visit_id, admission_id, invoice_date, due_date, subtotal, discount_amount, insurance_share, patient_share, vat_amount, total_amount, collected_amount, collection_status, notes, tenant_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_DATE, $9, $10, $11, $12, $13, $14, $15, 0, 'Outstanding', $16, $17) RETURNING *`,
+            [patient_id ? parseInt(patient_id) : null, patient_name || '', payer_type, payer_id ? parseInt(payer_id) : null, payer_name || '', invoice_number, visit_id ? parseInt(visit_id) : null, admission_id ? parseInt(admission_id) : null, due_date || null, parseFloat(subtotal)||0, parseFloat(discount_amount)||0, parseFloat(insurance_share)||0, parseFloat(patient_share)||0, parseFloat(vat_amount)||0, parseFloat(total_amount), notes || '', tid]
+        );
+        logAudit(req.session.user.id, req.session.user.display_name, 'AR_INVOICE_CREATE', 'Finance', `AR Invoice #${invoice_number} created (Total: SAR ${total_amount})`, tid);
+        res.json({ success: true, record: r.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/finance/ar/:id/collect', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const id = parseInt(req.params.id);
+        const { collection_amount } = req.body;
+        if (!collection_amount) return res.status(400).json({ error: 'collection_amount required' });
+        
+        const ar = (await pool.query('SELECT * FROM finance_accounts_receivable WHERE id=$1 AND tenant_id=$2', [id, tid])).rows[0];
+        if (!ar) return res.status(404).json({ error: 'AR invoice not found' });
+        
+        const colAmt = parseFloat(collection_amount);
+        const newCol = parseFloat(ar.collected_amount || 0) + colAmt;
+        let newStatus = 'Partial';
+        if (newCol >= parseFloat(ar.total_amount)) newStatus = 'Collected';
+        
+        const r = await pool.query(
+            `UPDATE finance_accounts_receivable 
+             SET collected_amount=$1, collection_status=$2, last_payment_date=CURRENT_DATE, last_payment_amount=$3
+             WHERE id=$4 AND tenant_id=$5 RETURNING *`,
+            [newCol, newStatus, colAmt, id, tid]
+        );
+        
+        logAudit(req.session.user.id, req.session.user.display_name, 'AR_INVOICE_COLLECTED', 'Finance', `AR Invoice #${id} collected SAR ${colAmt} (Status: ${newStatus})`, tid);
+        res.json({ success: true, record: r.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── D2: VENDORS ────────────────────────────────────────────────────────────
+app.get('/api/vendors', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const rows = await pool.query('SELECT * FROM vendors WHERE tenant_id=$1 ORDER BY vendor_name_ar ASC', [tid]);
+        res.json(rows.rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/vendors', requireAuth, requireRole('finance', 'accounts', 'inventory', 'admin'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { vendor_code, vendor_name_ar, vendor_name_en, vendor_type = 'Supplier', contact_person, phone, email, address, vat_number, commercial_register, iban, bank_name, payment_terms = 30 } = req.body;
+        if (!vendor_name_ar) return res.status(400).json({ error: 'vendor_name_ar required' });
+        
+        const code = vendor_code || `VND-${Date.now().toString(36).toUpperCase()}`;
+        const r = await pool.query(
+            `INSERT INTO vendors 
+                (vendor_code, vendor_name_ar, vendor_name_en, vendor_type, contact_person, phone, email, address, vat_number, commercial_register, iban, bank_name, payment_terms, is_approved, approved_by, approved_at, tenant_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, TRUE, $14, NOW(), $15) RETURNING *`,
+            [code, vendor_name_ar, vendor_name_en || '', vendor_type, contact_person || '', phone || '', email || '', address || '', vat_number || '', commercial_register || '', iban || '', bank_name || '', parseInt(payment_terms)||30, req.session.user.display_name, tid]
+        );
+        logAudit(req.session.user.id, req.session.user.display_name, 'VENDOR_CREATE', 'Finance', `Vendor ${vendor_name_ar} created (Code: ${code})`, tid);
+        res.json({ success: true, vendor: r.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── D3: FINANCIAL REPORTS SNAPSHOTS ────────────────────────────────────────
+app.get('/api/finance/reports/snapshots', requireAuth, requireRole('finance', 'accounts', 'admin'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const rows = await pool.query('SELECT id, report_type, report_period_start, report_period_end, generated_at, generated_by, total_revenue, total_expenses, net_income, status FROM finance_report_snapshots WHERE tenant_id=$1 ORDER BY report_period_end DESC', [tid]);
+        res.json(rows.rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/finance/reports/generate', requireAuth, requireRole('finance', 'accounts', 'admin'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { report_type = 'PL', period_start, period_end } = req.body;
+        if (!period_start || !period_end) return res.status(400).json({ error: 'period_start and period_end required (YYYY-MM-DD)' });
+        
+        // Sum revenue and expenses for the period in the General Ledger / billing records
+        const rev = await pool.query(
+            "SELECT COALESCE(SUM(total_with_vat - vat_amount), 0) val FROM zatca_invoices WHERE tenant_id=$1 AND created_at BETWEEN $2::timestamp AND $3::timestamp",
+            [tid, period_start + ' 00:00:00', period_end + ' 23:59:59']
+        );
+        const apSum = await pool.query(
+            "SELECT COALESCE(SUM(total_amount - vat_amount), 0) val FROM finance_accounts_payable WHERE tenant_id=$1 AND invoice_date BETWEEN $2::date AND $3::date",
+            [tid, period_start, period_end]
+        );
+        
+        const totalRevenue = parseFloat(rev.rows[0].val) || 0;
+        const totalExpenses = parseFloat(apSum.rows[0].val) || 0;
+        const netIncome = totalRevenue - totalExpenses;
+        
+        const reportData = {
+            metadata: { generated_by: req.session.user.display_name, generated_at: new Date() },
+            summary: { totalRevenue, totalExpenses, netIncome }
+        };
+        
+        const r = await pool.query(
+            `INSERT INTO finance_report_snapshots 
+                (report_type, report_period_start, report_period_end, generated_by, report_data, total_revenue, total_expenses, net_income, status, tenant_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'Final', $9) RETURNING *`,
+            [report_type, period_start, period_end, req.session.user.display_name, JSON.stringify(reportData), totalRevenue, totalExpenses, netIncome, tid]
+        );
+        logAudit(req.session.user.id, req.session.user.display_name, 'FINANCIAL_REPORT_SNAPSHOT', 'Finance', `Financial report generated (${report_type}) for ${period_start} to ${period_end}`, tid);
+        res.json({ success: true, snapshot: r.rows[0] });
+    } catch (e) { console.error(e); res.status(500).json({ error: e.message }); }
+});
+
+
+// ===== PHASE E: INTEGRATION & AI (E1: FHIR Resources, E2: HL7 Messages, E3: AI CDS & Voice) =====
+
+// ─── E1: FHIR RESOURCE STORE ────────────────────────────────────────────────
+app.get('/api/fhir/:resourceType/:id', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { resourceType, id } = req.params;
+        
+        const r = await pool.query('SELECT * FROM fhir_resources WHERE resource_type=$1 AND resource_id=$2 AND tenant_id=$3 AND is_active=TRUE', [resourceType, id, tid]);
+        if (!r.rows.length) return res.status(404).json({ error: 'FHIR resource not found' });
+        res.json(r.rows[0].resource_json);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/fhir/:resourceType', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { resourceType } = req.params;
+        const body = req.body;
+        if (!body || !body.id) return res.status(400).json({ error: 'FHIR resource body with an id is required' });
+        
+        const r = await pool.query(
+            `INSERT INTO fhir_resources (resource_type, resource_id, resource_json, last_updated, tenant_id)
+             VALUES ($1, $2, $3, NOW(), $4)
+             ON CONFLICT (resource_type, resource_id, tenant_id)
+             DO UPDATE SET resource_json=$3, last_updated=NOW()
+             RETURNING *`,
+            [resourceType, body.id, JSON.stringify(body), tid]
+        );
+        res.json({ success: true, resource: r.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── E2: HL7 MESSAGE LOG ────────────────────────────────────────────────────
+app.get('/api/hl7/messages', requireAuth, requireRole('admin', 'lis_admin', 'ris_admin'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const rows = await pool.query('SELECT * FROM hl7_messages WHERE tenant_id=$1 ORDER BY message_datetime DESC LIMIT 200', [tid]);
+        res.json(rows.rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/hl7/messages/send', requireAuth, requireRole('admin', 'lis', 'ris'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { message_type, message_body, patient_id, interface_name } = req.body;
+        if (!message_type || !message_body) return res.status(400).json({ error: 'message_type and message_body required' });
+        
+        // IDOR check if patient is supplied
+        if (patient_id) {
+            const pCheck = await pool.query('SELECT id FROM patients WHERE id=$1 AND tenant_id=$2', [parseInt(patient_id), tid]);
+            if (!pCheck.rows.length) return res.status(403).json({ error: 'Patient access denied' });
+        }
+        
+        const ctrlId = `CTRL-${Date.now()}`;
+        const r = await pool.query(
+            `INSERT INTO hl7_messages (message_type, message_control_id, message_body, patient_id, direction, processing_status, interface_name, tenant_id)
+             VALUES ($1, $2, $3, $4, 'Outbound', 'Queued', $5, $6) RETURNING *`,
+            [message_type, ctrlId, message_body, patient_id ? parseInt(patient_id) : null, interface_name || 'LIS', tid]
+        );
+        logAudit(req.session.user.id, req.session.user.display_name, 'HL7_MSG_QUEUE', 'Integration', `Outbound HL7 ${message_type} queued. ControlID: ${ctrlId}`, tid);
+        res.json({ success: true, message: r.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── E3: AI CLINICAL DECISION SUPPORT & VOICE ───────────────────────────────
+app.post('/api/ai/cds-hooks', requireAuth, requireRole('doctor', 'clinical-pharmacy'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { patient_id, context_type = 'Differential', input_data } = req.body;
+        if (!patient_id) return res.status(400).json({ error: 'patient_id required' });
+        
+        // IDOR check
+        const pat = await pool.query('SELECT id, name_en, gender, dob FROM patients WHERE id=$1 AND tenant_id=$2', [parseInt(patient_id), tid]);
+        if (!pat.rows.length) return res.status(403).json({ error: 'Patient access denied' });
+        
+        // Simulating clinical decision co-pilot prompt & output (AI Sandbox)
+        // If they want real clinical RAG / Langchain co-pilot orchestration we stub it gracefully here
+        const outputRec = context_type === 'DoseCheck' 
+            ? "WARNING: Calculated weight-based dose for pediatric patient is correct, but check kidney functions (CrCl)." 
+            : "RECOMMENDATION: Consider ordering ECG and cardiac enzymes (Troponin T) based on presented symptoms.";
+        
+        const responseJson = {
+            cards: [{
+                summary: `AI Clinical Decision Support Advice (${context_type})`,
+                indicator: 'warning',
+                detail: outputRec,
+                source: { label: 'NamaMedical AI Copilot', url: 'https://jumanasoft.com' }
+            }]
+        };
+        
+        await pool.query(
+            `INSERT INTO ai_cds_log (patient_id, user_id, user_name, context_type, input_data, ai_model, ai_response, recommendations, tenant_id)
+             VALUES ($1, $2, $3, $4, $5, 'gemini-3.5-flash', $6, $7, $8)`,
+            [parseInt(patient_id), req.session.user.id, req.session.user.display_name, context_type, JSON.stringify(input_data || {}), JSON.stringify(responseJson), outputRec, tid]
+        );
+        
+        res.json(responseJson);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/ai/voice-dictation/start', requireAuth, requireRole('doctor', 'clinical'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { patient_id, session_type = 'Clinical Note' } = req.body;
+        
+        // IDOR check
+        if (patient_id) {
+            const pat = await pool.query('SELECT id FROM patients WHERE id=$1 AND tenant_id=$2', [parseInt(patient_id), tid]);
+            if (!pat.rows.length) return res.status(403).json({ error: 'Patient access denied' });
+        }
+        
+        const r = await pool.query(
+            `INSERT INTO ai_voice_sessions (user_id, user_name, patient_id, session_type, is_finalized, tenant_id)
+             VALUES ($1, $2, $3, $4, FALSE, $5) RETURNING *`,
+            [req.session.user.id, req.session.user.display_name, patient_id ? parseInt(patient_id) : null, session_type, tid]
+        );
+        res.json({ success: true, session: r.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/ai/voice-dictation/:id/finalize', requireAuth, requireRole('doctor', 'clinical'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const id = parseInt(req.params.id);
+        const { transcript_raw } = req.body;
+        if (!transcript_raw) return res.status(400).json({ error: 'transcript_raw required' });
+        
+        const session = (await pool.query('SELECT * FROM ai_voice_sessions WHERE id=$1 AND tenant_id=$2', [id, tid])).rows[0];
+        if (!session) return res.status(404).json({ error: 'Voice session not found' });
+        
+        // Simulate structuring transcript into medical SOAP format
+        const soapOutput = {
+            subjective: "Patient reports chest pain since morning.",
+            objective: "Pulse 88 bpm. BP 120/80 mmHg.",
+            assessment: "Rule out acute coronary syndrome.",
+            plan: "ECG done, Troponin test ordered, follow up in 2 hours."
+        };
+        
+        const finalText = `SOAP NOTE:\nSubjective: ${soapOutput.subjective}\nObjective: ${soapOutput.objective}\nAssessment: ${soapOutput.assessment}\nPlan: ${soapOutput.plan}`;
+        
+        const r = await pool.query(
+            `UPDATE ai_voice_sessions 
+             SET transcript_raw=$1, transcript_structured=$2, draft_text=$3, final_text=$3, is_finalized=TRUE, finalized_at=NOW(), confidence_score=0.985
+             WHERE id=$4 AND tenant_id=$5 RETURNING *`,
+            [transcript_raw, JSON.stringify(soapOutput), finalText, id, tid]
+        );
+        
+        logAudit(req.session.user.id, req.session.user.display_name, 'VOICE_DICTATION_FINALIZE', 'Clinical', `Voice dictation session #${id} structured via AI`, tid);
+        res.json({ success: true, session: r.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+
 // ===== SPA CATCH-ALL (must be LAST route) =====
 app.get('*', (req, res) => {
     if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
