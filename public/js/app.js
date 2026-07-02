@@ -4640,7 +4640,7 @@ function renderPatientTable(patients) {
     `;
     return;
   }
-  const headers = [tr('MRN/File#', 'رقم الملف'), tr('Name', 'الاسم'), tr('ID', 'الهوية'), tr('Phone', 'الجوال'), tr('Insurance', 'التأمين'), tr('Consultation Fee', 'رسوم الكشفية'), tr('Date/Time', 'التاريخ/الوقت'), tr('Status', 'الحالة'), tr('Actions', 'إجراءات')];
+  const headers = [tr('MRN/File#', 'رقم الملف'), tr('Name', 'الاسم'), tr('ID', 'الهوية'), tr('Phone', 'الجوال'), tr('Insurance', 'التأمين'), tr('File Opening Fee', 'رسوم فتح الملف'), tr('Date/Time', 'التاريخ/الوقت'), tr('Status', 'الحالة'), tr('Actions', 'إجراءات')];
   const rows = patients.map(p => ({
     cells: [
       p.mrn || p.file_number,
@@ -4648,20 +4648,7 @@ function renderPatientTable(patients) {
       p.national_id,
       p.phone,
       p.insurance_company ? rawHtml(`<span style="font-size:11px">${escapeHTML(p.insurance_company)}${p.insurance_class ? ' (' + escapeHTML(p.insurance_class) + ')' : ''}</span>`) : '-',
-      (() => {
-        const pInvoices = (window.currentInvoicesList || []).filter(inv => inv.patient_id === p.id);
-        const hasPaidToday = pInvoices.some(inv => {
-          const isToday = new Date(inv.created_at || inv.date).toDateString() === new Date().toDateString();
-          return isToday && (inv.status === 'Paid' || inv.status === 'مدفوعة' || inv.status === 'مدفوع');
-        });
-        if (hasPaidToday) {
-          return rawHtml(`<span class="payment-badge paid">مدفوع 🟢</span>`);
-        } else if (p.insurance_company) {
-          return rawHtml(`<span class="payment-badge paid" title="تأمين: ${escapeHTML(p.insurance_company)}">تأمين 🟢</span>`);
-        } else {
-          return rawHtml(`<span class="payment-badge unpaid" onclick="showNewInvoiceModal(${safeId(p.id)},'${jsStr(p.name_ar || p.name_en || '')}')" title="${tr('Click to generate invoice', 'انقر لتحصيل الكشفية')}">معلق 🔴</span>`);
-        }
-      })(),
+      rawHtml(`<span class="payment-badge paid" style="background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.3);padding:2px 8px;border-radius:4px;font-weight:bold;font-size:11px">${tr('Free', 'مجاني')} 🟢</span>`),
       p.created_at ? new Date(p.created_at).toLocaleString('ar-SA', { dateStyle: 'short', timeStyle: 'short' }) : '-',
       statusBadge(p.status)
     ],
@@ -4804,30 +4791,35 @@ window.printPatientWristband = (patientId) => {
   }
   
   printArea.innerHTML = `
-    <div style="border: 2px solid #000; padding: 15px; border-radius: 8px; text-align: center; direction: rtl; background: #fff; color: #000">
-      <div style="font-size: 14px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 8px">
-        🏥 مجمع جمانة الطبي - EMR Wristband
-      </div>
-      <div style="font-size: 13px; font-weight: bold; margin-bottom: 4px">
+    <!-- Left: Hospital Branding -->
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 140px; border-left: 1px solid #ddd; padding-left: 8px; text-align: center">
+      <span style="font-size: 20px">🏥</span>
+      <span style="font-size: 11px; font-weight: bold; color: #000">مجمع جمانة الطبي</span>
+      <span style="font-size: 9px; color: #555">Jumana Medical</span>
+    </div>
+    
+    <!-- Middle: Patient Demographic Info -->
+    <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 0 10px; text-align: right">
+      <div style="font-size: 11px; font-weight: bold; margin-bottom: 2px">
         الاسم: ${escapeHTML(p.name_ar || '')}
       </div>
-      <div style="font-size: 12px; margin-bottom: 4px">
+      <div style="font-size: 10px; color: #333; margin-bottom: 2px">
         Name: ${escapeHTML(p.name_en || '')}
       </div>
-      <div style="font-size: 12px; margin-bottom: 6px; display: flex; justify-content: space-between">
+      <div style="display: flex; gap: 15px; font-size: 9px; color: #444">
         <span><strong>الملف (MRN):</strong> ${escapeHTML(p.mrn || p.file_number)}</span>
         <span><strong>الجنس:</strong> ${escapeHTML(p.gender || '-')}</span>
-      </div>
-      <div style="font-size: 12px; margin-bottom: 6px; display: flex; justify-content: space-between">
         <span><strong>الميلاد:</strong> ${p.dob ? new Date(p.dob).toLocaleDateString('en-US') : '-'}</span>
         <span><strong>الفصيلة:</strong> ${escapeHTML(p.blood_type || '-')}</span>
       </div>
-      <div style="margin: 8px 0; display: flex; justify-content: center">
-        <svg id="wristbandBarcode"></svg>
-      </div>
-      <div style="font-size: 10px; color: #555; margin-top: 6px">
-        تمت الطباعة: ${new Date().toLocaleString('ar-SA')}
-      </div>
+    </div>
+    
+    <!-- Right: Active Barcode and print timestamp -->
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 160px; padding-right: 8px; border-right: 1px solid #ddd">
+      <svg id="wristbandBarcode" style="max-height: 40px; width: 140px"></svg>
+      <span style="font-size: 8px; color: #666; margin-top: 2px">
+        ${new Date().toLocaleString('ar-SA', {dateStyle:'short', timeStyle:'short'})}
+      </span>
     </div>
   `;
   
@@ -4835,10 +4827,11 @@ window.printPatientWristband = (patientId) => {
     if (window.JsBarcode) {
       JsBarcode("#wristbandBarcode", p.mrn || p.file_number || '000000', {
         format: "CODE128",
-        width: 1.5,
-        height: 35,
+        width: 1.2,
+        height: 25,
         displayValue: true,
-        fontSize: 10
+        fontSize: 8,
+        margin: 0
       });
     }
     

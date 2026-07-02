@@ -2066,21 +2066,29 @@ body {
   transform: scale(1.05);
 }
 
+#wristbandPrintArea {
+  display: none;
+}
 @media print {
   body.printing-wristband #app {
     display: none !important;
   }
   body.printing-wristband #wristbandPrintArea {
-    display: block !important;
+    display: flex !important;
     position: absolute;
     top: 0;
     left: 0;
-    width: 280px;
-    height: auto;
+    width: 750px;
+    height: 95px;
     font-family: 'IBM Plex Sans Arabic', sans-serif;
     color: #000 !important;
     background: #fff !important;
-    padding: 10px;
+    padding: 5px 15px;
+    border: 1px dashed #666;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: space-between;
+    direction: rtl;
   }
 }
 
