@@ -13,7 +13,7 @@ const { pool } = require('./db_postgres');
 
 const TEST_PORT = 3020;
 const TEST_USERNAME = 'safety_doc';
-const TEST_PASSWORD = 'SAFETY_PASSWORD_2026';
+const TEST_PASSWORD = 'SAFETY_PASSWORD_PLACEHOLDER';
 
 let serverProcess;
 

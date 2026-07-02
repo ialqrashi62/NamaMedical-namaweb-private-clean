@@ -13,7 +13,7 @@ const { pool } = require('./db_postgres');
 
 const TEST_PORT = 3027;
 const TEST_USERNAME = 'reorder_tester';
-const TEST_PASSWORD = 'REORDER_PASSWORD_2026';
+const TEST_PASSWORD = 'REORDER_PASSWORD_PLACEHOLDER';
 
 let serverProcess;
 

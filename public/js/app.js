@@ -17489,7 +17489,7 @@ window.e1AddJointAssessment = async (pid) => {
   }
   const score = (0.56 * Math.sqrt(parseInt(tjc)) + 0.28 * Math.sqrt(parseInt(sjc)) + 0.014 * parseInt(vas));
   try {
-    await API.post('/api/rheumatology/joints', {
+    const resp = await API.post('/api/rheumatology/joints', {
       patient_id: pid,
       tender_joint_count: parseInt(tjc),
       swollen_joint_count: parseInt(sjc),
@@ -17497,6 +17497,10 @@ window.e1AddJointAssessment = async (pid) => {
       das28_score: parseFloat(score.toFixed(2)),
       notes: notes
     });
+    if (resp && resp.error) {
+      showToast(tr('Rejected: ', 'مرفوض: ') + resp.error, 'error');
+      return;
+    }
     showToast(tr('Joint assessment saved successfully!', 'تم حفظ تقييم المفاصل بنجاح!'));
     window.e1LoadJointList(pid);
     document.getElementById('e1RheumTJC').value = '';
@@ -17632,19 +17636,23 @@ window.e1LoadNeuroList = async (pid) => {
       return;
     }
     container.innerHTML = records.map(r => {
-      const gcs = r.gcs_total_score || 0;
+      // A NULL total = incomplete/unassessed GCS — must render as unmeasured ('—'),
+      // never as 0/15-Severe, and unmeasured components must not display as worst-score 1.
+      const gcs = (r.gcs_total_score === null || r.gcs_total_score === undefined) ? null : r.gcs_total_score;
       let border = '4px solid #10b981';
-      if (gcs <= 8) border = '4px solid #ef4444';
+      if (gcs === null) border = '4px solid #94a3b8';
+      else if (gcs <= 8) border = '4px solid #ef4444';
       else if (gcs <= 12) border = '4px solid #f59e0b';
-      
+      const comp = (v) => (v === null || v === undefined) ? '—' : v;
+
       return `
         <div style="padding:10px;margin:6px 0;border-radius:8px;background:var(--hover,#f8f9fa);border-right: ${border};font-size:12px">
           <div style="font-weight:700;color:var(--primary);display:flex;justify-content:space-between">
             <span>📅 ${new Date(r.assessment_date).toLocaleDateString('ar-SA')}</span>
-            <span style="font-weight:700;color:var(--accent,#0ea5e9)">GCS: ${gcs}/15</span>
+            <span style="font-weight:700;color:var(--accent,#0ea5e9)">GCS: ${gcs === null ? '—' : gcs + '/15'}</span>
           </div>
           <div style="margin-top:4px;display:grid;grid-template-columns:1fr 1fr;gap:4px">
-            <div><strong>${tr('GCS (E,V,M):', 'عناصر مقياس غلاسكو:')}</strong> ${r.gcs_eye || 1},${r.gcs_verbal || 1},${r.gcs_motor || 1}</div>
+            <div><strong>${tr('GCS (E,V,M):', 'عناصر مقياس غلاسكو:')}</strong> ${comp(r.gcs_eye)},${comp(r.gcs_verbal)},${comp(r.gcs_motor)}</div>
             <div><strong>${tr('NIHSS Score:', 'مقياس السكتة الدماغية:')}</strong> ${r.nihss_score !== null ? r.nihss_score : '-'}</div>
             <div style="grid-column: span 2"><strong>${tr('Reflexes:', 'المنعكسات العميقة:')}</strong> ${r.reflexes_status || 'Normal'}</div>
           </div>
@@ -17670,7 +17678,7 @@ window.e1AddNeurologyAssessment = async (pid) => {
     return;
   }
   try {
-    await API.post('/api/neurology/assessments', {
+    const resp = await API.post('/api/neurology/assessments', {
       patient_id: pid,
       gcs_eye: parseInt(eye),
       gcs_verbal: parseInt(verbal),
@@ -17679,6 +17687,10 @@ window.e1AddNeurologyAssessment = async (pid) => {
       reflexes_status: reflexes,
       notes: notes
     });
+    if (resp && resp.error) {
+      showToast(tr('Rejected: ', 'مرفوض: ') + resp.error, 'error');
+      return;
+    }
     showToast(tr('Neurological assessment saved successfully!', 'تم حفظ التقييم العصبي بنجاح!'));
     window.e1LoadNeuroList(pid);
     document.getElementById('e1NeuroGCSEye').value = '';

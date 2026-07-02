@@ -34,6 +34,8 @@ const nursingScores = require('./nursing_scores');
 const esiEngine = require('./esi_engine');
 // E9 ICU / Critical Care (additive): server-side, anti-spoof SOFA / GCS / APACHE-II acuity engine.
 const icuScoring = require('./icu_scoring');
+// Gate 1 (specialty modules): server-side, anti-spoof GCS / DAS28 / NIHSS score engine.
+const specialtyScores = require('./specialty_scores');
 const e11Engine = require('./e11_insurance_engine'); // E11 insurance/NPHIES pure engine (state machines + co-pay math)
 const pathologyEngine = require('./pathology_engine'); // E15: pure state-machine + accession + flag engine
 const e16 = require('./e16_inventory_engine'); // E16 inventory/CSSD pure engine (FEFO, no-negative, BI gate)
@@ -4925,17 +4927,24 @@ app.post('/api/pediatrics/growth', requireAuth, requireRole('patients', 'prescri
         if (!patient_id) {
             return res.status(400).json({ error: 'Patient ID is required' });
         }
-        
+
+        // APGAR is 0-10 by definition; out-of-range/garbage 422s instead of being stored
+        // verbatim onto the neonatal growth record (absent stays NULL).
+        const apgar1Res = specialtyScores.validateAPGARTotal(apgar_1min);
+        if (!apgar1Res.ok) return res.status(422).json({ error: `APGAR 1-min rejected: ${apgar1Res.error}` });
+        const apgar5Res = specialtyScores.validateAPGARTotal(apgar_5min);
+        if (!apgar5Res.ok) return res.status(422).json({ error: `APGAR 5-min rejected: ${apgar5Res.error}` });
+
         const result = await pool.query(
-            `INSERT INTO pediatric_growth_records 
+            `INSERT INTO pediatric_growth_records
              (patient_id, doctor_id, record_date, apgar_1min, apgar_5min, weight_kg, height_cm, head_circ_cm, tenant_id, facility_id) 
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
             [
                 patient_id,
                 req.session.user?.id || null,
                 record_date || new Date().toISOString().slice(0, 10),
-                apgar_1min === undefined || apgar_1min === '' ? null : parseInt(apgar_1min),
-                apgar_5min === undefined || apgar_5min === '' ? null : parseInt(apgar_5min),
+                apgar1Res.total,
+                apgar5Res.total,
                 weight_kg === undefined || weight_kg === '' ? null : parseFloat(weight_kg),
                 height_cm === undefined || height_cm === '' ? null : parseFloat(height_cm),
                 head_circ_cm === undefined || head_circ_cm === '' ? null : parseFloat(head_circ_cm),
@@ -5438,41 +5447,59 @@ app.post('/api/icu/assessments', requireAuth, requireRole('patients', 'prescript
         if (!patient_id) {
             return res.status(400).json({ error: 'Patient ID is required' });
         }
-        
+
+        // APACHE-II / SOFA totals are server-side authority values: computed as the sum of
+        // the submitted point components (each strictly range-validated — garbage 422s
+        // instead of silently becoming 0 points). Client-sent apache_ii_score/sofa_score
+        // are NEVER trusted: a spoofed SOFA 0 would rank the sickest patient as the
+        // healthiest on the acuity board.
+        const apacheRes = specialtyScores.sumAPACHE2Points({
+            temp: apache_temp, map: apache_map, hr: apache_hr, rr: apache_rr, pao2: apache_pao2,
+            ph: apache_ph, na: apache_na, k: apache_k, creatinine: apache_creatinine,
+            hct: apache_hct, wbc: apache_wbc, gcs_points: apache_gcs,
+            age_points: apache_age_points, chronic_points: apache_chronic_points
+        });
+        if (!apacheRes.ok) return res.status(422).json({ error: `APACHE-II rejected: ${apacheRes.error}` });
+        const sofaRes = specialtyScores.sumSOFAPoints({
+            pao2_fio2: sofa_pao2_fio2, platelets: sofa_platelets, bilirubin: sofa_bilirubin,
+            map_vasopressor: sofa_map_vasopressor, gcs: sofa_gcs, creatinine: sofa_creatinine
+        });
+        if (!sofaRes.ok) return res.status(422).json({ error: `SOFA rejected: ${sofaRes.error}` });
+
         const result = await pool.query(
-            `INSERT INTO icu_assessments 
+            `INSERT INTO icu_assessments
              (patient_id, doctor_id, assessment_date,
               apache_temp, apache_map, apache_hr, apache_rr, apache_pao2, apache_ph, apache_na, apache_k, apache_creatinine, apache_hct, apache_wbc, apache_gcs,
               apache_age_points, apache_chronic_points, apache_ii_score,
               sofa_pao2_fio2, sofa_platelets, sofa_bilirubin, sofa_map_vasopressor, sofa_gcs, sofa_creatinine, sofa_score,
-              clinical_notes, tenant_id, facility_id) 
+              clinical_notes, tenant_id, facility_id)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28) RETURNING id`,
             [
                 patient_id,
                 req.session.user?.id || null,
                 assessment_date || new Date().toISOString().slice(0, 10),
-                parseInt(apache_temp || 0),
-                parseInt(apache_map || 0),
-                parseInt(apache_hr || 0),
-                parseInt(apache_rr || 0),
-                parseInt(apache_pao2 || 0),
-                parseInt(apache_ph || 0),
-                parseInt(apache_na || 0),
-                parseInt(apache_k || 0),
-                parseInt(apache_creatinine || 0),
-                parseInt(apache_hct || 0),
-                parseInt(apache_wbc || 0),
-                parseInt(apache_gcs || 0),
-                parseInt(apache_age_points || 0),
-                parseInt(apache_chronic_points || 0),
-                parseInt(apache_ii_score || 0),
-                parseInt(sofa_pao2_fio2 || 0),
-                parseInt(sofa_platelets || 0),
-                parseInt(sofa_bilirubin || 0),
-                parseInt(sofa_map_vasopressor || 0),
-                parseInt(sofa_gcs || 0),
-                parseInt(sofa_creatinine || 0),
-                parseInt(sofa_score || 0),
+                apacheRes.points.temp,
+                apacheRes.points.map,
+                apacheRes.points.hr,
+                apacheRes.points.rr,
+                apacheRes.points.pao2,
+                apacheRes.points.ph,
+                apacheRes.points.na,
+                apacheRes.points.k,
+                apacheRes.points.creatinine,
+                apacheRes.points.hct,
+                apacheRes.points.wbc,
+                apacheRes.points.gcs_points,
+                apacheRes.points.age_points,
+                apacheRes.points.chronic_points,
+                apacheRes.total,
+                sofaRes.points.pao2_fio2,
+                sofaRes.points.platelets,
+                sofaRes.points.bilirubin,
+                sofaRes.points.map_vasopressor,
+                sofaRes.points.gcs,
+                sofaRes.points.creatinine,
+                sofaRes.total,
                 clinical_notes || '',
                 tenantId || 1,
                 facilityId || null
@@ -5652,19 +5679,34 @@ app.post('/api/pulmonology/pft', requireAuth, requireRole('patients', 'prescript
         if (!patient_id) {
             return res.status(400).json({ error: 'Patient ID is required' });
         }
-        
+
+        // FEV1/FVC ratio is a DERIVED server-side value: when both volumes are present the
+        // ratio is computed (a client-sent ratio is ignored — a spoofed 0.9 over an
+        // obstructive 0.55 would mask COPD/asthma severity); physiologically inconsistent
+        // volumes (FEV1 > FVC, non-positive, > 12 L) 422 fail-closed.
+        const fev1Num = (fev1 !== undefined && fev1 !== null && fev1 !== '') ? Number(fev1) : null;
+        const fvcNum = (fvc !== undefined && fvc !== null && fvc !== '') ? Number(fvc) : null;
+        if (fev1Num !== null && !Number.isFinite(fev1Num)) return res.status(422).json({ error: 'fev1 must be numeric' });
+        if (fvcNum !== null && !Number.isFinite(fvcNum)) return res.status(422).json({ error: 'fvc must be numeric' });
+        let ratioVal = null;
+        if (fev1Num !== null && fvcNum !== null) {
+            const ratioRes = specialtyScores.computeFEV1FVC(fev1Num, fvcNum);
+            if (!ratioRes.ok) return res.status(422).json({ error: `FEV1/FVC rejected: ${ratioRes.error}` });
+            ratioVal = ratioRes.ratio;
+        }
+
         const result = await pool.query(
-            `INSERT INTO pulmonary_function_tests 
-             (patient_id, doctor_id, test_date, fev1, fvc, fev1_fvc_ratio, pef, interpretation, notes, tenant_id, facility_id) 
+            `INSERT INTO pulmonary_function_tests
+             (patient_id, doctor_id, test_date, fev1, fvc, fev1_fvc_ratio, pef, interpretation, notes, tenant_id, facility_id)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
             [
-                patient_id, 
-                req.session.user?.id || null, 
-                test_date || new Date().toISOString().slice(0, 10), 
-                fev1 || null, 
-                fvc || null, 
-                fev1_fvc_ratio || null, 
-                pef || null, 
+                patient_id,
+                req.session.user?.id || null,
+                test_date || new Date().toISOString().slice(0, 10),
+                fev1Num,
+                fvcNum,
+                ratioVal,
+                pef || null,
                 interpretation || '', 
                 notes || '', 
                 tenantId || 1, 
@@ -5708,27 +5750,59 @@ app.get('/api/pulmonology/pft/patient/:patient_id', requireAuth, requireRole('pa
 // ===== RHEUMATOLOGY DEPARTMENT =====
 app.post('/api/rheumatology/joints', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
     try {
-        const { patient_id, assessment_date, tender_joint_count, swollen_joint_count, vas_pain, das28_score, notes } = req.body;
+        const { patient_id, assessment_date, tender_joint_count, swollen_joint_count, vas_pain, das28_score, esr, crp, gh, notes } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
-        
+
         if (!patient_id) {
             return res.status(400).json({ error: 'Patient ID is required' });
         }
-        
+
+        const tjcP = specialtyScores.parseOptionalInt(tender_joint_count, 0, 28, 'tender_joint_count');
+        if (!tjcP.ok) return res.status(422).json({ error: tjcP.error });
+        const sjcP = specialtyScores.parseOptionalInt(swollen_joint_count, 0, 28, 'swollen_joint_count');
+        if (!sjcP.ok) return res.status(422).json({ error: sjcP.error });
+        const vasP = specialtyScores.parseOptionalInt(vas_pain, 0, 100, 'vas_pain');
+        if (!vasP.ok) return res.status(422).json({ error: vasP.error });
+        const tjcVal = tjcP.value, sjcVal = sjcP.value, vasVal = vasP.value;
+
+        // DAS28 is a server-side authority value (anti-spoof). When a NON-EMPTY acute-phase
+        // reactant is supplied we COMPUTE it and ignore any client-sent das28_score; a
+        // client-sent score is only accepted stand-alone after strict range validation.
+        // (Empty-string esr/crp — typical untouched form fields — count as absent.)
+        const hasEsr = esr !== undefined && esr !== null && esr !== '';
+        const hasCrp = crp !== undefined && crp !== null && crp !== '';
+        let das28Val = null;
+        if (hasEsr || hasCrp) {
+            const das28Input = { tjc28: tjcVal, sjc28: sjcVal, gh: (gh !== undefined && gh !== null && gh !== '') ? gh : vasVal };
+            const computed = hasEsr
+                ? specialtyScores.computeDAS28ESR({ ...das28Input, esr })
+                : specialtyScores.computeDAS28CRP({ ...das28Input, crp });
+            if (!computed.ok) {
+                return res.status(422).json({ error: `DAS28 rejected: ${computed.error}` });
+            }
+            das28Val = computed.score;
+        } else if (das28_score !== undefined && das28_score !== null && das28_score !== '') {
+            const clientScore = parseFloat(das28_score);
+            if (!Number.isFinite(clientScore) || clientScore < 0 || clientScore > 10) {
+                return res.status(422).json({ error: 'das28_score out of range (0-10)' });
+            }
+            das28Val = clientScore;
+        }
+
         const result = await pool.query(
-            `INSERT INTO joint_assessments 
-             (patient_id, doctor_id, assessment_date, tender_joint_count, swollen_joint_count, vas_pain, das28_score, notes, tenant_id, facility_id) 
+            `INSERT INTO joint_assessments
+             (patient_id, doctor_id, assessment_date, tender_joint_count, swollen_joint_count, vas_pain, das28_score, notes, tenant_id, facility_id)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
             [
-                patient_id, 
-                req.session.user?.id || null, 
-                assessment_date || new Date().toISOString().slice(0, 10), 
-                tender_joint_count !== undefined ? parseInt(tender_joint_count) : null, 
-                swollen_joint_count !== undefined ? parseInt(swollen_joint_count) : null, 
-                vas_pain !== undefined ? parseInt(vas_pain) : null, 
-                das28_score !== undefined ? parseFloat(das28_score) : null, 
-                notes || '', 
-                tenantId || 1, 
+                patient_id,
+                req.session.user?.id || null,
+                assessment_date || new Date().toISOString().slice(0, 10),
+                tjcVal,
+                sjcVal,
+                vasVal,
+                das28Val,
+                notes || '',
+                tenantId || 1,
                 facilityId || null
             ]
         );
@@ -5776,15 +5850,28 @@ app.post('/api/neurology/assessments', requireAuth, requireRole('patients', 'pre
             return res.status(400).json({ error: 'Patient ID is required' });
         }
         
-        const gcs_eye_val = gcs_eye !== undefined ? parseInt(gcs_eye) : null;
-        const gcs_verbal_val = gcs_verbal !== undefined ? parseInt(gcs_verbal) : null;
-        const gcs_motor_val = gcs_motor !== undefined ? parseInt(gcs_motor) : null;
-        
-        let gcs_total_score = null;
-        if (gcs_eye_val !== null && gcs_verbal_val !== null && gcs_motor_val !== null) {
-            gcs_total_score = gcs_eye_val + gcs_verbal_val + gcs_motor_val;
+        // GCS is a server-side authority value: each provided component is strictly
+        // range-validated by the engine (422 on garbage instead of a DB CHECK 500);
+        // a partial GCS keeps a NULL total — never a reassuring default.
+        const gcsRes = specialtyScores.validateGCSComponents({ eye: gcs_eye, verbal: gcs_verbal, motor: gcs_motor });
+        if (!gcsRes.ok) {
+            return res.status(422).json({ error: `GCS rejected: ${gcsRes.error}` });
         }
-        
+        const gcs_eye_val = gcsRes.components.eye;
+        const gcs_verbal_val = gcsRes.components.verbal;
+        const gcs_motor_val = gcsRes.components.motor;
+        const gcs_total_score = gcsRes.total;
+
+        // NIHSS total is range-validated server-side (0-42); garbage is rejected, not stored.
+        let nihss_val = null;
+        if (nihss_score !== undefined && nihss_score !== null && nihss_score !== '') {
+            const nihssRes = specialtyScores.validateNIHSSTotal(nihss_score);
+            if (!nihssRes.ok) {
+                return res.status(422).json({ error: `NIHSS rejected: ${nihssRes.error}` });
+            }
+            nihss_val = nihssRes.total;
+        }
+
         const result = await pool.query(
             `INSERT INTO neurology_assessments 
              (patient_id, doctor_id, assessment_date, gcs_eye, gcs_verbal, gcs_motor, gcs_total_score, nihss_score, reflexes_status, notes, tenant_id, facility_id) 
@@ -5797,7 +5884,7 @@ app.post('/api/neurology/assessments', requireAuth, requireRole('patients', 'pre
                 gcs_verbal_val,
                 gcs_motor_val,
                 gcs_total_score,
-                nihss_score !== undefined ? parseInt(nihss_score) : null,
+                nihss_val,
                 reflexes_status || '',
                 notes || '', 
                 tenantId || 1, 
@@ -8400,11 +8487,20 @@ app.post('/api/emergency/trauma/:visitId', requireAuth, requireTenantScope, asyn
             if (!patientCheck) return res.status(403).json({ error: 'Invalid patient context or access denied' });
         }
 
-        const gcs_total = (parseInt(gcs_eye) || 4) + (parseInt(gcs_verbal) || 5) + (parseInt(gcs_motor) || 6);
+        // GCS is a server-side authority value. A missing component must NEVER default to
+        // normal (the old `|| 4/5/6` turned an unassessed patient into a reassuring GCS 15).
+        // Partial GCS (e.g. best-motor only in rapid trauma) is stored honestly with a NULL
+        // total; invalid provided components 422 fail-closed.
+        const gcsRes = specialtyScores.validateGCSComponents({ eye: gcs_eye, verbal: gcs_verbal, motor: gcs_motor });
+        if (!gcsRes.ok) {
+            return res.status(422).json({ error: `GCS rejected: ${gcsRes.error}` });
+        }
+        const teVal = gcsRes.components.eye, tvVal = gcsRes.components.verbal, tmVal = gcsRes.components.motor;
+        const gcs_total = gcsRes.total;
         const r = await pool.query(
             `INSERT INTO emergency_trauma_assessments (visit_id,patient_id,airway,breathing,circulation,disability,exposure,gcs_eye,gcs_verbal,gcs_motor,gcs_total,mechanism_of_injury,trauma_team_activated,assessed_by,tenant_id,facility_id)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
-            [req.params.visitId, patient_id, airway, breathing, circulation, disability, exposure, gcs_eye || 4, gcs_verbal || 5, gcs_motor || 6, gcs_total, mechanism_of_injury, trauma_team_activated ? 1 : 0, assessed_by, tenantId, facilityId]);
+            [req.params.visitId, patient_id, airway, breathing, circulation, disability, exposure, teVal, tvVal, tmVal, gcs_total, mechanism_of_injury, trauma_team_activated ? 1 : 0, assessed_by, tenantId, facilityId]);
 
         logAudit(req.session.user?.id, req.session.user?.display_name, 'CREATE_TRAUMA_ASSESSMENT', 'Emergency', `Created trauma assessment for visit #${req.params.visitId}`, req.ip);
         res.json(r.rows[0]);

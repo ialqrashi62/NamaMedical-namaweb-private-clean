@@ -13,7 +13,7 @@ const { pool } = require('./db_postgres');
 
 const TEST_PORT = 3024;
 const TEST_USERNAME = 'surg_tester';
-const TEST_PASSWORD = 'SURG_PASSWORD_2026';
+const TEST_PASSWORD = 'SURG_PASSWORD_PLACEHOLDER';
 
 let serverProcess;
 

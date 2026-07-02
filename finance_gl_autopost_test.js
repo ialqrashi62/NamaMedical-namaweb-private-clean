@@ -13,7 +13,7 @@ const { pool } = require('./db_postgres');
 
 const TEST_PORT = 3028;
 const TEST_USERNAME = 'gl_autopost_tester';
-const TEST_PASSWORD = 'GL_AUTOPOST_PASSWORD_2026';
+const TEST_PASSWORD = 'GL_AUTOPOST_PASSWORD_PLACEHOLDER';
 
 let serverProcess;
 
