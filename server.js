@@ -5122,29 +5122,48 @@ app.get('/api/pediatrics/growth/patient/:patient_id', requireAuth, requireRole('
 // ===== OBGYN DEPARTMENT (G21) =====
 app.post('/api/obgyn/pregnancies', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
     try {
-        const { 
-            patient_id, lmp_date, edd_date, gravida, para, abortions, living, gestational_weeks, notes 
+        // NOTE: this is the EFFECTIVE handler for POST /api/obgyn/pregnancies — a second,
+        // richer registration exists further down (~14203) but Express routes to the FIRST
+        // match, so it is shadowed/dead. To avoid silent data loss we accept BOTH payload
+        // shapes here: the specialty (e1) UI sends lmp_date/edd_date/living; the OB-module UI
+        // sends lmp (no _date) + living_children and expects a server-computed EDD. Previously
+        // the OB-module payload stored NULL dates (it only reads lmp_date). We normalise the
+        // aliases and compute EDD server-side (Naegele via ob_engine) when only LMP is given.
+        const {
+            patient_id, lmp_date, edd_date, lmp, gravida, para, abortions, living, living_children, gestational_weeks, notes
         } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
-        
+
         if (!patient_id) {
             return res.status(400).json({ error: 'Patient ID is required' });
         }
-        
+
+        const lmpVal = lmp_date || lmp || null;
+        // EDD is a server-side authority value: prefer an explicit edd_date, else compute from
+        // LMP (never trust a client-computed EDD when we can derive it). NULL if no LMP.
+        const eddVal = edd_date || (lmpVal ? obEngine.computeEDD(lmpVal) : null);
+        const livingVal = living !== undefined ? living : living_children;
+        // Server-derive gestational weeks from LMP when the client did not send them.
+        let gestWeeks = gestational_weeks === undefined ? null : parseInt(gestational_weeks);
+        if (gestWeeks === null && lmpVal) {
+            const ga = obEngine.gestationalAgeFromLMP(lmpVal);
+            if (ga && Number.isInteger(ga.weeks)) gestWeeks = ga.weeks;
+        }
+
         const result = await pool.query(
-            `INSERT INTO obgyn_pregnancies 
-             (patient_id, doctor_id, lmp_date, edd_date, gravida, para, abortions, living, gestational_weeks, notes, tenant_id, facility_id) 
+            `INSERT INTO obgyn_pregnancies
+             (patient_id, doctor_id, lmp_date, edd_date, gravida, para, abortions, living, gestational_weeks, notes, tenant_id, facility_id)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
             [
                 patient_id,
                 req.session.user?.id || null,
-                lmp_date || null,
-                edd_date || null,
+                lmpVal,
+                eddVal,
                 gravida === undefined ? 0 : parseInt(gravida),
                 para === undefined ? 0 : parseInt(para),
                 abortions === undefined ? 0 : parseInt(abortions),
-                living === undefined ? 0 : parseInt(living),
-                gestational_weeks === undefined ? null : parseInt(gestational_weeks),
+                livingVal === undefined || livingVal === null ? 0 : parseInt(livingVal),
+                gestWeeks,
                 notes || '',
                 tenantId || 1,
                 facilityId || null
@@ -14200,6 +14219,10 @@ app.get('/api/obgyn/pregnancies', requireAuth, requireRole(...OB_RBAC), requireT
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
+// SHADOWED/DEAD: an earlier app.post('/api/obgyn/pregnancies', ...) (~line 5123) is
+// registered first, so Express never routes here. Kept for reference until the OB endpoints
+// are consolidated onto a single handler+schema (tracked as a Wave-2 schema-conflict item);
+// the effective handler above was hardened to accept this route's payload shape too.
 app.post('/api/obgyn/pregnancies', requireAuth, requireRole(...OB_RBAC), requireTenantScope, async (req, res) => {
     try {
         const tenantId = e14RequireTenant(req);
