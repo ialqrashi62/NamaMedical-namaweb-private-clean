@@ -3998,11 +3998,19 @@ app.post('/api/patients/:id/consent', requireAuth, requireRole('patients'), asyn
 
 // ===== METADATA-DRIVEN CLINICAL EMR & SPECIALTIES =====
 
-app.get('/api/clinical/templates/:dept_id', requireAuth, async (req, res) => {
+app.get('/api/clinical/templates/:dept_id', requireAuth, requireTenantScope, async (req, res) => {
     try {
         const deptId = parseInt(req.params.dept_id, 10);
         if (!Number.isInteger(deptId)) return res.status(400).json({ error: 'Invalid department ID' });
-        const rows = (await pool.query('SELECT * FROM clinical_templates WHERE department_id=$1 AND is_active=1', [deptId])).rows;
+        // clinical_templates has no tenant_id/RLS of its own, so enforce isolation TRANSITIVELY
+        // via clinical_departments (which is FORCE-RLS): the JOIN yields rows only when the
+        // department belongs to the caller's tenant, so a foreign dept_id returns nothing
+        // instead of leaking another tenant's form templates. (Pending the e50 candidate that
+        // gives clinical_templates its own tenant_id + RLS.)
+        const rows = (await pool.query(
+            `SELECT t.* FROM clinical_templates t
+             JOIN clinical_departments d ON d.id = t.department_id
+             WHERE t.department_id=$1 AND t.is_active=1`, [deptId])).rows;
         res.json(rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
