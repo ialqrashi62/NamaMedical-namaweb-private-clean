@@ -10056,7 +10056,7 @@ async function renderSettings(el) {
             </table>
           </div>
         </div>
-      ` : `
+      ` : settingsTab === 'cybersecurity' ? `
         <!-- Cybersecurity Governance -->
         <div class="space-y-md">
           <!-- Staging Warning banner inside tab -->
