@@ -3742,138 +3742,201 @@ async function renderReception(el) {
   const depts = ['العيادة العامة', 'الباطنية', 'الأطفال', 'العظام', 'الجلدية', 'الأنف والأذن', 'العيون', 'الأسنان', 'الطوارئ'];
   const deptsEn = ['General Clinic', 'Internal Medicine', 'Pediatrics', 'Orthopedics', 'Dermatology', 'ENT', 'Ophthalmology', 'Dental', 'Emergency'];
   const maxFile = patients.length ? Math.max(...patients.map(p => p.file_number || 1000)) + 1 : 1001;
-
   el.innerHTML = `
-    <div class="page-title">🏥 ${tr('Reception', 'الاستقبال')}</div>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+      <div class="glass-card glass-card-premium p-4 rounded-xl border border-primary/20 flex items-center gap-3">
+        <span class="material-symbols-outlined text-3xl text-primary" style="font-size:32px">groups</span>
+        <div>
+          <div class="text-xs text-on-surface-variant font-medium">${tr('Total Patients', 'إجمالي الملفات')}</div>
+          <div class="text-xl font-bold text-primary mt-1" id="kpiTotalPatients">${patients.length}</div>
+        </div>
+      </div>
+      <div class="glass-card glass-card-premium p-4 rounded-xl border border-emerald-500/20 flex items-center gap-3">
+        <span class="material-symbols-outlined text-3xl text-emerald-500" style="font-size:32px">person_add</span>
+        <div>
+          <div class="text-xs text-on-surface-variant font-medium">${tr("Today's Registered", 'مسجلي اليوم')}</div>
+          <div class="text-xl font-bold text-emerald-500 mt-1" id="kpiTodayPatients">
+            ${patients.filter(p => p.created_at && new Date(p.created_at).toDateString() === new Date().toDateString()).length}
+          </div>
+        </div>
+      </div>
+      <div class="glass-card glass-card-premium p-4 rounded-xl border border-amber-500/20 flex items-center gap-3">
+        <span class="material-symbols-outlined text-3xl text-amber-500" style="font-size:32px">medical_services</span>
+        <div>
+          <div class="text-xs text-on-surface-variant font-medium">${tr('Active Insurance', 'حالات التأمين')}</div>
+          <div class="text-xl font-bold text-amber-500 mt-1" id="kpiInsurancePatients">
+            ${patients.filter(p => p.insurance_company).length}
+          </div>
+        </div>
+      </div>
+      <div class="glass-card glass-card-premium p-4 rounded-xl border border-error/20 flex items-center gap-3">
+        <span class="material-symbols-outlined text-3xl text-error" style="font-size:32px">payments</span>
+        <div>
+          <div class="text-xs text-on-surface-variant font-medium">${tr('Pending Payments', 'طلبات انتظار السداد')}</div>
+          <div class="text-xl font-bold text-error mt-1" id="kpiPendingPayments">0</div>
+        </div>
+      </div>
+    </div>
+
     <div class="split-layout">
       <div class="card glass-card-premium">
-        <div class="card-title">📝 ${tr('New Patient File', 'ملف مريض جديد')}</div>
-        <div class="form-group mb-12"><label>${tr('File No.', 'رقم الملف')}</label><input class="form-input form-input-readonly" value="${maxFile}" readonly id="rFileNum"></div>
-        <div class="form-group mb-12"><label>${tr('Full Name (Arabic)', 'الاسم بالعربية')}</label><input class="form-input" id="rNameAr" placeholder="${tr('Enter Arabic name', 'ادخل الاسم بالعربية')}"></div>
-        <div class="form-group mb-12"><label>${tr('Full Name (English)', 'الاسم بالإنجليزية')}</label><input class="form-input" id="rNameEn" placeholder="${tr('Enter English name', 'ادخل الاسم بالإنجليزية')}"></div>
-        <div class="form-group mb-12"><label>${tr('National ID', 'رقم الهوية')}</label><input class="form-input" id="rNatId"></div>
-        <div class="form-group mb-12"><label>${tr('Phone', 'الجوال')}</label><input class="form-input" id="rPhone" placeholder="05XXXXXXXX"></div>
-        <div class="form-group mb-12"><label>${tr('Nationality', 'الجنسية')}</label><select class="form-input" id="rNationality">
-          <option value="سعودي">🇸🇦 ${tr('Saudi', 'سعودي')}</option>
-          <option value="يمني">🇾🇪 ${tr('Yemeni', 'يمني')}</option>
-          <option value="إماراتي">🇦🇪 ${tr('Emirati', 'إماراتي')}</option>
-          <option value="كويتي">🇰🇼 ${tr('Kuwaiti', 'كويتي')}</option>
-          <option value="بحريني">🇧🇭 ${tr('Bahraini', 'بحريني')}</option>
-          <option value="قطري">🇶🇦 ${tr('Qatari', 'قطري')}</option>
-          <option value="عماني">🇴🇲 ${tr('Omani', 'عماني')}</option>
-          <option value="عراقي">🇮🇶 ${tr('Iraqi', 'عراقي')}</option>
-          <option value="أردني">🇯🇴 ${tr('Jordanian', 'أردني')}</option>
-          <option value="سوري">🇸🇾 ${tr('Syrian', 'سوري')}</option>
-          <option value="لبناني">🇱🇧 ${tr('Lebanese', 'لبناني')}</option>
-          <option value="فلسطيني">🇵🇸 ${tr('Palestinian', 'فلسطيني')}</option>
-          <option value="مصري">🇪🇬 ${tr('Egyptian', 'مصري')}</option>
-          <option value="سوداني">🇸🇩 ${tr('Sudanese', 'سوداني')}</option>
-          <option value="ليبي">🇱🇾 ${tr('Libyan', 'ليبي')}</option>
-          <option value="تونسي">🇹🇳 ${tr('Tunisian', 'تونسي')}</option>
-          <option value="جزائري">🇩🇿 ${tr('Algerian', 'جزائري')}</option>
-          <option value="مغربي">🇲🇦 ${tr('Moroccan', 'مغربي')}</option>
-          <option value="موريتاني">🇲🇷 ${tr('Mauritanian', 'موريتاني')}</option>
-          <option value="صومالي">🇸🇴 ${tr('Somali', 'صومالي')}</option>
-          <option value="جيبوتي">🇩🇯 ${tr('Djiboutian', 'جيبوتي')}</option>
-          <option value="جزر القمر">🇰🇲 ${tr('Comoran', 'جزر القمر')}</option>
-          <option value="تركي">🇹🇷 ${tr('Turkish', 'تركي')}</option>
-          <option value="إيراني">🇮🇷 ${tr('Iranian', 'إيراني')}</option>
-          <option value="أفغاني">🇦🇫 ${tr('Afghan', 'أفغاني')}</option>
-          <option value="باكستاني">🇵🇰 ${tr('Pakistani', 'باكستاني')}</option>
-          <option value="هندي">🇮🇳 ${tr('Indian', 'هندي')}</option>
-          <option value="بنغلاديشي">🇧🇩 ${tr('Bangladeshi', 'بنغلاديشي')}</option>
-          <option value="سريلانكي">🇱🇰 ${tr('Sri Lankan', 'سريلانكي')}</option>
-          <option value="نيبالي">🇳🇵 ${tr('Nepali', 'نيبالي')}</option>
-          <option value="فلبيني">🇵🇭 ${tr('Filipino', 'فلبيني')}</option>
-          <option value="إندونيسي">🇮🇩 ${tr('Indonesian', 'إندونيسي')}</option>
-          <option value="ماليزي">🇲🇾 ${tr('Malaysian', 'ماليزي')}</option>
-          <option value="تايلاندي">🇹🇭 ${tr('Thai', 'تايلاندي')}</option>
-          <option value="فيتنامي">🇻🇳 ${tr('Vietnamese', 'فيتنامي')}</option>
-          <option value="ميانماري">🇲🇲 ${tr('Myanmar', 'ميانماري')}</option>
-          <option value="صيني">🇨🇳 ${tr('Chinese', 'صيني')}</option>
-          <option value="ياباني">🇯🇵 ${tr('Japanese', 'ياباني')}</option>
-          <option value="كوري">🇰🇷 ${tr('Korean', 'كوري')}</option>
-          <option value="أمريكي">🇺🇸 ${tr('American', 'أمريكي')}</option>
-          <option value="كندي">🇨🇦 ${tr('Canadian', 'كندي')}</option>
-          <option value="مكسيكي">🇲🇽 ${tr('Mexican', 'مكسيكي')}</option>
-          <option value="برازيلي">🇧🇷 ${tr('Brazilian', 'برازيلي')}</option>
-          <option value="أرجنتيني">🇦🇷 ${tr('Argentine', 'أرجنتيني')}</option>
-          <option value="كولومبي">🇨🇴 ${tr('Colombian', 'كولومبي')}</option>
-          <option value="بريطاني">🇬🇧 ${tr('British', 'بريطاني')}</option>
-          <option value="فرنسي">🇫🇷 ${tr('French', 'فرنسي')}</option>
-          <option value="ألماني">🇩🇪 ${tr('German', 'ألماني')}</option>
-          <option value="إيطالي">🇮🇹 ${tr('Italian', 'إيطالي')}</option>
-          <option value="إسباني">🇪🇸 ${tr('Spanish', 'إسباني')}</option>
-          <option value="برتغالي">🇵🇹 ${tr('Portuguese', 'برتغالي')}</option>
-          <option value="هولندي">🇳🇱 ${tr('Dutch', 'هولندي')}</option>
-          <option value="بلجيكي">🇧🇪 ${tr('Belgian', 'بلجيكي')}</option>
-          <option value="سويسري">🇨🇭 ${tr('Swiss', 'سويسري')}</option>
-          <option value="نمساوي">🇦🇹 ${tr('Austrian', 'نمساوي')}</option>
-          <option value="سويدي">🇸🇪 ${tr('Swedish', 'سويدي')}</option>
-          <option value="نرويجي">🇳🇴 ${tr('Norwegian', 'نرويجي')}</option>
-          <option value="دنماركي">🇩🇰 ${tr('Danish', 'دنماركي')}</option>
-          <option value="فنلندي">🇫🇮 ${tr('Finnish', 'فنلندي')}</option>
-          <option value="بولندي">🇵🇱 ${tr('Polish', 'بولندي')}</option>
-          <option value="روسي">🇷🇺 ${tr('Russian', 'روسي')}</option>
-          <option value="أوكراني">🇺🇦 ${tr('Ukrainian', 'أوكراني')}</option>
-          <option value="روماني">🇷🇴 ${tr('Romanian', 'روماني')}</option>
-          <option value="يوناني">🇬🇷 ${tr('Greek', 'يوناني')}</option>
-          <option value="أسترالي">🇦🇺 ${tr('Australian', 'أسترالي')}</option>
-          <option value="نيوزيلندي">🇳🇿 ${tr('New Zealander', 'نيوزيلندي')}</option>
-          <option value="جنوب أفريقي">🇿🇦 ${tr('South African', 'جنوب أفريقي')}</option>
-          <option value="نيجيري">🇳🇬 ${tr('Nigerian', 'نيجيري')}</option>
-          <option value="كيني">🇰🇪 ${tr('Kenyan', 'كيني')}</option>
-          <option value="إثيوبي">🇪🇹 ${tr('Ethiopian', 'إثيوبي')}</option>
-          <option value="أوغندي">🇺🇬 ${tr('Ugandan', 'أوغندي')}</option>
-          <option value="تانزاني">🇹🇿 ${tr('Tanzanian', 'تانزاني')}</option>
-          <option value="غاني">🇬🇭 ${tr('Ghanaian', 'غاني')}</option>
-          <option value="سنغالي">🇸🇳 ${tr('Senegalese', 'سنغالي')}</option>
-          <option value="كاميروني">🇨🇲 ${tr('Cameroonian', 'كاميروني')}</option>
-          <option value="تشادي">🇹🇩 ${tr('Chadian', 'تشادي')}</option>
-          <option value="مالي">🇲🇱 ${tr('Malian', 'مالي')}</option>
-          <option value="إريتري">🇪🇷 ${tr('Eritrean', 'إريتري')}</option>
-          <option value="أذربيجاني">🇦🇿 ${tr('Azerbaijani', 'أذربيجاني')}</option>
-          <option value="أوزبكي">🇺🇿 ${tr('Uzbek', 'أوزبكي')}</option>
-          <option value="كازاخي">🇰🇿 ${tr('Kazakh', 'كازاخي')}</option>
-          <option value="تركمانستاني">🇹🇲 ${tr('Turkmen', 'تركمانستاني')}</option>
-          <option value="قرغيزي">🇰🇬 ${tr('Kyrgyz', 'قرغيزي')}</option>
-          <option value="طاجيكي">🇹🇯 ${tr('Tajik', 'طاجيكي')}</option>
-          <option value="أخرى">🌍 ${tr('Other', 'أخرى')}</option>
-        </select></div>
-        <div class="form-group mb-12"><label>${tr('Gender', 'الجنس')}</label><select class="form-input" id="rGender">
-          <option value="ذكر">👨 ${tr('Male', 'ذكر')}</option>
-          <option value="أنثى">👩 ${tr('Female', 'أنثى')}</option>
-        </select></div>
-        <div class="flex gap-16 mb-12" style="flex-wrap:wrap">
-          <div class="form-group" style="flex:3;min-width:220px"><label>${tr('DOB (Gregorian)', 'تاريخ الميلاد (ميلادي)')}</label>
-            <div class="flex gap-4">
-              <select class="form-input" id="rGregDay" style="flex:0.8"><option value="">${tr('Day', 'يوم')}</option>${Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('')}</select>
-              <select class="form-input" id="rGregMonth" style="flex:1.5"><option value="">${tr('Month', 'شهر')}</option>
-                <option value="1">${tr('January', 'يناير')}</option><option value="2">${tr('February', 'فبراير')}</option><option value="3">${tr('March', 'مارس')}</option>
-                <option value="4">${tr('April', 'أبريل')}</option><option value="5">${tr('May', 'مايو')}</option><option value="6">${tr('June', 'يونيو')}</option>
-                <option value="7">${tr('July', 'يوليو')}</option><option value="8">${tr('August', 'أغسطس')}</option><option value="9">${tr('September', 'سبتمبر')}</option>
-                <option value="10">${tr('October', 'أكتوبر')}</option><option value="11">${tr('November', 'نوفمبر')}</option><option value="12">${tr('December', 'ديسمبر')}</option>
-              </select>
-              <select class="form-input" id="rGregYear" style="flex:1"><option value="">${tr('Year', 'سنة')}</option>${Array.from({ length: 97 }, (_, i) => `<option value="${2026 - i}">${2026 - i}</option>`).join('')}</select>
-            </div>
+        <!-- Stepper Wizard Header -->
+        <div class="flex justify-between items-center mb-6 border-b pb-4 border-outline-variant/30" style="flex-wrap:wrap;gap:8px">
+          <div class="flex items-center gap-2 step-indicator active" id="stepIndicator1">
+            <span class="w-7 h-7 rounded-full bg-primary text-on-primary flex items-center justify-center font-bold text-xs" style="background:var(--primary);color:var(--on-primary)">1</span>
+            <span class="text-xs font-bold text-primary">${tr('Identity Profile', 'ملف الهوية')}</span>
           </div>
-          <div class="form-group" style="flex:3;min-width:220px"><label>${tr('DOB (Hijri)', 'تاريخ الميلاد (هجري)')}</label>
-            <div class="flex gap-4">
-              <select class="form-input" id="rHijriDay" style="flex:0.8"><option value="">${tr('Day', 'يوم')}</option>${Array.from({ length: 30 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('')}</select>
-              <select class="form-input" id="rHijriMonth" style="flex:1.5"><option value="">${tr('Month', 'شهر')}</option>
-                <option value="1">محرم</option><option value="2">صفر</option><option value="3">ربيع الأول</option><option value="4">ربيع الثاني</option>
-                <option value="5">جمادى الأولى</option><option value="6">جمادى الثانية</option><option value="7">رجب</option><option value="8">شعبان</option>
-                <option value="9">رمضان</option><option value="10">شوال</option><option value="11">ذو القعدة</option><option value="12">ذو الحجة</option>
-              </select>
-              <select class="form-input" id="rHijriYear" style="flex:1"><option value="">${tr('Year', 'سنة')}</option>${Array.from({ length: 101 }, (_, i) => `<option value="${1350 + i}">${1350 + i}</option>`).join('')}</select>
-            </div>
+          <div class="h-0.5 bg-outline-variant flex-1 mx-4" id="stepLine1" style="min-width:40px;background:var(--primary)"></div>
+          <div class="flex items-center gap-2 step-indicator" id="stepIndicator2">
+            <span class="w-7 h-7 rounded-full bg-outline-variant text-on-surface-variant flex items-center justify-center font-bold text-xs" id="stepNum2" style="background:var(--border-color,#e5e7eb);color:var(--text-dim)">2</span>
+            <span class="text-xs text-on-surface-variant font-medium" id="stepLabel2">${tr('Medical & Contact', 'الملف الطبي والاتصال')}</span>
           </div>
-          <div class="form-group" style="flex:1;min-width:70px"><label>${tr('Age', 'العمر')}</label><input class="form-input form-input-readonly" id="rAge" readonly></div>
+          <div class="h-0.5 bg-outline-variant flex-1 mx-4" id="stepLine2" style="min-width:40px;background:var(--border-color,#e5e7eb)"></div>
+          <div class="flex items-center gap-2 step-indicator" id="stepIndicator3">
+            <span class="w-7 h-7 rounded-full bg-outline-variant text-on-surface-variant flex items-center justify-center font-bold text-xs" id="stepNum3" style="background:var(--border-color,#e5e7eb);color:var(--text-dim)">3</span>
+            <span class="text-xs text-on-surface-variant font-medium" id="stepLabel3">${tr('Insurance (NPHIES)', 'التأمين (نفيز)')}</span>
+          </div>
         </div>
 
-        <div style="background:var(--hover);padding:12px;border-radius:8px;margin-bottom:12px">
-          <h4 style="margin:0 0 8px;font-size:13px;color:var(--accent)">🏥 ${tr('Medical Information', 'المعلومات الطبية')}</h4>
-          <div class="flex gap-8 mb-8" style="flex-wrap:wrap">
+        <!-- EMPI Duplicate File Notification Card -->
+        <div class="mb-4" id="empiDuplicateAlert" style="display:none"></div>
+
+        <!-- Step 1: Personal Profile & Identity -->
+        <div class="reception-step-content" id="receptionStep1">
+          <h4 class="font-title-sm text-primary mb-4">🪪 ${tr('Identity & Personal Information', 'البيانات الشخصية والتحقق')}</h4>
+          <div class="form-group mb-12"><label>${tr('File No.', 'رقم الملف')}</label><input class="form-input form-input-readonly" value="${maxFile}" readonly id="rFileNum"></div>
+          <div class="form-group mb-12"><label>${tr('Full Name (Arabic)', 'الاسم بالعربية')}</label><input class="form-input" id="rNameAr" placeholder="${tr('Enter Arabic name', 'ادخل الاسم بالعربية')}"></div>
+          <div class="form-group mb-12"><label>${tr('Full Name (English)', 'الاسم بالإنجليزية')}</label><input class="form-input" id="rNameEn" placeholder="${tr('Enter English name', 'ادخل الاسم بالإنجليزية')}"></div>
+          <div class="form-group mb-12"><label>${tr('National ID / Iqama', 'رقم الهوية / الإقامة')}</label><input class="form-input" id="rNatId" placeholder="1XXXXXXXXX / 2XXXXXXXXX"></div>
+          <div class="form-group mb-12"><label>${tr('Phone', 'الجوال')}</label><input class="form-input" id="rPhone" placeholder="05XXXXXXXX"></div>
+          <div class="form-group mb-12"><label>${tr('Nationality', 'الجنسية')}</label><select class="form-input" id="rNationality">
+            <option value="سعودي">🇸🇦 ${tr('Saudi', 'سعودي')}</option>
+            <option value="يمني">🇾🇪 ${tr('Yemeni', 'يمني')}</option>
+            <option value="إماراتي">🇦🇪 ${tr('Emirati', 'إماراتي')}</option>
+            <option value="كويتي">🇰🇼 ${tr('Kuwaiti', 'كويتي')}</option>
+            <option value="بحريني">🇧🇭 ${tr('Bahraini', 'بحريني')}</option>
+            <option value="قطري">🇶🇦 ${tr('Qatari', 'قطري')}</option>
+            <option value="عماني">🇴🇲 ${tr('Omani', 'عماني')}</option>
+            <option value="عراقي">🇮🇶 ${tr('Iraqi', 'عراقي')}</option>
+            <option value="أردني">🇯🇴 ${tr('Jordanian', 'أردني')}</option>
+            <option value="سوري">🇸🇾 ${tr('Syrian', 'سوري')}</option>
+            <option value="لبناني">🇱🇧 ${tr('Lebanese', 'لبناني')}</option>
+            <option value="فلسطيني">🇵🇸 ${tr('Palestinian', 'فلسطيني')}</option>
+            <option value="مصري">🇪🇬 ${tr('Egyptian', 'مصري')}</option>
+            <option value="سوداني">🇸🇩 ${tr('Sudanese', 'سوداني')}</option>
+            <option value="ليبي">🇱🇾 ${tr('Libyan', 'ليبي')}</option>
+            <option value="تونسي">🇹🇳 ${tr('Tunisian', 'تونسي')}</option>
+            <option value="جزائري">🇩🇿 ${tr('Algerian', 'جزائري')}</option>
+            <option value="مغربي">🇲🇦 ${tr('Moroccan', 'مغربي')}</option>
+            <option value="موريتاني">🇲🇷 ${tr('Mauritanian', 'موريتاني')}</option>
+            <option value="صومالي">🇸🇴 ${tr('Somali', 'صومالي')}</option>
+            <option value="جيبوتي">🇩🇯 ${tr('Djiboutian', 'جيبوتي')}</option>
+            <option value="جزر القمر">🇰🇲 ${tr('Comoran', 'جزر القمر')}</option>
+            <option value="تركي">🇹🇷 ${tr('Turkish', 'تركي')}</option>
+            <option value="إيراني">🇮🇷 ${tr('Iranian', 'إيراني')}</option>
+            <option value="أفغاني">🇦🇫 ${tr('Afghan', 'أفغاني')}</option>
+            <option value="باكستاني">🇵🇰 ${tr('Pakistani', 'باكستاني')}</option>
+            <option value="هندي">🇮🇳 ${tr('Indian', 'هندي')}</option>
+            <option value="بنغلاديشي">🇧🇩 ${tr('Bangladeshi', 'بنغلاديشي')}</option>
+            <option value="سريلانكي">🇱🇰 ${tr('Sri Lankan', 'سريلانكي')}</option>
+            <option value="نيبالي">🇳🇵 ${tr('Nepali', 'نيبالي')}</option>
+            <option value="فلبيني">🇵🇭 ${tr('Filipino', 'فلبيني')}</option>
+            <option value="إندونيسي">🇮🇩 ${tr('Indonesian', 'إندونيسي')}</option>
+            <option value="ماليزي">🇲🇾 ${tr('Malaysian', 'ماليزي')}</option>
+            <option value="تايلاندي">🇹🇭 ${tr('Thai', 'تايلاندي')}</option>
+            <option value="فيتنامي">🇻🇳 ${tr('Vietnamese', 'فيتنامي')}</option>
+            <option value="ميانماري">🇲🇲 ${tr('Myanmar', 'ميانماري')}</option>
+            <option value="صيني">🇨🇳 ${tr('Chinese', 'صيني')}</option>
+            <option value="ياباني">🇯🇵 ${tr('Japanese', 'ياباني')}</option>
+            <option value="كوري">🇰🇷 ${tr('Korean', 'كوري')}</option>
+            <option value="أمريكي">🇺🇸 ${tr('American', 'أمريكي')}</option>
+            <option value="كندي">🇨🇦 ${tr('Canadian', 'كندي')}</option>
+            <option value="مكسيكي">🇲🇽 ${tr('Mexican', 'مكسيكي')}</option>
+            <option value="برازيلي">🇧🇷 ${tr('Brazilian', 'برازيلي')}</option>
+            <option value="أرجنتيني">🇦🇷 ${tr('Argentine', 'أرجنتيني')}</option>
+            <option value="كولومبي">🇨🇴 ${tr('Colombian', 'كولومبي')}</option>
+            <option value="بريطاني">🇬🇧 ${tr('British', 'بريطاني')}</option>
+            <option value="فرنسي">🇫🇷 ${tr('French', 'فرنسي')}</option>
+            <option value="ألماني">🇩🇪 ${tr('German', 'ألماني')}</option>
+            <option value="إيطالي">🇮🇹 ${tr('Italian', 'إيطالي')}</option>
+            <option value="إسباني">🇪🇸 ${tr('Spanish', 'إسباني')}</option>
+            <option value="برتغالي">🇵🇹 ${tr('Portuguese', 'برتغالي')}</option>
+            <option value="هولندي">🇳🇱 ${tr('Dutch', 'هولندي')}</option>
+            <option value="بلجيكي">🇧🇪 ${tr('Belgian', 'بلجيكي')}</option>
+            <option value="سويسري">🇨🇭 ${tr('Swiss', 'سويسري')}</option>
+            <option value="نمساوي">🇦🇹 ${tr('Austrian', 'نمساوي')}</option>
+            <option value="سويدي">🇸🇪 ${tr('Swedish', 'سويدي')}</option>
+            <option value="نرويجي">🇳🇴 ${tr('Norwegian', 'نرويجي')}</option>
+            <option value="دنماركي">🇩🇰 ${tr('Danish', 'دنماركي')}</option>
+            <option value="فنلندي">🇫🇮 ${tr('Finnish', 'فنلندي')}</option>
+            <option value="بولندي">🇵🇱 ${tr('Polish', 'بولندي')}</option>
+            <option value="روسي">🇷🇺 ${tr('Russian', 'روسي')}</option>
+            <option value="أوكراني">🇺🇦 ${tr('Ukrainian', 'أوكراني')}</option>
+            <option value="روماني">🇷🇴 ${tr('Romanian', 'روماني')}</option>
+            <option value="يوناني">🇬🇷 ${tr('Greek', 'يوناني')}</option>
+            <option value="أسترالي">🇦🇺 ${tr('Australian', 'أسترالي')}</option>
+            <option value="نيوزيلندي">🇳🇿 ${tr('New Zealander', 'نيوزيلندي')}</option>
+            <option value="جنوب أفريقي">🇿🇦 ${tr('South African', 'جنوب أفريقي')}</option>
+            <option value="نيجيري">🇳🇬 ${tr('Nigerian', 'نيجيري')}</option>
+            <option value="كيني">🇰🇪 ${tr('Kenyan', 'كيني')}</option>
+            <option value="إثيوبي">🇪🇹 ${tr('Ethiopian', 'إثيوبي')}</option>
+            <option value="أوغندي">🇺🇬 ${tr('Ugandan', 'أوغندي')}</option>
+            <option value="تانزاني">🇹🇿 ${tr('Tanzanian', 'تانزاني')}</option>
+            <option value="غاني">🇬🇭 ${tr('Ghanaian', 'غاني')}</option>
+            <option value="سنغالي">🇸🇳 ${tr('Senegalese', 'سنغالي')}</option>
+            <option value="كاميروني">🇨🇲 ${tr('Cameroonian', 'كاميروني')}</option>
+            <option value="تشادي">🇹🇩 ${tr('Chadian', 'تشادي')}</option>
+            <option value="مالي">🇲🇱 ${tr('Malian', 'مالي')}</option>
+            <option value="إريتري">🇪🇷 ${tr('Eritrean', 'إريتري')}</option>
+            <option value="أذربيجاني">🇦🇿 ${tr('Azerbaijani', 'أذربيجاني')}</option>
+            <option value="أوزبكي">🇺🇿 ${tr('Uzbek', 'أوزبكي')}</option>
+            <option value="كازاخي">🇰🇿 ${tr('Kazakh', 'كازاخي')}</option>
+            <option value="تركمانستاني">🇹🇲 ${tr('Turkmen', 'تركمانستاني')}</option>
+            <option value="قرغيزي">🇰🇬 ${tr('Kyrgyz', 'قرغيزي')}</option>
+            <option value="طاجيكي">🇹🇯 ${tr('Tajik', 'طاجيكي')}</option>
+            <option value="أخرى">🌍 ${tr('Other', 'أخرى')}</option>
+          </select></div>
+          <div class="form-group mb-12"><label>${tr('Gender', 'الجنس')}</label><select class="form-input" id="rGender">
+            <option value="ذكر">👨 ${tr('Male', 'ذكر')}</option>
+            <option value="أنثى">👩 ${tr('Female', 'أنثى')}</option>
+          </select></div>
+          <div class="flex gap-16 mb-12" style="flex-wrap:wrap">
+            <div class="form-group" style="flex:3;min-width:220px"><label>${tr('DOB (Gregorian)', 'تاريخ الميلاد (ميلادي)')}</label>
+              <div class="flex gap-4">
+                <select class="form-input" id="rGregDay" style="flex:0.8"><option value="">${tr('Day', 'يوم')}</option>${Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('')}</select>
+                <select class="form-input" id="rGregMonth" style="flex:1.5"><option value="">${tr('Month', 'شهر')}</option>
+                  <option value="1">${tr('January', 'يناير')}</option><option value="2">${tr('February', 'فبراير')}</option><option value="3">${tr('March', 'مارس')}</option>
+                  <option value="4">${tr('April', 'أبريل')}</option><option value="5">${tr('May', 'مايو')}</option><option value="6">${tr('June', 'يونيو')}</option>
+                  <option value="7">${tr('July', 'يوليو')}</option><option value="8">${tr('August', 'أغسطس')}</option><option value="9">${tr('September', 'سبتمبر')}</option>
+                  <option value="10">${tr('October', 'أكتوبر')}</option><option value="11">${tr('November', 'نوفمبر')}</option><option value="12">${tr('December', 'ديسمبر')}</option>
+                </select>
+                <select class="form-input" id="rGregYear" style="flex:1"><option value="">${tr('Year', 'سنة')}</option>${Array.from({ length: 97 }, (_, i) => `<option value="${2026 - i}">${2026 - i}</option>`).join('')}</select>
+              </div>
+            </div>
+            <div class="form-group" style="flex:3;min-width:220px"><label>${tr('DOB (Hijri)', 'تاريخ الميلاد (هجري)')}</label>
+              <div class="flex gap-4">
+                <select class="form-input" id="rHijriDay" style="flex:0.8"><option value="">${tr('Day', 'يوم')}</option>${Array.from({ length: 30 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('')}</select>
+                <select class="form-input" id="rHijriMonth" style="flex:1.5"><option value="">${tr('Month', 'شهر')}</option>
+                  <option value="1">محرم</option><option value="2">صفر</option><option value="3">ربيع الأول</option><option value="4">ربيع الثاني</option>
+                  <option value="5">جمادى الأولى</option><option value="6">جمادى الثانية</option><option value="7">رجب</option><option value="8">شعبان</option>
+                  <option value="9">رمضان</option><option value="10">شوال</option><option value="11">ذو القعدة</option><option value="12">ذو الحجة</option>
+                </select>
+                <select class="form-input" id="rHijriYear" style="flex:1"><option value="">${tr('Year', 'سنة')}</option>${Array.from({ length: 101 }, (_, i) => `<option value="${1350 + i}">${1350 + i}</option>`).join('')}</select>
+              </div>
+            </div>
+            <div class="form-group" style="flex:1;min-width:70px"><label>${tr('Age', 'العمر')}</label><input class="form-input form-input-readonly" id="rAge" readonly></div>
+          </div>
+        </div>
+
+        <!-- Step 2: Emergency Contact & Medical Baseline -->
+        <div class="reception-step-content" id="receptionStep2" style="display:none">
+          <h4 class="font-title-sm text-primary mb-4">🩺 ${tr('Medical Profile & Emergency Contacts', 'الملف الطبي وجهات الاتصال')}</h4>
+          <div class="form-group mb-12"><label>📍 ${tr('Address', 'العنوان')}</label><input class="form-input" id="rAddress" placeholder="${tr('City, Street...', 'المدينة، الشارع...')}"></div>
+          <div class="flex gap-8 mb-12" style="flex-wrap:wrap">
+            <div class="form-group" style="flex:1;min-width:180px"><label>🆘 ${tr('Emergency Contact Name', 'اسم جهة الطوارئ')}</label><input class="form-input" id="rEmergencyName"></div>
+            <div class="form-group" style="flex:1;min-width:140px"><label>📞 ${tr('Emergency Phone', 'هاتف الطوارئ')}</label><input class="form-input" id="rEmergencyPhone" type="tel"></div>
+          </div>
+          <div class="flex gap-8 mb-12" style="flex-wrap:wrap">
             <div class="form-group" style="flex:1;min-width:120px"><label>${tr('Blood Type', 'فصيلة الدم')}</label>
               <select class="form-input" id="rBloodType">
                 <option value="">--</option>
@@ -3886,31 +3949,39 @@ async function renderReception(el) {
             <div class="form-group" style="flex:2;min-width:200px"><label>⚠️ ${tr('Allergies', 'الحساسية')}</label><input class="form-input" id="rAllergies" placeholder="${tr('Drug allergies, food allergies...', 'حساسية أدوية، طعام...')}"></div>
             <div class="form-group" style="flex:2;min-width:200px"><label>🩺 ${tr('Chronic Diseases', 'الأمراض المزمنة')}</label><input class="form-input" id="rChronicDiseases" placeholder="${tr('Diabetes, Hypertension, Asthma...', 'سكري، ضغط، ربو...')}"></div>
           </div>
-          <div class="flex gap-8 mb-8" style="flex-wrap:wrap">
-            <div class="form-group" style="flex:1;min-width:150px"><label>🆘 ${tr('Emergency Contact Name', 'اسم جهة الطوارئ')}</label><input class="form-input" id="rEmergencyName"></div>
-            <div class="form-group" style="flex:1;min-width:120px"><label>📞 ${tr('Emergency Phone', 'هاتف الطوارئ')}</label><input class="form-input" id="rEmergencyPhone" type="tel"></div>
-            <div class="form-group" style="flex:2;min-width:200px"><label>📍 ${tr('Address', 'العنوان')}</label><input class="form-input" id="rAddress"></div>
+        </div>
+
+        <!-- Step 3: Insurance & NPHIES Verification -->
+        <div class="reception-step-content" id="receptionStep3" style="display:none">
+          <h4 class="font-title-sm text-primary mb-4">🏢 ${tr('Insurance & NPHIES Verification', 'التغطية التأمينية والتحقق الفوري')}</h4>
+          <div class="form-group mb-12"><label>${tr('Insurance Company', 'شركة التأمين')}</label><input class="form-input" id="rInsuranceCompany" placeholder="${tr('e.g. Bupa, Tawuniya, MedGulf...', 'مثال: بوبا، التعاونية...')}"></div>
+          <div class="form-group mb-12"><label>${tr('Policy Number', 'رقم البوليصة')}</label><input class="form-input" id="rInsurancePolicyNo"></div>
+          <div class="form-group mb-16"><label>${tr('Class', 'الفئة')}</label>
+            <select class="form-input" id="rInsuranceClass">
+              <option value="">--</option>
+              <option value="VIP">VIP</option>
+              <option value="A">A (Gold)</option>
+              <option value="B">B (Silver)</option>
+              <option value="C">C (Bronze)</option>
+            </select>
+          </div>
+          
+          <div class="bg-surface-container-low p-4 rounded-xl border border-outline-variant/30 mb-16">
+            <button type="button" class="btn btn-secondary w-full" id="btnVerifyNphies" style="height:38px">🔍 ${tr('Verify Coverage (NPHIES)', 'تحقق نفيز من التغطية التأمينية')}</button>
+            <div id="nphiesVerificationStatus" class="mt-3"></div>
           </div>
         </div>
 
-        <div style="background:var(--hover);padding:12px;border-radius:8px;margin-bottom:12px">
-          <h4 style="margin:0 0 8px;font-size:13px;color:var(--accent)">🏢 ${tr('Insurance Information', 'معلومات التأمين')}</h4>
-          <div class="flex gap-8" style="flex-wrap:wrap">
-            <div class="form-group" style="flex:2;min-width:180px"><label>${tr('Insurance Company', 'شركة التأمين')}</label><input class="form-input" id="rInsuranceCompany" placeholder="${tr('e.g. Bupa, Tawuniya, MedGulf...', 'مثال: بوبا، التعاونية...')}"></div>
-            <div class="form-group" style="flex:1;min-width:140px"><label>${tr('Policy Number', 'رقم البوليصة')}</label><input class="form-input" id="rInsurancePolicyNo"></div>
-            <div class="form-group" style="flex:1;min-width:120px"><label>${tr('Class', 'الفئة')}</label>
-              <select class="form-input" id="rInsuranceClass">
-                <option value="">--</option>
-                <option value="VIP">VIP</option>
-                <option value="A">A (Gold)</option>
-                <option value="B">B (Silver)</option>
-                <option value="C">C (Bronze)</option>
-              </select>
-            </div>
-          </div>
+        <!-- Navigation Controls -->
+        <div class="flex justify-between items-center mt-6 pt-4 border-t border-outline-variant/30">
+          <button type="button" class="btn btn-secondary" id="btnStepPrev" style="display:none;min-width:100px">⬅️ ${tr('Back', 'السابق')}</button>
+          <button type="button" class="btn btn-primary" id="btnStepNext" style="margin-right:auto; margin-left:0;min-width:100px">
+            ${tr('Next', 'التالي')} ➡️
+          </button>
+          <button class="btn btn-primary" id="rSaveBtn" style="height:44px;font-size:15px;display:none;margin-right:auto;margin-left:0;min-width:150px">
+            💾 ${tr('Save & Generate File', 'حفظ وإنشاء ملف')}
+          </button>
         </div>
-
-        <button class="btn btn-primary w-full" id="rSaveBtn" style="height:44px;font-size:15px">💾 ${tr('Save & Generate File', 'حفظ وإنشاء ملف')}</button>
       </div>
     </div>
     <div id="rPatientBannerContainer"></div>
@@ -4124,6 +4195,176 @@ async function renderReception(el) {
   document.getElementById('rHijriYear').addEventListener('change', hijriChange);
   document.getElementById('rHijriMonth').addEventListener('change', hijriChange);
   document.getElementById('rHijriDay').addEventListener('change', hijriChange);
+
+  // --- REDESIGN STEPPER WIZARD EVENT HANDLERS ---
+  let currentStep = 1;
+  
+  const updateStepperUI = () => {
+    // Hide all steps
+    document.getElementById('receptionStep1').style.display = 'none';
+    document.getElementById('receptionStep2').style.display = 'none';
+    document.getElementById('receptionStep3').style.display = 'none';
+    
+    // Show current step
+    document.getElementById(`receptionStep${currentStep}`).style.display = 'block';
+    
+    // Toggle navigation buttons
+    document.getElementById('btnStepPrev').style.display = currentStep === 1 ? 'none' : 'block';
+    document.getElementById('btnStepNext').style.display = currentStep === 3 ? 'none' : 'block';
+    document.getElementById('rSaveBtn').style.display = currentStep === 3 ? 'block' : 'none';
+    
+    // Update Stepper Header indicators
+    for (let s = 1; s <= 3; s++) {
+      const indicator = document.getElementById(`stepIndicator${s}`);
+      const line = document.getElementById(`stepLine${s}`);
+      const numSpan = document.getElementById(s === 1 ? 'stepNum1' : `stepNum${s}`);
+      const labelSpan = document.getElementById(s === 1 ? 'stepLabel1' : `stepLabel${s}`);
+      
+      if (s === currentStep) {
+        if (indicator) indicator.classList.add('active');
+        if (numSpan) {
+          numSpan.style.background = 'var(--primary)';
+          numSpan.style.color = 'var(--on-primary)';
+        }
+        if (labelSpan) {
+          labelSpan.style.color = 'var(--primary)';
+          labelSpan.style.fontWeight = '700';
+        }
+      } else {
+        if (indicator) indicator.classList.remove('active');
+        if (numSpan) {
+          numSpan.style.background = s < currentStep ? 'var(--primary)' : 'var(--border-color,#e5e7eb)';
+          numSpan.style.color = s < currentStep ? 'var(--on-primary)' : 'var(--text-dim)';
+        }
+        if (labelSpan) {
+          labelSpan.style.color = 'var(--text-on-surface-variant)';
+          labelSpan.style.fontWeight = '500';
+        }
+      }
+      
+      if (s < 3) {
+        const stepLine = document.getElementById(`stepLine${s}`);
+        if (stepLine) {
+          stepLine.style.background = s < currentStep ? 'var(--primary)' : 'var(--border-color,#e5e7eb)';
+        }
+      }
+    }
+  };
+  
+  document.getElementById('btnStepNext').addEventListener('click', () => {
+    if (currentStep === 1) {
+      // Validate Step 1 before proceeding
+      const nameAr = document.getElementById('rNameAr').value.trim();
+      const nameEn = document.getElementById('rNameEn').value.trim();
+      if (!nameAr && !nameEn) { showToast(tr('Enter patient name', 'ادخل اسم المريض'), 'error'); return; }
+      
+      const natId = document.getElementById('rNatId').value.trim();
+      if (!natId) { showToast(tr('National ID is required', 'رقم الهوية الوطنية مطلوب'), 'error'); return; }
+      if (!/^[12]\d{9}$/.test(natId)) {
+        showToast(tr('National ID must be exactly 10 digits starting with 1 or 2', 'يجب أن يتكون رقم الهوية من 10 أرقام ويبدأ بـ 1 أو 2'), 'error');
+        return;
+      }
+      
+      const phone = document.getElementById('rPhone').value.trim();
+      if (!phone) { showToast(tr('Phone number is required', 'رقم الجوال مطلوب'), 'error'); return; }
+      if (!/^(05|9665)\d{8}$/.test(phone)) {
+        showToast(tr('Phone number must start with 05 or 9665 followed by 8 digits', 'رقم الجوال يجب أن يبدأ بـ 05 أو 9665 متبوعاً بـ 8 أرقام'), 'error');
+        return;
+      }
+    }
+    
+    if (currentStep < 3) {
+      currentStep++;
+      updateStepperUI();
+    }
+  });
+  
+  document.getElementById('btnStepPrev').addEventListener('click', () => {
+    if (currentStep > 1) {
+      currentStep--;
+      updateStepperUI();
+    }
+  });
+
+  // --- EMPI DUPLICATE CHECK ---
+  const checkDuplicates = () => {
+    const natIdVal = document.getElementById('rNatId').value.trim();
+    const phoneVal = document.getElementById('rPhone').value.trim();
+    const dupCard = document.getElementById('empiDuplicateAlert');
+    if (!dupCard) return;
+    
+    let dupPatient = null;
+    if (natIdVal && natIdVal.length >= 5) {
+      dupPatient = patients.find(p => p.national_id === natIdVal);
+    }
+    if (!dupPatient && phoneVal && phoneVal.length >= 7) {
+      dupPatient = patients.find(p => p.phone === phoneVal);
+    }
+    
+    if (dupPatient) {
+      dupCard.style.display = 'block';
+      dupCard.innerHTML = `
+        <div style="background:rgba(220,38,38,0.1); border:1px solid rgba(220,38,38,0.2); color:#ef4444; font-size:12px; padding:12px; border-radius:8px; display:flex; flex-direction:column; gap:4px">
+          <div style="font-weight:700">⚠️ ${tr('Duplicate File Warning (EMPI)', 'تنبيه: ملف طبي مكرر بالمنظومة')}</div>
+          <div>${tr('A patient record already exists with this ID or phone number:', 'يوجد بالفعل ملف مسجل لهذا الرقم أو الهوية:')}</div>
+          <div style="font-family:monospace; margin-top:4px; font-weight:700">${escapeHTML(isArabic ? (dupPatient.name_ar || dupPatient.name_en) : (dupPatient.name_en || dupPatient.name_ar))} (${tr('MRN', 'الملف')}: ${escapeHTML(dupPatient.mrn || dupPatient.file_number)})</div>
+        </div>
+      `;
+    } else {
+      dupCard.style.display = 'none';
+    }
+  };
+  
+  document.getElementById('rNatId').addEventListener('input', checkDuplicates);
+  document.getElementById('rPhone').addEventListener('input', checkDuplicates);
+
+  // --- NPHIES MOCK ELIGIBILITY CHECK ---
+  const btnVerify = document.getElementById('btnVerifyNphies');
+  if (btnVerify) {
+    btnVerify.addEventListener('click', async () => {
+      const insCompany = document.getElementById('rInsuranceCompany').value.trim();
+      const policyNo = document.getElementById('rInsurancePolicyNo').value.trim();
+      const statusDiv = document.getElementById('nphiesVerificationStatus');
+      if (!statusDiv) return;
+      
+      if (!insCompany || !policyNo) {
+        showToast(tr('Please enter Insurance Company and Policy Number', 'يرجى إدخال اسم شركة التأمين ورقم البوليصة'), 'error');
+        return;
+      }
+      
+      btnVerify.disabled = true;
+      btnVerify.innerHTML = `⌛ ${tr('Verifying with NPHIES...', 'جاري الاستعلام من نفيز...')}`;
+      statusDiv.innerHTML = `<div style="color:var(--text-dim);font-family:monospace;font-size:12px">📡 Connecting to NPHIES Gateway...</div>`;
+      
+      // Simulate network request delay (1.2s)
+      await new Promise(r => setTimeout(r, 1200));
+      
+      btnVerify.disabled = false;
+      btnVerify.innerHTML = `🔍 ${tr('Verify Coverage (NPHIES)', 'تحقق نفيز من التغطية التأمينية')}`;
+      
+      // Generate a mock eligibility response based on policy number
+      const isEligible = !policyNo.toLowerCase().includes('reject') && !policyNo.includes('999');
+      if (isEligible) {
+        statusDiv.innerHTML = `
+          <div style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.2); color:#059669; font-size:12px; padding:12px; border-radius:8px; display:flex; flex-direction:column; gap:4px">
+            <div style="font-weight:700">✅ ${tr('NPHIES Coverage Active', 'تم التحقق: التغطية التأمينية نشطة')}</div>
+            <div><strong>${tr('Class', 'الفئة')}:</strong> ${escapeHTML(document.getElementById('rInsuranceClass').value || 'A')}</div>
+            <div><strong>${tr('Copayment', 'نسبة التحمل')}:</strong> 10% (Max 100 SAR)</div>
+            <div><strong>${tr('Limit', 'الحد الأقصى')}:</strong> 100,000 SAR</div>
+          </div>
+        `;
+        showToast(tr('NPHIES Coverage Approved!', 'تمت موافقة نفيز على التغطية!'));
+      } else {
+        statusDiv.innerHTML = `
+          <div style="background:rgba(220,38,38,0.1); border:1px solid rgba(220,38,38,0.2); color:#ef4444; font-size:12px; padding:12px; border-radius:8px; display:flex; flex-direction:column; gap:4px">
+            <div style="font-weight:700">❌ ${tr('NPHIES Eligibility Rejected', 'خطأ: التغطية التأمينية غير مطابقة')}</div>
+            <div>${tr('The policy number is invalid or has expired.', 'رقم البوليصة غير صالح أو منتهي الصلاحية.')}</div>
+          </div>
+        `;
+        showToast(tr('NPHIES Coverage Rejected', 'رفضت نفيز التغطية التأمينية'), 'error');
+      }
+    });
+  }
 
   const userPerms = currentUser?.permissions ? currentUser.permissions.split(',') : [];
   const isAdmin = currentUser?.role === 'Admin';
