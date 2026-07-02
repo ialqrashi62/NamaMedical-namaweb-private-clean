@@ -4981,8 +4981,62 @@ async function renderAppointments(el) {
     (row) => `<button class="btn btn-sm" onclick="checkInPatient(${safeId(row.id)})" title="${tr('Check-in', 'تسجيل وصول')}" style="background:#e8f5e9;color:#2e7d32;margin:0 2px">✅</button><button class="btn btn-sm" onclick="markNoShow(${safeId(row.id)})" title="${tr('No-Show', 'متغيب')}" style="background:#fff3e0;color:#e65100;margin:0 2px">⚠️</button><button class="btn btn-danger btn-sm" onclick="delAppt(${safeId(row.id)})" style="margin:0 2px">🗑</button>`
   );
 
+  window.currentCalYear = window.currentCalYear || new Date().getFullYear();
+  window.currentCalMonth = window.currentCalMonth || new Date().getMonth();
+  window.currentAppointmentsList = appts;
+
+  const todayDateStr = new Date().toISOString().split('T')[0];
+  const todayAppts = appts.filter(a => (a.appt_date || '').startsWith(todayDateStr));
+  const todayCount = todayAppts.length;
+  
+  const checkedInToday = todayAppts.filter(a => a.status === 'Checked-in' || a.status === 'Checked-In' || a.status === 'حاضر').length;
+  const attendanceRate = todayCount > 0 ? Math.round((checkedInToday / todayCount) * 100) : 0;
+  
+  const noShowToday = todayAppts.filter(a => a.status === 'No-Show' || a.status === 'متغيب').length;
+  const noShowRate = todayCount > 0 ? Math.round((noShowToday / todayCount) * 100) : 0;
+  
+  const activeDoctors = [...new Set(todayAppts.map(a => a.doctor_name))].length || emps.length || 1;
+  const maxSlots = activeDoctors * 12;
+  const slotUtilization = Math.min(100, Math.round((todayCount / maxSlots) * 100));
+
   el.innerHTML = `
     <div class="page-title">📅 ${tr('Appointments', 'المواعيد')}</div>
+    
+    <!-- KPI Cards Dashboard -->
+    <div class="appt-kpis-container">
+      <div class="appt-kpi-card">
+        <div class="appt-kpi-icon-wrapper" style="background: rgba(13,148,136,0.1); color: var(--accent)">📅</div>
+        <div class="appt-kpi-info">
+          <span class="appt-kpi-val">${todayCount}</span>
+          <span class="appt-kpi-label">${tr("Today's Appointments", 'مواعيد اليوم')}</span>
+        </div>
+      </div>
+      
+      <div class="appt-kpi-card">
+        <div class="appt-kpi-icon-wrapper" style="background: rgba(16,185,129,0.1); color: #10b981">🟢</div>
+        <div class="appt-kpi-info">
+          <span class="appt-kpi-val">${attendanceRate}%</span>
+          <span class="appt-kpi-label">${tr('Attendance Rate', 'نسبة الحضور')}</span>
+        </div>
+      </div>
+
+      <div class="appt-kpi-card">
+        <div class="appt-kpi-icon-wrapper" style="background: rgba(245,158,11,0.1); color: #f59e0b">🟡</div>
+        <div class="appt-kpi-info">
+          <span class="appt-kpi-val">${noShowRate}%</span>
+          <span class="appt-kpi-label">${tr('No-Show Rate', 'نسبة التغيب')}</span>
+        </div>
+      </div>
+
+      <div class="appt-kpi-card">
+        <div class="appt-kpi-icon-wrapper" style="background: rgba(99,102,241,0.1); color: #6366f1">⚡</div>
+        <div class="appt-kpi-info">
+          <span class="appt-kpi-val">${slotUtilization}%</span>
+          <span class="appt-kpi-label">${tr('Slot Utilization', 'إشغال العيادات')}</span>
+        </div>
+      </div>
+    </div>
+
     <div class="split-layout">
       <div class="card glass-card-premium">
         <div class="card-title">📝 ${tr('Book Appointment', 'حجز موعد')}</div>
@@ -4995,9 +5049,16 @@ async function renderAppointments(el) {
         <button id="aBookBtn" class="btn btn-primary w-full" onclick="bookAppt()" style="height:44px">📅 ${tr('Book', 'حجز')}</button>
       </div>
       <div class="card glass-card-premium">
-        <div class="card-title">📋 ${tr('Appointments List', 'قائمة المواعيد')}</div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px">
+          <div class="card-title" style="margin:0">📋 ${tr('Appointments', 'المواعيد')}</div>
+          <div style="display: flex; gap: 8px">
+            <button class="btn btn-sm" id="btnListView" onclick="window.toggleApptView('list')" style="background:var(--accent);color:#fff;padding:4px 12px;font-size:12px">📋 ${tr('List', 'القائمة')}</button>
+            <button class="btn btn-sm btn-secondary" id="btnCalView" onclick="window.toggleApptView('calendar')" style="padding:4px 12px;font-size:12px">📅 ${tr('Calendar', 'التقويم')}</button>
+          </div>
+        </div>
         <input class="search-filter" placeholder="${tr('Search...', 'بحث...')}" oninput="filterTable(this,'aTable')">
         <div id="aTable">${appointmentsTableHtml}</div>
+        <div id="aCalendarGrid" style="display: none"></div>
       </div>
     </div>`;
 
@@ -5032,11 +5093,153 @@ window.bookAppt = async () => {
     return;
   }
 
+  // Conflict Double-Booking Detection
+  const doctorName = document.getElementById('aDoctor').value;
+  const apptTimeStr = document.getElementById('aTime').value;
+  if (window.currentAppointmentsList) {
+    const conflict = window.currentAppointmentsList.find(a => 
+      a.doctor_name === doctorName && 
+      (a.appt_date || '').startsWith(apptDateStr) && 
+      (a.appt_time || '').substring(0, 5) === apptTimeStr.substring(0, 5) &&
+      a.status !== 'Cancelled'
+    );
+    if (conflict) {
+      const confirmProceed = confirm(tr(
+        `Warning: Dr. ${doctorName} already has an appointment booked at ${apptTimeStr} on ${apptDateStr}. Do you want to confirm a double-booking?`,
+        `تنبيه: الدكتور ${doctorName} لديه موعد محجوز بالفعل في الساعة ${apptTimeStr} بتاريخ ${apptDateStr}. هل ترغب في تأكيد الحجز المزدوج؟`
+      ));
+      if (!confirmProceed) return;
+    }
+  }
+
   try {
-    await API.post('/api/appointments', { patient_name: pName, patient_id: pId, doctor_name: document.getElementById('aDoctor').value, department: '', appt_date: document.getElementById('aDate').value, appt_time: document.getElementById('aTime').value, notes: document.getElementById('aNotes').value, fee: parseFloat(document.getElementById('aFee').value) || 0 });
+    await API.post('/api/appointments', { patient_name: pName, patient_id: pId, doctor_name: doctorName, department: '', appt_date: apptDateStr, appt_time: apptTimeStr, notes: document.getElementById('aNotes').value, fee: parseFloat(document.getElementById('aFee').value) || 0 });
     showToast(tr('Appointment booked!', 'تم حجز الموعد!'));
     await navigateTo(2);
   } catch (e) { showToast(tr('Error booking', 'خطأ في الحجز'), 'error'); }
+};
+
+window.toggleApptView = (view) => {
+  const listBtn = document.getElementById('btnListView');
+  const calBtn = document.getElementById('btnCalView');
+  const tableEl = document.getElementById('aTable');
+  const calEl = document.getElementById('aCalendarGrid');
+  const filterInput = document.querySelector('.search-filter');
+  
+  if (view === 'list') {
+    if (listBtn) { listBtn.style.background = 'var(--accent)'; listBtn.style.color = '#fff'; }
+    if (calBtn) { calBtn.style.background = ''; calBtn.style.color = ''; }
+    if (tableEl) tableEl.style.display = 'block';
+    if (filterInput) filterInput.style.display = 'block';
+    if (calEl) calEl.style.display = 'none';
+  } else {
+    if (calBtn) { calBtn.style.background = 'var(--accent)'; calBtn.style.color = '#fff'; }
+    if (listBtn) { listBtn.style.background = ''; listBtn.style.color = ''; }
+    if (tableEl) tableEl.style.display = 'none';
+    if (filterInput) filterInput.style.display = 'none';
+    if (calEl) {
+      calEl.style.display = 'block';
+      window.renderApptCalendar();
+    }
+  }
+};
+
+window.changeCalMonth = (direction) => {
+  window.currentCalMonth += direction;
+  if (window.currentCalMonth < 0) {
+    window.currentCalMonth = 11;
+    window.currentCalYear -= 1;
+  } else if (window.currentCalMonth > 11) {
+    window.currentCalMonth = 0;
+    window.currentCalYear += 1;
+  }
+  window.renderApptCalendar();
+};
+
+window.renderApptCalendar = () => {
+  const gridEl = document.getElementById('aCalendarGrid');
+  if (!gridEl) return;
+  
+  const year = window.currentCalYear;
+  const month = window.currentCalMonth;
+  const appts = window.currentAppointmentsList || [];
+  
+  const monthNamesAr = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+  const monthNamesEn = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const monthName = isArabic ? monthNamesAr[month] : monthNamesEn[month];
+  
+  const firstDayIndex = new Date(year, month, 1).getDay();
+  const totalDays = new Date(year, month + 1, 0).getDate();
+  const prevMonthTotalDays = new Date(year, month, 0).getDate();
+  
+  let cellsHtml = '';
+  
+  // Padding for previous month
+  for (let i = firstDayIndex - 1; i >= 0; i--) {
+    const dNum = prevMonthTotalDays - i;
+    cellsHtml += `
+      <div class="appt-calendar-cell other-month">
+        <div class="appt-calendar-cell-num">${dNum}</div>
+        <div class="appt-calendar-strips"></div>
+      </div>
+    `;
+  }
+  
+  // Current month cells
+  const todayStr = new Date().toISOString().split('T')[0];
+  for (let day = 1; day <= totalDays; day++) {
+    const dayStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const isToday = dayStr === todayStr;
+    const dayAppts = appts.filter(a => (a.appt_date || '').startsWith(dayStr) && a.status !== 'Cancelled');
+    
+    let stripsHtml = '';
+    dayAppts.slice(0, 3).forEach(a => {
+      let bg = '#e3f2fd', color = '#1565c0';
+      if (a.status === 'Checked-in' || a.status === 'Checked-In' || a.status === 'حاضر') {
+        bg = '#e8f5e9'; color = '#2e7d32';
+      } else if (a.status === 'No-Show' || a.status === 'متغيب') {
+        bg = '#fff3e0'; color = '#e65100';
+      }
+      stripsHtml += `
+        <span class="appt-mini-strip" style="background:${bg};color:${color}" title="${escapeHTML(a.patient_name || '')} - Dr. ${escapeHTML(a.doctor_name)}">
+          ${escapeHTML(a.appt_time || '00:00')} - ${escapeHTML(a.patient_name || '')}
+        </span>
+      `;
+    });
+    
+    if (dayAppts.length > 3) {
+      stripsHtml += `<span style="font-size: 8px; color: var(--text-dim); text-align: center; display: block">+${dayAppts.length - 3} ${tr('more', 'المزيد')}</span>`;
+    }
+    
+    cellsHtml += `
+      <div class="appt-calendar-cell ${isToday ? 'today' : ''}" onclick="window.selectCalDate('${dayStr}')">
+        <div class="appt-calendar-cell-num">${day}</div>
+        <div class="appt-calendar-strips">${stripsHtml}</div>
+      </div>
+    `;
+  }
+  
+  gridEl.innerHTML = `
+    <div class="appt-calendar-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;background:var(--hover);padding:8px 12px;border-radius:8px">
+      <button class="btn btn-sm btn-secondary" onclick="window.changeCalMonth(-1)">◀</button>
+      <span style="font-weight:bold;font-size:14px;color:var(--text-main)">${monthName} ${year}</span>
+      <button class="btn btn-sm btn-secondary" onclick="window.changeCalMonth(1)">▶</button>
+    </div>
+    <div class="appt-calendar-grid" style="display:grid;grid-template-columns:repeat(7, 1fr);gap:6px">
+      ${(isArabic ? ['أحد', 'اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']).map(d => `
+        <div style="text-align:center;font-weight:bold;font-size:11px;padding:6px;background:var(--hover);border-radius:4px;color:var(--text-dim)">${d}</div>
+      `).join('')}
+      ${cellsHtml}
+    </div>
+  `;
+};
+
+window.selectCalDate = (dateStr) => {
+  const dateInput = document.getElementById('aDate');
+  if (dateInput) {
+    dateInput.value = dateStr;
+    showToast(tr('Selected booking date: ', 'تم اختيار تاريخ الحجز: ') + dateStr);
+  }
 };
 window.delAppt = async (id) => {
   if (!confirm(tr('Delete this appointment?', 'حذف هذا الموعد؟'))) return;
