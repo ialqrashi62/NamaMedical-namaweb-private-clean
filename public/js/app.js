@@ -5323,6 +5323,7 @@ async function renderDoctor(el) {
   }
 
   const drSpecialty = (currentUser.user && currentUser.user.speciality) || '';
+  window.__currentDoctorSpecialty = drSpecialty;
   const filteredServices = drSpecialty ? allServices.filter(s => s.specialty === drSpecialty) : allServices;
   // Group services by category for display
   const svcCategories = {};
@@ -5350,10 +5351,15 @@ async function renderDoctor(el) {
               <button class="btn btn-sm" onclick="loadDiagTemplates()" style="white-space:nowrap">📥 ${tr('Load', 'تحميل')}</button>
             </div>
           </div>
-          <div class="form-group mb-12"><label>${tr('Diagnosis', 'التشخيص')}</label><input class="form-input" id="drDiag"></div>
+          <div class="form-group mb-12" style="position:relative"><label>${tr('Diagnosis', 'التشخيص')}</label>
+            <input class="form-input" id="drDiag" placeholder="${tr('Type diagnosis...', 'اكتب التشخيص...')}" oninput="window.handleDiagAutocomplete(this)" autocomplete="off">
+            <div id="drDiagSuggestions" style="position:absolute;top:100%;left:0;right:0;background:var(--bg-card,#fff);border:1px solid var(--border-color,#e5e7eb);border-radius:8px;z-index:100;max-height:200px;overflow-y:auto;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.1)"></div>
+          </div>
           <div class="form-group mb-12"><label>${tr('Symptoms', 'الأعراض')}</label><input class="form-input" id="drSymp"></div>
           <div class="form-group mb-12"><label>${tr('ICD-10', 'رمز التشخيص')}</label><input class="form-input" id="drIcd"></div>
           <div class="form-group mb-16"><label>${tr('Notes', 'ملاحظات')}</label><textarea class="form-input form-textarea" id="drNotes"></textarea></div>
+          <!-- Specialty Template Container -->
+          <div id="drSpecialtyTemplateContainer" class="mb-16"></div>
           <button class="btn btn-primary w-full" onclick="saveMedRecord()" style="height:44px">💾 ${tr('Save Record', 'حفظ السجل')}</button>
         </div>
           <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
@@ -5816,6 +5822,8 @@ window.loadPatientInfo = async () => {
     document.getElementById('drPatientInfo').innerHTML = `<div class="flex gap-8 mt-16" style="flex-wrap:wrap;align-items:center"><span class="badge badge-info">📁 ${escapeHTML(p.mrn || p.file_number)}</span><span class="badge badge-warning">🎂 ${tr('Age', 'العمر')}: ${escapeHTML(p.age || '?')}</span>${p.blood_type ? `<span class="badge" style="background:#dc2626;color:#fff;font-weight:700">🩸 ${escapeHTML(p.blood_type)}</span>` : ''}<span class="badge badge-success">📞 ${escapeHTML(p.phone)}</span><span class="badge badge-purple">🆔 ${escapeHTML(p.national_id)}</span>${p.gender ? `<span class="badge" style="background:${p.gender === 'ذكر' ? '#3b82f6' : '#ec4899'};color:#fff">${p.gender === 'ذكر' ? '👨' : '👩'} ${escapeHTML(p.gender)}</span>` : ''}${p.insurance_company ? `<span class="badge" style="background:#0d9488;color:#fff">🏢 ${escapeHTML(p.insurance_company)}${p.insurance_class ? ' (' + escapeHTML(p.insurance_class) + ')' : ''}</span>` : ''}${consentBadge}<span class="badge" style="background:#0ea5e9;color:#fff">📅 ${tr('Visit', 'الزيارة')}: ${new Date().toLocaleString('ar-SA', { dateStyle: 'short', timeStyle: 'short' })}</span><button class="btn btn-sm btn-primary" onclick="viewPatientResults(${safeId(p.id)})">📋 ${tr('View Lab & Radiology Results', 'استعراض نتائج الفحوصات والأشعة')}</button><button class="btn btn-sm" onclick="dischargePatient(${safeId(p.id)})" style="margin-right:auto;background:#dc3545;color:#fff;font-weight:600">🚪 ${tr('Patient Done', 'المريض طلع')}</button></div>${p.allergies ? `<div style="margin-top:8px;padding:10px;background:#fef2f2;border:2px solid #ef4444;border-radius:8px;font-size:13px;font-weight:600;color:#dc2626">⚠️ <strong>${tr('ALLERGIES', 'حساسية')}:</strong> ${escapeHTML(p.allergies)}</div>` : ''}${p.chronic_diseases ? `<div style="margin-top:6px;padding:8px;background:#fefce8;border:1px solid #facc15;border-radius:8px;font-size:12px;color:#854d0e">🩺 <strong>${tr('Chronic Diseases', 'أمراض مزمنة')}:</strong> ${escapeHTML(p.chronic_diseases)}</div>` : ''}${vitalsHtml}${historyHtml}<div id="drE1Panel"></div><div id="drResultsPanel"></div>`;
     // E1: render Problem List / CPOE / SOAP tabs for the selected patient.
     if (typeof window.renderE1Panel === 'function') { window.renderE1Panel(p.id); }
+    // Dynamic specialty clinical templates
+    if (typeof window.renderSpecialtyTemplate === 'function') { window.renderSpecialtyTemplate(window.__currentDoctorSpecialty); }
   } catch (e) { }
 };
 window.dischargePatient = async (pid) => {
@@ -6069,7 +6077,27 @@ window.saveMedRecord = async () => {
   const pid = document.getElementById('drPatient').value;
   if (!pid) { showToast(tr('Select patient first', 'اختر المريض أولاً'), 'error'); return; }
   try {
-    await API.post('/api/medical/records', { patient_id: pid, diagnosis: document.getElementById('drDiag').value, symptoms: document.getElementById('drSymp').value, icd10_codes: document.getElementById('drIcd').value, notes: document.getElementById('drNotes').value });
+    let notesExtra = '';
+    const container = document.getElementById('drSpecialtyTemplateContainer');
+    if (container) {
+      const inputs = container.querySelectorAll('.dr-spec-input');
+      if (inputs.length > 0) {
+        notesExtra = '\n\n--- ' + tr('Specialty Documentation', 'التوثيق السريري التخصصي') + ' (' + tr(window.__currentDoctorSpecialty || 'General', window.__currentDoctorSpecialty || 'عام') + ') ---\n';
+        inputs.forEach(input => {
+          const label = input.dataset.label || input.name;
+          const val = input.value;
+          notesExtra += `${label}: ${val}\n`;
+        });
+      }
+    }
+    
+    await API.post('/api/medical/records', { 
+      patient_id: pid, 
+      diagnosis: document.getElementById('drDiag').value, 
+      symptoms: document.getElementById('drSymp').value, 
+      icd10_codes: document.getElementById('drIcd').value, 
+      notes: document.getElementById('drNotes').value + notesExtra 
+    });
     showToast(tr('Record saved!', 'تم حفظ السجل!'));
     await navigateTo(3);
   } catch (e) { showToast(tr('Error saving', 'خطأ في الحفظ'), 'error'); }
@@ -20326,3 +20354,296 @@ window.e1AddDermLesion = async (pid) => {
     showToast(tr('Error saving skin lesion record', 'خطأ في حفظ سجل الآفة الجلدية'), 'error');
   }
 };
+
+// ==========================================
+// DYNAMIC SPECIALTY TEMPLATES & CALCULATORS
+// ==========================================
+window.renderSpecialtyTemplate = (specialty) => {
+  const container = document.getElementById('drSpecialtyTemplateContainer');
+  if (!container) return;
+  if (!specialty) {
+    container.innerHTML = '';
+    return;
+  }
+  
+  let html = `<div class="specialty-card-premium" style="margin-top:12px;padding:12px;border:1px solid var(--primary,#0ea5e9);border-radius:10px;background:rgba(14,165,233,0.05)">
+    <div style="font-weight:600;margin-bottom:10px;font-size:13px;color:var(--primary,#0ea5e9);display:flex;align-items:center;gap:6px">
+      🩺 ${tr('Specialty Charting', 'التوثيق التخصصي')}: ${tr(specialty, specialty)}
+    </div>`;
+  
+  const specLower = specialty.toLowerCase();
+  if (specLower.includes('cardio')) {
+    html += `
+      <div class="form-group mb-8">
+        <label>${tr('Chest Pain Type', 'نوع ألم الصدر')}</label>
+        <select class="form-input dr-spec-input" name="chest_pain" data-label="${tr('Chest Pain', 'ألم الصدر')}">
+          <option>Typical Angina</option>
+          <option>Atypical Angina</option>
+          <option>Non-anginal</option>
+          <option>None</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px" class="mb-8">
+        <div class="form-group" style="flex:1">
+          <label>${tr('BP Systolic', 'الضغط الانقباضي')}</label>
+          <input type="number" class="form-input dr-spec-input" name="bp_systolic" data-label="${tr('BP Systolic', 'الضغط الانقباضي')}" placeholder="mmHg">
+        </div>
+        <div class="form-group" style="flex:1">
+          <label>${tr('BP Diastolic', 'الضغط الانبساطي')}</label>
+          <input type="number" class="form-input dr-spec-input" name="bp_diastolic" data-label="${tr('BP Diastolic', 'الضغط الانبساطي')}" placeholder="mmHg">
+        </div>
+      </div>
+      <div class="form-group mb-8">
+        <label>${tr('Ejection Fraction (%)', 'الكسر القذفي للقلب %')}</label>
+        <input type="number" class="form-input dr-spec-input" name="ejection_fraction" data-label="${tr('Ejection Fraction', 'معدل الضخ')}" placeholder="e.g. 60%">
+      </div>
+      <div class="form-group mb-8">
+        <label>${tr('ECG Findings', 'نتائج تخطيط القلب')}</label>
+        <input type="text" class="form-input dr-spec-input" name="ecg_findings" data-label="${tr('ECG Findings', 'تخطيط القلب')}" placeholder="${tr('Normal sinus rhythm...', 'سليم...')}">
+      </div>
+    `;
+  } else if (specLower.includes('pediatr') || specLower.includes('neonat')) {
+    html += `
+      <div style="display:flex;gap:8px" class="mb-8">
+        <div class="form-group" style="flex:1">
+          <label>${tr('Birth Weight (kg)', 'وزن الولادة (كجم)')}</label>
+          <input type="number" step="0.01" class="form-input dr-spec-input" name="birth_weight" data-label="${tr('Birth Weight', 'وزن الولادة')}" placeholder="kg">
+        </div>
+        <div class="form-group" style="flex:1">
+          <label>${tr('APGAR Score (5m)', 'مقياس أبغار 5د')}</label>
+          <input type="number" class="form-input dr-spec-input" id="drApgarInput" name="apgar_score" data-label="${tr('APGAR Score', 'مقياس أبغار')}" placeholder="0-10">
+        </div>
+      </div>
+      <div style="padding:8px;background:var(--bg-secondary,#f8f9fa);border:1px solid var(--border-color,#e5e7eb);border-radius:8px;margin-bottom:8px;font-size:11px">
+        <div style="font-weight:600;margin-bottom:4px">👶 ${tr('APGAR Calculator', 'حاسبة مقياس أبغار')}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+          <div>
+            <label>${tr('Heart Rate', 'نبض القلب')}</label>
+            <select class="form-input" id="apgarHR" style="padding:2px;font-size:10px" onchange="window.calculateAPGAR()">
+              <option value="0">0 - Absent</option>
+              <option value="1">1 - <100 bpm</option>
+              <option value="2">2 - >100 bpm</option>
+            </select>
+          </div>
+          <div>
+            <label>${tr('Reflex Irritability', 'المنعكسات')}</label>
+            <select class="form-input" id="apgarReflex" style="padding:2px;font-size:10px" onchange="window.calculateAPGAR()">
+              <option value="0">0 - None</option>
+              <option value="1">1 - Grimace</option>
+              <option value="2">2 - Cry/Sneeze</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="form-group mb-8">
+        <label>${tr('Growth Percentile (%)', 'النمو المئوي %')}</label>
+        <input type="number" class="form-input dr-spec-input" name="growth_percentile" data-label="${tr('Growth Percentile', 'النمو المئوي')}" placeholder="e.g. 75">
+      </div>
+    `;
+  } else if (specLower.includes('obgyn') || specLower.includes('obstet') || specLower.includes('gynec')) {
+    html += `
+      <div style="display:flex;gap:8px" class="mb-8">
+        <div class="form-group" style="flex:1">
+          <label>${tr('Gestational Age (wks)', 'عمر الحمل بالأسبوع')}</label>
+          <input type="number" class="form-input dr-spec-input" name="gestational_age" data-label="${tr('Gestational Age', 'عمر الحمل')}" placeholder="weeks">
+        </div>
+        <div class="form-group" style="flex:1">
+          <label>${tr('Fetal Heart Rate (bpm)', 'نبض الجنين (ن/د)')}</label>
+          <input type="number" class="form-input dr-spec-input" name="fetal_hr" data-label="${tr('Fetal HR', 'نبض الجنين')}" placeholder="bpm">
+        </div>
+      </div>
+      <div style="display:flex;gap:4px" class="mb-8">
+        <div style="flex:1"><label style="font-size:10px">Gravida (G)</label><input type="number" class="form-input dr-spec-input" name="gravida" data-label="Gravida (G)" placeholder="G"></div>
+        <div style="flex:1"><label style="font-size:10px">Para (P)</label><input type="number" class="form-input dr-spec-input" name="para" data-label="Para (P)" placeholder="P"></div>
+        <div style="flex:1"><label style="font-size:10px">Abortus (A)</label><input type="number" class="form-input dr-spec-input" name="abortus" data-label="Abortus (A)" placeholder="A"></div>
+      </div>
+      <div class="form-group mb-8">
+        <label>${tr('Last Menstrual Period (LMP)', 'آخر دورة شهرية')}</label>
+        <input type="date" class="form-input" id="drLmpDate" onchange="window.calculateEDD()">
+      </div>
+      <div class="form-group mb-8">
+        <label>${tr('Expected Delivery Date (EDD)', 'تاريخ الولادة المتوقع')}</label>
+        <input type="text" class="form-input dr-spec-input" id="drEddOutput" name="edd" data-label="${tr('EDD', 'تاريخ الولادة المتوقع')}" readonly>
+      </div>
+    `;
+  } else if (specLower.includes('emerg') || specLower.includes('er')) {
+    html += `
+      <div class="form-group mb-8">
+        <label>${tr('Triage ESI Level', 'مستوى الفرز ESI')}</label>
+        <select class="form-input dr-spec-input" name="esi_level" data-label="${tr('ESI Level', 'مستوى الفرز')}">
+          <option>ESI 1 - Resuscitation</option>
+          <option>ESI 2 - Emergent</option>
+          <option>ESI 3 - Urgent</option>
+          <option>ESI 4 - Less Urgent</option>
+          <option>ESI 5 - Non-Urgent</option>
+        </select>
+      </div>
+      <div style="padding:8px;background:var(--bg-secondary,#f8f9fa);border:1px solid var(--border-color,#e5e7eb);border-radius:8px;margin-bottom:8px;font-size:11px">
+        <div style="font-weight:600;margin-bottom:4px">🧠 ${tr('GCS Calculator', 'حاسبة مقياس غلاسكو')}</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px">
+          <div>
+            <label>${tr('Eyes', 'العين')}</label>
+            <select class="form-input" id="gcsEyes" style="padding:2px;font-size:10px" onchange="window.calculateGCS()">
+              <option value="4">4 - Spontaneous</option>
+              <option value="3">3 - To Speech</option>
+              <option value="2">2 - To Pain</option>
+              <option value="1">1 - None</option>
+            </select>
+          </div>
+          <div>
+            <label>${tr('Verbal', 'اللفظ')}</label>
+            <select class="form-input" id="gcsVerbal" style="padding:2px;font-size:10px" onchange="window.calculateGCS()">
+              <option value="5">5 - Oriented</option>
+              <option value="4">4 - Confused</option>
+              <option value="3">3 - Inappropriate</option>
+              <option value="2">2 - Incomprehensible</option>
+              <option value="1">1 - None</option>
+            </select>
+          </div>
+          <div>
+            <label>${tr('Motor', 'الحركة')}</label>
+            <select class="form-input" id="gcsMotor" style="padding:2px;font-size:10px" onchange="window.calculateGCS()">
+              <option value="6">6 - Obeys commands</option>
+              <option value="5">5 - Localizes pain</option>
+              <option value="4">4 - Withdraws</option>
+              <option value="3">3 - Flexion (decorticate)</option>
+              <option value="2">2 - Extension (decerebrate)</option>
+              <option value="1">1 - None</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="form-group mb-8">
+        <label>${tr('GCS Total Score', 'مجموع غلاسكو للوعي')}</label>
+        <input type="text" class="form-input dr-spec-input" id="drGcsOutput" name="gcs_score" data-label="GCS Score" value="15" readonly>
+      </div>
+    `;
+  } else if (specLower.includes('icu') || specLower.includes('critical')) {
+    html += `
+      <div class="form-group mb-8">
+        <label>${tr('SOFA Score (0-24)', 'مقياس SOFA للوهن')}</label>
+        <input type="number" min="0" max="24" class="form-input dr-spec-input" name="sofa_score" data-label="SOFA Score" placeholder="e.g. 5">
+      </div>
+      <div class="form-group mb-8">
+        <label>${tr('Ventilator Mode', 'وضع جهاز التنفس الصناعي')}</label>
+        <select class="form-input dr-spec-input" name="vent_mode" data-label="${tr('Vent Mode', 'وضع التنفس')}">
+          <option>None (Room Air)</option>
+          <option>Nasal Cannula</option>
+          <option>CPAP / BiPAP</option>
+          <option>Volume Control (VC)</option>
+          <option>Pressure Control (PC)</option>
+          <option>SIMV</option>
+        </select>
+      </div>
+    `;
+  } else {
+    html += `
+      <div class="form-group mb-8">
+        <label>S - ${tr('Subjective', 'الشكوى والأعراض الذاتية')}</label>
+        <textarea class="form-input form-textarea dr-spec-input" name="soap_s" data-label="SOAP - Subjective" rows="1" style="min-height:40px"></textarea>
+      </div>
+      <div class="form-group mb-8">
+        <label>O - ${tr('Objective', 'الفحص السريري الموضوعي')}</label>
+        <textarea class="form-input form-textarea dr-spec-input" name="soap_o" data-label="SOAP - Objective" rows="1" style="min-height:40px"></textarea>
+      </div>
+      <div class="form-group mb-8">
+        <label>A - ${tr('Assessment', 'التقييم والتشخيص الفني')}</label>
+        <textarea class="form-input form-textarea dr-spec-input" name="soap_a" data-label="SOAP - Assessment" rows="1" style="min-height:40px"></textarea>
+      </div>
+      <div class="form-group mb-8">
+        <label>P - ${tr('Plan', 'الخطة العلاجية والدوائية')}</label>
+        <textarea class="form-input form-textarea dr-spec-input" name="soap_p" data-label="SOAP - Plan" rows="1" style="min-height:40px"></textarea>
+      </div>
+    `;
+  }
+  
+  html += `</div>`;
+  container.innerHTML = html;
+};
+
+window.calculateGCS = () => {
+  const e = parseInt(document.getElementById('gcsEyes')?.value || '4');
+  const v = parseInt(document.getElementById('gcsVerbal')?.value || '5');
+  const m = parseInt(document.getElementById('gcsMotor')?.value || '6');
+  const total = e + v + m;
+  const output = document.getElementById('drGcsOutput');
+  if (output) output.value = `${total} / 15`;
+};
+
+window.calculateAPGAR = () => {
+  const hr = parseInt(document.getElementById('apgarHR')?.value || '2');
+  const reflex = parseInt(document.getElementById('apgarReflex')?.value || '2');
+  const total = hr + reflex + 6;
+  const input = document.getElementById('drApgarInput');
+  if (input) input.value = total;
+};
+
+window.calculateEDD = () => {
+  const lmpVal = document.getElementById('drLmpDate')?.value;
+  if (!lmpVal) return;
+  const lmp = new Date(lmpVal);
+  const edd = new Date(lmp);
+  edd.setDate(lmp.getDate() + 7);
+  edd.setMonth(lmp.getMonth() + 9);
+  const output = document.getElementById('drEddOutput');
+  if (output) {
+    output.value = edd.toISOString().split('T')[0];
+  }
+};
+
+window.ICD10_DICTIONARY = [
+  { code: 'I10', en: 'Essential (primary) hypertension', ar: 'ارتفاع ضغط الدم الأساسي' },
+  { code: 'E11.9', en: 'Type 2 diabetes mellitus without complications', ar: 'داء السكري النوع الثاني' },
+  { code: 'J06.9', en: 'Acute upper respiratory infection, unspecified', ar: 'التهاب حاد في الجهاز التنفسي العلوي' },
+  { code: 'K59.0', en: 'Constipation', ar: 'الإمساك' },
+  { code: 'M54.5', en: 'Low back pain', ar: 'ألم أسفل الظهر' },
+  { code: 'N39.0', en: 'Urinary tract infection, site not specified', ar: 'التهاب المسالك البولية' },
+  { code: 'H66.9', en: 'Otitis media, unspecified', ar: 'التهاب الأذن الوسطى' },
+  { code: 'J45.909', en: 'Unspecified asthma, uncomplicated', ar: 'الربو غير المحدد' },
+  { code: 'Z00.00', en: 'Encounter for general adult medical examination', ar: 'فحص طبي عام' },
+  { code: 'O80', en: 'Encounter for full-term uncomplicated delivery', ar: 'ولادة طبيعية غير معقدة' },
+  { code: 'P07.3', en: 'Preterm infant', ar: 'طفل مبتسر' },
+  { code: 'R07.9', en: 'Chest pain, unspecified', ar: 'ألم في الصدر' }
+];
+
+window.handleDiagAutocomplete = (input) => {
+  const q = input.value.trim().toLowerCase();
+  const box = document.getElementById('drDiagSuggestions');
+  if (!box) return;
+  if (!q) {
+    box.style.display = 'none';
+    return;
+  }
+  const filtered = window.ICD10_DICTIONARY.filter(item => 
+    item.code.toLowerCase().includes(q) || 
+    item.en.toLowerCase().includes(q) || 
+    item.ar.includes(q)
+  );
+  if (filtered.length === 0) {
+    box.style.display = 'none';
+    return;
+  }
+  box.style.display = 'block';
+  box.innerHTML = filtered.map(item => `
+    <div class="autocomplete-item" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border-color,#f3f4f6);font-size:12px;" onclick="window.selectDiagSuggestion('${item.code}', '${window.jsStr(isArabic ? item.ar : item.en)}')">
+      <strong style="color:var(--primary,#0ea5e9)">${escapeHTML(item.code)}</strong> - ${escapeHTML(isArabic ? item.ar : item.en)}
+    </div>
+  `).join('');
+};
+
+window.selectDiagSuggestion = (code, diagText) => {
+  const diagInput = document.getElementById('drDiag');
+  const icdInput = document.getElementById('drIcd');
+  if (diagInput) diagInput.value = diagText;
+  if (icdInput) icdInput.value = code;
+  const box = document.getElementById('drDiagSuggestions');
+  if (box) box.style.display = 'none';
+};
+
+// Dismiss autocomplete box on outside click
+document.addEventListener('click', (e) => {
+  const box = document.getElementById('drDiagSuggestions');
+  if (box && !e.target.closest('#drDiag')) {
+    box.style.display = 'none';
+  }
+});
