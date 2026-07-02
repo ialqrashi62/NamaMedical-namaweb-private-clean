@@ -16,6 +16,16 @@
      - Dashboard stats (Total Biomedical Assets, Active Work Orders, Overdue PM, Equipment Downtime Rate) render successfully without errors.
      - Preventive maintenance calendar, active tickets table, work orders queue, and biomedical assets registry render correctly.
    - **تصنيف الجاهزية**: البيئة مصنفة كـ `PUBLIC_STAGING_HTTPS_RLS_BATCH6_ENABLED_NOT_FULL_PRODUCTION` (تصميم عزل التقييمات جاهز، والجاهزية للإنتاج `PRODUCTION_READY: NO`).
+   - 7. **Mojibake Encoding Audit**:
+     - Executed a custom auditing script `audit_mojibake.py` on all newly created and modified files.
+     - Result: **Passed**. All files are confirmed to be written in clean UTF-8 Arabic encoding.
+
+### 7. Phase 5 (Staging Verification & e47 Gate Checks)
+- **Local Staging DB Checks**: Connected successfully to PostgreSQL staging database `jumanasoft_staging` on localhost:5432.
+- **e47 DDL Execution**: Executed `e47_billing_tables_candidate_up.sql` constructing billing customers, subscriptions, checkout sessions, transactions, and audit tables.
+- **e47 DDL Validation**: Executed `e47_billing_tables_candidate_validate.sql` verifying `all_ok = true` (checking RLS policies, indexing, columns presence).
+- **e47 Rollback**: Executed `e47_billing_tables_candidate_down.sql` verifying clean rollback.
+- **Documentation**: Overwrote `JUMANASOFT_VERIFY_STAGING_AND_E47_GATE_FINAL_REPORT_AR.md` to mark Phase 5 as successfully verified (`REAL_STAGING_EVIDENCE_VERIFIED_AND_E47_COMPLETED`).
 
 ---
 
