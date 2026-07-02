@@ -38,6 +38,8 @@ const icuScoring = require('./icu_scoring');
 const specialtyScores = require('./specialty_scores');
 // Gate 2: server-side early-warning + sepsis screening engine (MEWS/PEWS/qSOFA/SIRS + escalation).
 const ewsEngine = require('./ews_engine');
+// Gate 3: order↔result closed-loop + acknowledgement policy engine.
+const resultLoop = require('./result_loop');
 const e11Engine = require('./e11_insurance_engine'); // E11 insurance/NPHIES pure engine (state machines + co-pay math)
 const pathologyEngine = require('./pathology_engine'); // E15: pure state-machine + accession + flag engine
 const e16 = require('./e16_inventory_engine'); // E16 inventory/CSSD pure engine (FEFO, no-negative, BI gate)
@@ -2657,14 +2659,123 @@ app.put('/api/lab/results/:id/report', requireAuth, requireTenantScope, async (r
         }
         // belt-and-suspenders: only flip an as-yet-unreported row (concurrency-safe with the 409 above).
         await pool.query('UPDATE lab_results SET reported=1, reported_at=CURRENT_TIMESTAMP WHERE id=$1 AND tenant_id=$2 AND reported = 0', [req.params.id, ctx.tenantId]);
-        // advance the sample to Reported when present.
+        // advance the sample to Reported when present, then CLOSE THE LOOP back to the
+        // originating legacy order (lab_radiology_orders) — guarded by result_loop:
+        // patient must match between sample and order and the order must still be open
+        // (closing the wrong patient's order is a patient-safety hazard, so any doubt
+        // refuses the close). Unified E-X orders are NOT touched here: no sample carries
+        // a unified order id until CPOE dispatch activates (see Gate 3 report).
+        let orderClosed = null;
         if (r.lab_sample_id) {
             await pool.query("UPDATE lab_samples SET state='Reported' WHERE id=$1 AND tenant_id=$2", [r.lab_sample_id, ctx.tenantId]);
+            const sample = (await pool.query('SELECT id, patient_id, lab_order_id FROM lab_samples WHERE id=$1 AND tenant_id=$2', [r.lab_sample_id, ctx.tenantId])).rows[0];
+            if (sample && sample.lab_order_id) {
+                const legacyOrder = (await pool.query(
+                    'SELECT id, patient_id, status FROM lab_radiology_orders WHERE id=$1 AND (tenant_id=$2 OR tenant_id IS NULL)',
+                    [sample.lab_order_id, ctx.tenantId])).rows[0];
+                const decision = resultLoop.shouldCloseLegacyOrder(sample, legacyOrder);
+                if (decision.close) {
+                    await pool.query(
+                        "UPDATE lab_radiology_orders SET status='Completed', result_date=CURRENT_TIMESTAMP::text WHERE id=$1 AND (tenant_id=$2 OR tenant_id IS NULL)",
+                        [sample.lab_order_id, ctx.tenantId]);
+                    orderClosed = sample.lab_order_id;
+                }
+            }
         }
         logAudit(req.session.user?.id, req.session.user?.display_name, 'LAB_RESULT_REPORT', 'Lab',
-            `Reported result #${req.params.id}${r.is_critical ? ' [CRITICAL, call-back on file]' : ''}`, req.ip);
+            `Reported result #${req.params.id}${r.is_critical ? ' [CRITICAL, call-back on file]' : ''}` +
+            (orderClosed ? ` — order #${orderClosed} closed (loop)` : ''), req.ip);
         res.json((await pool.query('SELECT * FROM lab_results WHERE id=$1 AND tenant_id=$2', [req.params.id, ctx.tenantId])).rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// ===== GATE 3: PHYSICIAN RESULT ACKNOWLEDGEMENT (feature-detects the e49 candidate
+// table; returns 503 RESULT_ACK_PENDING_DDL until the owner approves + runs e49) =====
+async function resultAckTableExists() {
+    const r = await pool.query("SELECT to_regclass('public.result_acknowledgements') AS t");
+    return !!r.rows[0].t;
+}
+
+// POST /api/results/:type/:id/acknowledge — the ordering/covering physician documents
+// having reviewed a verified abnormal/critical result. Level comes from the server-side
+// resultLoop.ackRequirement policy, never from the client.
+app.post('/api/results/:type/:id/acknowledge', requireAuth, requireRole('doctor', 'patients', 'prescriptions'), requireTenantScope, async (req, res) => {
+    try {
+        const ctx = lisRequireTenant(req, res); if (!ctx) return;
+        const type = req.params.type;
+        if (type !== 'lab' && type !== 'rad') return res.status(404).json({ error: 'Unknown result type' });
+        if (!(await resultAckTableExists())) {
+            return res.status(503).json({ error: 'Result acknowledgement storage pending DDL approval (e49)', code: 'RESULT_ACK_PENDING_DDL' });
+        }
+        const resultId = parseInt(req.params.id, 10);
+        if (!Number.isInteger(resultId)) return res.status(404).json({ error: 'Result not found' });
+
+        let patientId, ack;
+        if (type === 'lab') {
+            const r = (await pool.query(
+                `SELECT lr.id, lr.is_critical, lr.abnormal_flag, lr.status, s.patient_id
+                 FROM lab_results lr JOIN lab_samples s ON lr.lab_sample_id = s.id AND s.tenant_id = lr.tenant_id
+                 WHERE lr.id=$1 AND lr.tenant_id=$2`, [resultId, ctx.tenantId])).rows[0];
+            if (!r) return res.status(404).json({ error: 'Result not found' });
+            if (r.status !== 'verified') return res.status(409).json({ error: 'Only verified results can be acknowledged' });
+            patientId = r.patient_id;
+            ack = resultLoop.ackRequirement(r);
+        } else {
+            const r = (await pool.query(
+                `SELECT rr.id, rr.is_critical, rr.status, e.patient_id
+                 FROM rad_reports rr JOIN rad_exams e ON rr.rad_exam_id = e.id AND e.tenant_id = rr.tenant_id
+                 WHERE rr.id=$1 AND rr.tenant_id=$2`, [resultId, ctx.tenantId])).rows[0];
+            if (!r) return res.status(404).json({ error: 'Report not found' });
+            if (r.status !== 'Signed') return res.status(409).json({ error: 'Only signed reports can be acknowledged' });
+            patientId = r.patient_id;
+            ack = resultLoop.ackRequirement({ is_critical: r.is_critical, abnormal_flag: r.is_critical ? 'HH' : 'N', status: r.status });
+        }
+        if (!patientId) return res.status(409).json({ error: 'Result has no resolvable patient — cannot acknowledge' });
+
+        const ins = await pool.query(
+            `INSERT INTO result_acknowledgements (tenant_id, facility_id, result_type, result_id, patient_id, ack_level, acknowledged_by, acknowledged_by_name, note)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+             ON CONFLICT ON CONSTRAINT uq_result_ack DO NOTHING RETURNING id`,
+            [ctx.tenantId, ctx.facilityId || null, type, resultId, patientId,
+             ack.required ? ack.level : 'unknown',
+             req.session.user?.id, req.session.user?.display_name || '', (req.body && req.body.note) || '']);
+        if (ins.rows.length === 0) return res.status(409).json({ error: 'Already acknowledged by this clinician' });
+        logAudit(req.session.user?.id, req.session.user?.display_name, 'RESULT_ACK', 'Lab',
+            `Acknowledged ${type} result #${resultId} (level: ${ack.level})`, req.ip);
+        res.json({ success: true, id: ins.rows[0].id, level: ack.level });
+    } catch (e) {
+        console.error('[Result Ack Error]', e);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// GET /api/results/unacknowledged — physician worklist of verified abnormal/critical lab
+// results not yet acknowledged by anyone (server-side policy; normal results excluded).
+app.get('/api/results/unacknowledged', requireAuth, requireRole('doctor', 'patients', 'prescriptions'), requireTenantScope, async (req, res) => {
+    try {
+        const ctx = lisRequireTenant(req, res); if (!ctx) return;
+        if (!(await resultAckTableExists())) {
+            return res.status(503).json({ error: 'Result acknowledgement storage pending DDL approval (e49)', code: 'RESULT_ACK_PENDING_DDL' });
+        }
+        // fail-closed filter: a NULL/unknown abnormal_flag is INCLUDED in the worklist
+        // (an unclassified result must never silently skip physician review).
+        const rows = (await pool.query(
+            `SELECT lr.id, lr.loinc, lr.test_name, lr.value, lr.unit, lr.abnormal_flag, lr.is_critical, lr.verified_at,
+                    s.patient_id, s.barcode, COALESCE(NULLIF(p.name_ar, ''), p.name_en) AS patient_name
+             FROM lab_results lr
+             JOIN lab_samples s ON lr.lab_sample_id = s.id AND s.tenant_id = lr.tenant_id
+             LEFT JOIN patients p ON p.id = s.patient_id AND p.tenant_id = lr.tenant_id
+             LEFT JOIN result_acknowledgements ra
+                    ON ra.result_type = 'lab' AND ra.result_id = lr.id AND ra.tenant_id = lr.tenant_id
+             WHERE lr.tenant_id = $1 AND lr.status = 'verified' AND ra.id IS NULL
+               AND (lr.is_critical = 1 OR lr.abnormal_flag IS NULL OR lr.abnormal_flag <> 'N')
+             ORDER BY lr.is_critical DESC, lr.verified_at ASC NULLS LAST
+             LIMIT 200`, [ctx.tenantId])).rows;
+        res.json(rows);
+    } catch (e) {
+        console.error('[Unacked Results Error]', e);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 // ---- HL7 INBOUND (gated; sandbox parse+store only, NO external connection) ----
@@ -3156,13 +3267,29 @@ app.put('/api/radiology/reports/:id/sign', requireAuth, requireRole('radiology',
         }
         await pool.query("UPDATE rad_reports SET status='Signed', signed_by=$1, signed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$2 AND tenant_id=$3",
             [req.session.user?.id || null, reportId, tenantId]);
-        // advance the worklist exam to Reported (tenant-scoped)
+        // advance the worklist exam to Reported (tenant-scoped), then CLOSE THE LOOP to the
+        // originating legacy radiology order — same result_loop patient-match guard as lab.
+        let radOrderClosed = null;
         if (rep.rad_exam_id) {
             await pool.query("UPDATE rad_exams SET state='Reported', reported_at=COALESCE(reported_at, CURRENT_TIMESTAMP), updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND tenant_id=$2 AND state IN ('Completed','InProgress','Arrived','Scheduled')",
                 [rep.rad_exam_id, tenantId]);
+            const exam = (await pool.query('SELECT id, patient_id, rad_order_id FROM rad_exams WHERE id=$1 AND tenant_id=$2', [rep.rad_exam_id, tenantId])).rows[0];
+            if (exam && exam.rad_order_id) {
+                const legacyOrder = (await pool.query(
+                    'SELECT id, patient_id, status FROM lab_radiology_orders WHERE id=$1 AND (tenant_id=$2 OR tenant_id IS NULL)',
+                    [exam.rad_order_id, tenantId])).rows[0];
+                const decision = resultLoop.shouldCloseLegacyOrder(exam, legacyOrder);
+                if (decision.close) {
+                    await pool.query(
+                        "UPDATE lab_radiology_orders SET status='Completed', result_date=CURRENT_TIMESTAMP::text WHERE id=$1 AND (tenant_id=$2 OR tenant_id IS NULL)",
+                        [exam.rad_order_id, tenantId]);
+                    radOrderClosed = exam.rad_order_id;
+                }
+            }
         }
         logAudit(req.session.user?.id, req.session.user?.display_name, 'SIGN_RAD_REPORT', 'Radiology',
-            `Signed rad report #${reportId}${rep.is_critical ? ' [CRITICAL, notified]' : ''}`, req.ip);
+            `Signed rad report #${reportId}${rep.is_critical ? ' [CRITICAL, notified]' : ''}` +
+            (radOrderClosed ? ` — order #${radOrderClosed} closed (loop)` : ''), req.ip);
 
         // Trigger SMS notification to patient
         if (rep) {
