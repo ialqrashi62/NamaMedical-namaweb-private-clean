@@ -40,6 +40,8 @@ const specialtyScores = require('./specialty_scores');
 const ewsEngine = require('./ews_engine');
 // Gate 3: order↔result closed-loop + acknowledgement policy engine.
 const resultLoop = require('./result_loop');
+// Gate 4: tenant-context resolution (session precedence over x-tenant-id header, anti-spoof).
+const { resolveTenantContext } = require('./tenant_resolve');
 const e11Engine = require('./e11_insurance_engine'); // E11 insurance/NPHIES pure engine (state machines + co-pay math)
 const pathologyEngine = require('./pathology_engine'); // E15: pure state-machine + accession + flag engine
 const e16 = require('./e16_inventory_engine'); // E16 inventory/CSSD pure engine (FEFO, no-negative, BI gate)
@@ -419,23 +421,17 @@ app.use(makeAuditMiddleware({
 if (process.env.AUDIT_ALL_MUTATIONS === 'true') console.log('[AUDIT] Auto-audit of /api mutations ENABLED');
 
 // ===== TENANT ISOLATION MIDDLEWARES =====
+// SECURITY: a tenant-bound user's tenant comes from the trusted SESSION and can never be
+// overridden by an x-tenant-id header (see tenant_resolve.js). The header is honored only
+// for a tenant-unbound privileged session (super admin) or the non-prod dev fallback.
 function getRequestTenantContext(req) {
-    let tenantId = req.headers['x-tenant-id'] || req.headers['x-tenant-id-key'] || req.session?.user?.tenantId || null;
-    let facilityId = req.session?.user?.facilityId || null;
-    const isProduction = process.env.NODE_ENV === 'production';
-
-    // Fallback ONLY in development/test — never in production
-    if (!tenantId && !isProduction) {
-        tenantId = 1;
-        facilityId = 1;
-    }
-
-    if (tenantId) {
-        tenantId = parseInt(tenantId) || 1;
-    }
-
-    // In production: if tenantId is still null, flag it so callers can block the request
-    return { tenantId, facilityId, isProduction };
+    const headerTenant = req.headers['x-tenant-id'] || req.headers['x-tenant-id-key'] || null;
+    const resolved = resolveTenantContext({
+        headerTenant,
+        sessionUser: req.session && req.session.user ? req.session.user : null,
+        isProduction: process.env.NODE_ENV === 'production',
+    });
+    return { tenantId: resolved.tenantId, facilityId: resolved.facilityId, isProduction: resolved.isProduction };
 }
 
 // Middleware: block any request that has no tenantId in production
