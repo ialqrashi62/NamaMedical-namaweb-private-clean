@@ -6930,7 +6930,7 @@ async function renderLab(el) {
           ${orders.length === 0 ? `<tr><td colspan="8"><div class="empty-state-card"><div class="empty-state-icon">🔬</div><div>${tr('No lab orders found', 'لا توجد طلبات مختبر')}</div></div></td></tr>` : orders.map(o => {
     const pt = patients.find(p => p.id == o.patient_id);
     const nRange = getLabNormalRange(o.order_type, pt ? pt.gender : ''); return `<tr>
-            <td><svg id="labBC${safeId(o.id)}" class="barcode-svg"></svg><br><button class="btn btn-sm btn-info" onclick="printLabBarcode(${safeId(o.id)}, '${jsStr(o.patient_name || '')}', '${jsStr(o.order_type || '')}')" style="margin-top:4px;font-size:11px">🖨️ ${tr('Print', 'طباعة')}</button></td>
+            <td><svg id="labBC${safeId(o.id)}" class="barcode-svg"></svg><br><button class="btn btn-sm btn-info" onclick="printLabBarcode(${safeId(o.id)}, '${jsStr(o.patient_name || '')}', '${jsStr(o.order_type || '')}', ${safeId(o.patient_id)})" style="margin-top:4px;font-size:11px">🖨️ ${tr('Print', 'طباعة')}</button></td>
             <td>${escapeHTML(o.patient_name || '')}</td><td>${escapeHTML(o.order_type)}</td>
             <td style="font-size:11px;max-width:200px;color:var(--text-dim);white-space:pre-wrap">${nRange || '-'}</td>
             <td>${statusBadge(o.status)}</td><td>${o.created_at ? new Date(o.created_at).toLocaleString('ar-SA', { dateStyle: 'short', timeStyle: 'short' }) : ''}</td>
@@ -7158,29 +7158,61 @@ window.lisEnterQc = async () => {
     await renderLisPanel();
   } catch (e) { showToast(tr('Error', 'خطأ') + ': ' + (e.message || e), 'error'); }
 };
-window.printLabBarcode = (orderId, patientName, testType) => {
-  const svgEl = document.getElementById('labBC' + orderId);
-  if (!svgEl) { showToast(tr('Barcode not found', 'الباركود غير موجود'), 'error'); return; }
-  const svgData = new XMLSerializer().serializeToString(svgEl);
-  const printWin = window.open('', '_blank', 'width=450,height=350');
-  printWin.document.write(`<!DOCTYPE html><html><head><title>Lab Barcode</title>
-    <style>body{font-family:'Segoe UI',Arial,sans-serif;text-align:center;padding:20px;margin:0}
-    .label{border:2px solid #333;border-radius:10px;padding:20px;display:inline-block;min-width:300px}
-    .clinic{font-size:16px;font-weight:bold;color:#1e40af;margin-bottom:8px}
-    .patient{font-size:14px;margin:8px 0;color:#333}
-    .test{font-size:13px;color:#666;margin:4px 0}
-    .date{font-size:11px;color:#999;margin-top:8px}
-    @media print{body{padding:5px}.label{border:2px solid #000}}
-    </style></head><body>
-    <div class="label">
-      <div class="clinic">جمانة الطبي - jumanaMedical</div>
-      <div style="margin:10px 0">${svgData}</div>
-      <div class="patient">👤 ${escapeHTML(patientName)}</div>
-      <div class="test">🔬 ${escapeHTML(testType)}</div>
-      <div class="date">📅 ${new Date().toLocaleDateString('en-CA')}</div>
+window.printLabBarcode = (orderId, patientName, testType, patientId) => {
+  const labelId = 'LAB-' + orderId;
+  const timestamp = new Date().toLocaleString();
+  const testCode = testType.substring(0, 10).toUpperCase().replace(/[^A-Z]/g, '') || 'GEN';
+  
+  const modalHtml = `
+    <div style="display:flex;gap:20px;align-items:start">
+      <div id="thermalLabelContainer" style="width:260px;background:#fff;color:#000;border:2px solid #000;border-radius:4px;padding:12px;font-family:'Courier New', monospace;box-shadow:0 4px 10px rgba(0,0,0,0.15)">
+        <div style="text-align:center;border-bottom:1px dashed #000;padding-bottom:4px;margin-bottom:8px;font-weight:bold;font-size:14px">
+          NAMA LAB RECEIPT
+        </div>
+        <div style="font-size:11px;line-height:1.3">
+          <strong>PATIENT ID:</strong> P-${patientId || '1001'}<br>
+          <strong>PATIENT:</strong> ${escapeHTML(patientName.toUpperCase())}<br>
+          <strong>TEST CODE:</strong> ${testCode}<br>
+          <strong>ORDER ID:</strong> ${orderId}<br>
+          <strong>DATE:</strong> ${timestamp}<br>
+        </div>
+        <div style="text-align:center;margin:10px 0">
+          <svg id="thermalLabelBarcode" style="width:100%;height:45px"></svg>
+        </div>
+        <div style="border-top:1px dashed #000;padding-top:4px;margin-top:8px;font-size:10px;text-align:center">
+          <strong>SCAN STATUS:</strong> <span id="lblScanStatus" style="background:#f3f4f6;padding:2px 4px;border:1px solid #000;font-weight:bold">READY_TO_SCAN</span>
+        </div>
+      </div>
+      
+      <div style="flex:1;display:flex;flex-direction:column;gap:10px">
+        <h4 style="margin:0">${tr('Thermal Label Simulator', 'محاكي الملصق الحراري')}</h4>
+        <p style="font-size:12px;color:var(--text-muted)">
+          ${tr('This simulates the direct printing of a ZPL/thermal barcode label for clinical specimens. You can scan this barcode to automatically route the sample into the analyzer.', 'هذا يحاكي الطباعة المباشرة لملصق الباركود الحراري للعينات الطبية. يمكنك محاكاة قراءة الباركود لتوجيه العينة تلقائياً إلى جهاز التحليل.')}
+        </p>
+        <button class="btn btn-secondary w-full" onclick="window.simulateBarcodeScan('${labelId}', ${orderId})">
+          🖲️ ${tr('Simulate Barcode Scan', 'محاكاة مسح الباركود')}
+        </button>
+        <button class="btn btn-primary w-full" onclick="window.printThermalLabelContent('${labelId}')">
+          🖨️ ${tr('Print to Label Printer', 'طباعة إلى طابعة الملصقات')}
+        </button>
+      </div>
     </div>
-    <script>setTimeout(()=>{window.print();},300);<\/script></body></html>`);
-  printWin.document.close();
+  `;
+  
+  showModal(tr('LIS Barcode Simulator', 'محاكي باركود المختبر'), modalHtml);
+  
+  setTimeout(() => {
+    try {
+      JsBarcode('#thermalLabelBarcode', labelId, {
+        format: 'CODE128',
+        width: 1.5,
+        height: 35,
+        fontSize: 9,
+        displayValue: true,
+        margin: 2
+      });
+    } catch (e) { }
+  }, 100);
 };
 window.updateLabStatus = async (id, status) => {
   try { await API.put(`/api/lab/orders/${id}`, { status }); showToast(tr('Updated', 'تم التحديث')); await navigateTo(4); }
@@ -7575,7 +7607,7 @@ window.risOpenReport = async (examId) => {
   try {
     if (exam && exam.patient_id) priors = await API.get(`/api/radiology/reports/priors?patient_id=${encodeURIComponent(exam.patient_id)}&modality=${encodeURIComponent(exam.modality || '')}`);
     reports = await API.get(`/api/radiology/reports?rad_exam_id=${encodeURIComponent(examId)}`);
-  } catch (e) { /* non-fatal */ }
+  } catch (e) { }
   window.__risReports[examId] = reports || [];
   const priorHtml = (priors && priors.length)
     ? priors.map(p => `<div style="font-size:12px;border-${isArabic ? 'right' : 'left'}:3px solid var(--accent);padding:4px 8px;margin:4px 0">
@@ -7586,19 +7618,86 @@ window.risOpenReport = async (examId) => {
     ? reports.map(r => `<div style="font-size:12px;padding:4px 0">#${safeId(r.id)} · ${statusBadge(r.status)} ${r.is_critical ? `<span class="badge badge-danger">${tr('CRITICAL', 'حرج')}</span>` : ''} ${r.critical_notified_at ? `<span class="badge badge-info">${tr('Notified', 'تم الإبلاغ')}</span>` : ''}
         ${r.status === 'Draft' ? `${r.is_critical && !r.critical_notified_at ? `<button class="btn btn-sm btn-warning" onclick="risCriticalNotify(${safeId(r.id)},${safeId(examId)})">📞 ${tr('Notify Critical', 'إبلاغ حرج')}</button>` : ''}<button class="btn btn-sm btn-success" onclick="risSignReport(${safeId(r.id)},${safeId(examId)})">✍ ${tr('Sign', 'توقيع')}</button>` : ''}</div>`).join('')
     : `<div style="color:var(--text-dim);font-size:12px">${tr('No reports yet', 'لا توجد تقارير بعد')}</div>`;
+  
   box.innerHTML = `
-    <div class="card-title">📝 ${tr('Structured Report', 'تقرير منظم')} — ${tr('Exam', 'فحص')} #${safeId(examId)}</div>
-    <div class="form-group mb-8"><label>${tr('Template', 'القالب')}</label>
-      <select class="form-input" id="rrTemplate"><option value="generic">${tr('Generic', 'عام')}</option><option value="BI-RADS">BI-RADS</option></select></div>
-    <div class="form-group mb-8"><label>${tr('Findings', 'النتائج')}</label><textarea class="form-input form-textarea" id="rrFindings" rows="3"></textarea></div>
-    <div class="form-group mb-8"><label>${tr('Impression', 'الانطباع')}</label><textarea class="form-input form-textarea" id="rrImpression" rows="2"></textarea></div>
-    <div class="form-group mb-8"><label>BI-RADS</label><input class="form-input" id="rrBirads" placeholder="0-6"></div>
-    <label class="flex gap-8" style="align-items:center;margin-bottom:8px"><input type="checkbox" id="rrCritical"> <span style="color:#ef4444;font-weight:600">${tr('Critical finding (requires notification before signing)', 'نتيجة حرجة (تتطلب إبلاغاً قبل التوقيع)')}</span></label>
-    <button class="btn btn-primary w-full mb-12" onclick="risSaveReport(${safeId(examId)})">💾 ${tr('Save Draft', 'حفظ مسودة')}</button>
-    <div class="card-title" style="font-size:13px">📚 ${tr('Prior Signed Reports', 'تقارير سابقة موقعة')}</div>
-    <div class="mb-12">${priorHtml}</div>
-    <div class="card-title" style="font-size:13px">📄 ${tr('Reports for this exam', 'تقارير هذا الفحص')}</div>
-    <div id="rrList">${reportsHtml}</div>`;
+    <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:16px;align-items:start">
+      <div class="card" style="padding:12px;background:#000;color:#fff;border-radius:12px;border:2px dashed var(--outline);display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#aaa">
+          <span>🖥️ PACS VIEWER (SIMULATED DICOM)</span>
+          <span id="dicomMeta">WL: 40 / WW: 400</span>
+        </div>
+        
+        <div id="dicomViewport" style="height:220px;background:#050505;border-radius:8px;overflow:hidden;position:relative;display:flex;justify-content:center;align-items:center;cursor:grab">
+          <svg id="dicomImage" viewBox="0 0 200 200" style="width:180px;height:180px;filter:contrast(var(--d-contrast, 1)) brightness(var(--d-brightness, 1));transform:scale(var(--d-scale, 1)) translate(var(--d-pan-x, 0px), var(--d-pan-y, 0px));transition:filter 0.05s ease;transform-origin:center">
+            <rect x="95" y="10" width="10" height="180" fill="#ffffff" opacity="0.3" rx="2" />
+            <path d="M95,30 Q60,35 40,55" stroke="#ffffff" stroke-width="3" fill="none" opacity="0.4" />
+            <path d="M95,50 Q50,55 30,80" stroke="#ffffff" stroke-width="3" fill="none" opacity="0.4" />
+            <path d="M95,70 Q45,75 25,105" stroke="#ffffff" stroke-width="3" fill="none" opacity="0.4" />
+            <path d="M95,90 Q40,95 20,130" stroke="#ffffff" stroke-width="3" fill="none" opacity="0.4" />
+            <path d="M95,110 Q40,115 20,155" stroke="#ffffff" stroke-width="3" fill="none" opacity="0.4" />
+            
+            <path d="M105,30 Q140,35 160,55" stroke="#ffffff" stroke-width="3" fill="none" opacity="0.4" />
+            <path d="M105,50 Q150,55 170,80" stroke="#ffffff" stroke-width="3" fill="none" opacity="0.4" />
+            <path d="M105,70 Q155,75 175,105" stroke="#ffffff" stroke-width="3" fill="none" opacity="0.4" />
+            <path d="M105,90 Q160,95 180,130" stroke="#ffffff" stroke-width="3" fill="none" opacity="0.4" />
+            <path d="M105,110 Q160,115 180,155" stroke="#ffffff" stroke-width="3" fill="none" opacity="0.4" />
+            
+            <path d="M95,20 Q60,10 30,22" stroke="#ffffff" stroke-width="4" fill="none" opacity="0.5" />
+            <path d="M105,20 Q140,10 170,22" stroke="#ffffff" stroke-width="4" fill="none" opacity="0.5" />
+            <rect x="70" y="40" width="60" height="2" fill="#ffffff" opacity="0.6" />
+            <path d="M95,80 Q120,100 95,140 Z" fill="#ffffff" opacity="0.25" />
+            <path d="M10,180 Q50,165 95,180 Q140,165 190,180 Z" fill="#ffffff" opacity="0.35" />
+          </svg>
+          
+          <div style="position:absolute;bottom:6px;left:8px;font-size:9px;color:#aaa;pointer-events:none">
+            PATIENT: ${escapeHTML(exam.patient_name || ('#' + (exam.patient_id || '')))}<br>
+            MODALITY: ${escapeHTML(exam.modality || 'XR')}<br>
+            STUDY: CHEST PA
+          </div>
+        </div>
+        
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <label>Contrast (Window Width)</label>
+            <input type="range" id="dicomContrast" min="0.5" max="3" step="0.1" value="1" style="width:120px" oninput="window.adjustDicom()">
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <label>Brightness (Window Level)</label>
+            <input type="range" id="dicomBrightness" min="0.5" max="2" step="0.1" value="1" style="width:120px" oninput="window.adjustDicom()">
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+            <span style="font-weight:bold">Tools:</span>
+            <div style="display:flex;gap:4px">
+              <button class="btn btn-xs" style="background:#333;color:#fff;padding:2px 6px" onclick="window.zoomDicom(0.2)">➕ Zoom In</button>
+              <button class="btn btn-xs" style="background:#333;color:#fff;padding:2px 6px" onclick="window.zoomDicom(-0.2)">➖ Zoom Out</button>
+              <button class="btn btn-xs" style="background:#333;color:#fff;padding:2px 6px" onclick="window.panDicom(-10, 0)">⬅️</button>
+              <button class="btn btn-xs" style="background:#333;color:#fff;padding:2px 6px" onclick="window.panDicom(10, 0)">➡️</button>
+              <button class="btn btn-xs" style="background:#333;color:#fff;padding:2px 6px" onclick="window.panDicom(0, -10)">⬆️</button>
+              <button class="btn btn-xs" style="background:#333;color:#fff;padding:2px 6px" onclick="window.panDicom(0, 10)">⬇️</button>
+              <button class="btn btn-xs" style="background:#991b1b;color:#fff;padding:2px 6px" onclick="window.resetDicom()">Reset</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div class="card-title" style="margin:0">📝 ${tr('Structured Report', 'تقرير منظم')} — ${tr('Exam', 'فحص')} #${safeId(examId)}</div>
+        <div class="form-group"><label>${tr('Template', 'القالب')}</label>
+          <select class="form-input" id="rrTemplate" onchange="window.applyRadReportTemplate(this.value)"><option value="generic">${tr('Generic', 'عام')}</option><option value="BI-RADS">BI-RADS</option></select></div>
+        <div class="form-group"><label>${tr('Findings', 'النتائج')}</label><textarea class="form-input form-textarea" id="rrFindings" rows="3"></textarea></div>
+        <div class="form-group"><label>${tr('Impression', 'الانطباع')}</label><textarea class="form-input form-textarea" id="rrImpression" rows="2"></textarea></div>
+        <div class="form-group"><label>BI-RADS</label><input class="form-input" id="rrBirads" placeholder="0-6"></div>
+        <label class="flex gap-8" style="align-items:center"><input type="checkbox" id="rrCritical"> <span style="color:#ef4444;font-weight:600">${tr('Critical finding (requires notification before signing)', 'نتيجة حرجة (تتطلب إبلاغاً قبل التوقيع)')}</span></label>
+        <button class="btn btn-primary w-full" onclick="window.risSaveReport(${safeId(examId)})">💾 ${tr('Save Draft', 'حفظ مسودة')}</button>
+      </div>
+    </div>
+    <div style="margin-top:12px;border-top:1px solid var(--outline);padding-top:12px">
+      <div class="card-title" style="font-size:13px">📚 ${tr('Prior Signed Reports', 'تقارير سابقة موقعة')}</div>
+      <div class="mb-12">${priorHtml}</div>
+      <div class="card-title" style="font-size:13px">📄 ${tr('Reports for this exam', 'تقارير هذا الفحص')}</div>
+      <div id="rrList">${reportsHtml}</div>
+    </div>
+  `;
 };
 
 window.risSaveReport = async (examId) => {
@@ -7625,7 +7724,6 @@ window.risCriticalNotify = async (reportId, examId) => {
 window.risSignReport = async (reportId, examId) => {
   try { await API.put(`/api/radiology/reports/${reportId}/sign`, {}); showToast(tr('Report signed', 'تم توقيع التقرير')); await window.risOpenReport(examId); await window.loadRisWorklist(); }
   catch (e) {
-    // FAIL-CLOSED feedback: critical must be notified before signing
     showToast(tr('Cannot sign: ', 'تعذّر التوقيع: ') + escapeHTML(e.message || ''), 'error');
   }
 };
@@ -15247,6 +15345,344 @@ async function renderPatientPortal(el) {
 window.approvePortalAppt = async function (id) { await API.put('/api/portal/appointments/' + id, { status: 'Approved' }); showToast(tr('Approved', 'تمت الموافقة')); navigateTo(33); };
 window.rejectPortalAppt = async function (id) { await API.put('/api/portal/appointments/' + id, { status: 'Rejected' }); showToast(tr('Rejected', 'تم الرفض')); navigateTo(33); };
 
+// ===== A1: PORTAL PATIENT SELF-SERVICE VIEW =====
+window.renderPortalPatientView = async function(containerId, patientId) {
+  const el = document.getElementById(containerId);
+  if (!el || !patientId) return;
+  el.innerHTML = `<div class="flex gap-8 mb-16 flex-wrap">
+    <button id="portalTabLab" class="btn btn-sm bg-primary text-white" onclick="portalSwitchTab('lab',${patientId})">🧪 ${tr('Lab Results','نتائج المختبر')}</button>
+    <button id="portalTabMeds" class="btn btn-sm" onclick="portalSwitchTab('meds',${patientId})">💊 ${tr('Medications','الأدوية')}</button>
+    <button id="portalTabVisits" class="btn btn-sm" onclick="portalSwitchTab('visits',${patientId})">📋 ${tr('Visit Summary','ملخص الزيارات')}</button>
+    <button id="portalTabMsg" class="btn btn-sm" onclick="portalSwitchTab('msg',${patientId})">✉️ ${tr('Messages','الرسائل')}</button>
+  </div><div id="portalTabContent"></div>`;
+  await portalSwitchTab('lab', patientId);
+};
+window.portalSwitchTab = async function(tab, patientId) {
+  const el = document.getElementById('portalTabContent');
+  if (!el) return;
+  ['Lab','Meds','Visits','Msg'].forEach(t => {
+    const btn = document.getElementById('portalTab' + t);
+    if (btn) btn.className = t.toLowerCase() === tab ? 'btn btn-sm bg-primary text-white' : 'btn btn-sm';
+  });
+  el.innerHTML = `<div class="text-center py-24"><span class="material-symbols-outlined">progress_activity</span></div>`;
+  if (tab === 'lab') {
+    const results = await API.get('/api/portal/lab-results?patient_id=' + patientId).catch(() => []);
+    el.innerHTML = results.length ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="bg-surface-variant">
+      <th class="p-8 text-right">${tr('Test','الفحص')}</th><th class="p-8 text-right">${tr('Result','النتيجة')}</th><th class="p-8 text-right">${tr('Reference','المرجع')}</th><th class="p-8 text-right">${tr('Date','التاريخ')}</th><th class="p-8">${tr('Status','الحالة')}</th>
+    </tr></thead><tbody>${results.map(r => `<tr class="border-b hover:bg-surface-variant/30">
+      <td class="p-8 font-medium">${escapeHTML(r.test_name||'')}</td>
+      <td class="p-8 font-bold ${r.critical_flag?'text-error':''}">${escapeHTML(r.result_value||'')} ${escapeHTML(r.unit||'')}</td>
+      <td class="p-8 text-on-surface-variant text-xs">${escapeHTML(r.reference_range||'')}</td>
+      <td class="p-8 text-xs">${r.created_at ? new Date(r.created_at).toLocaleDateString('ar-SA') : ''}</td>
+      <td class="p-8">${r.critical_flag ? '<span class="badge bg-error text-white">⚠️ حرج</span>' : '<span class="badge bg-secondary-container">✓</span>'}</td>
+    </tr>`).join('')}</tbody></table></div>` :
+    `<p class="text-center text-on-surface-variant py-24">${tr('No verified lab results yet','لا توجد نتائج مختبر موثقة بعد')}</p>`;
+  } else if (tab === 'meds') {
+    const meds = await API.get('/api/portal/medications?patient_id=' + patientId).catch(() => []);
+    el.innerHTML = meds.length ? meds.map(m => `<div class="card p-16 mb-8 flex gap-12 items-start">
+      <span class="material-symbols-outlined text-primary mt-4">medication</span>
+      <div class="flex-1">
+        <div class="font-bold text-primary">${escapeHTML(m.medication_name||'')}</div>
+        <div class="text-sm text-on-surface-variant">${escapeHTML(m.dosage||'')} — ${escapeHTML(m.frequency||'')} ${m.route?'('+escapeHTML(m.route)+')':''}</div>
+        <div class="text-xs text-on-surface-variant mt-4">${tr('Prescribed by','وصفه')}: ${escapeHTML(m.prescribed_by||'')} | ${m.prescribed_date ? new Date(m.prescribed_date).toLocaleDateString('ar-SA') : ''}</div>
+      </div>
+      <span class="badge ${m.status==='Dispensed'?'bg-secondary-container':'bg-surface-variant'}">${escapeHTML(m.status||'')}</span>
+    </div>`).join('') : `<p class="text-center text-on-surface-variant py-24">${tr('No active medications','لا توجد أدوية نشطة')}</p>`;
+  } else if (tab === 'visits') {
+    const data = await API.get('/api/portal/visit-summary?patient_id=' + patientId).catch(() => ({ visits:[], admissions:[] }));
+    const visits = data.visits || []; const adm = data.admissions || [];
+    el.innerHTML = `<div class="space-y-8">
+      <h4 class="font-bold text-primary">📋 ${tr('Recent Visits','الزيارات الأخيرة')}</h4>
+      ${visits.length ? visits.map(v => `<div class="card p-12 border-r-4 border-primary">
+        <div class="flex justify-between"><span class="font-medium">${escapeHTML(v.visit_type||'زيارة')}</span><span class="text-xs">${v.visit_date?new Date(v.visit_date).toLocaleDateString('ar-SA'):''}</span></div>
+        <div class="text-sm mt-4">${escapeHTML(v.chief_complaint||'')}</div>
+        <div class="text-xs text-on-surface-variant">${tr('Doctor','الطبيب')}: ${escapeHTML(v.attending_doctor||'')} | ${escapeHTML(v.department||'')}</div>
+      </div>`).join('') : `<p class="text-sm text-on-surface-variant">${tr('No visits','لا توجد زيارات')}</p>`}
+      ${adm.length ? '<h4 class="font-bold text-primary mt-16">🏥 '+tr('Admissions','التنويمات')+'</h4>' + adm.map(a => `<div class="card p-12 border-r-4 border-secondary">
+        <div class="flex justify-between"><span class="font-medium">${escapeHTML(a.ward_name||'')}</span><span class="text-xs">${a.admission_date?new Date(a.admission_date).toLocaleDateString('ar-SA'):''}</span></div>
+        <div class="text-sm mt-4">${escapeHTML(a.diagnosis||'')}</div></div>`).join('') : ''}
+    </div>`;
+  } else if (tab === 'msg') {
+    const msgs = await API.get('/api/portal/messages?patient_id=' + patientId).catch(() => []);
+    el.innerHTML = `<div class="mb-12">
+      <h4 class="font-bold mb-8">✉️ ${tr('Send Message','أرسل رسالة للفريق الطبي')}</h4>
+      <input id="portalMsgSubject" class="input w-full mb-8" placeholder="${tr('Subject','الموضوع')}">
+      <textarea id="portalMsgBody" class="input w-full mb-8" rows="3" placeholder="${tr('Your message...','رسالتك...')}"></textarea>
+      <button class="btn btn-primary" onclick="sendPortalMessage(${patientId})">📤 ${tr('Send','إرسال')}</button>
+    </div>
+    <div class="space-y-8">${msgs.map(m => `<div class="card p-12 ${m.sender_type==='patient'?'border-r-4 border-primary':'border-r-4 border-secondary'}">
+      <div class="flex justify-between"><span class="font-medium">${escapeHTML(m.subject||'')}</span><span class="text-xs">${m.created_at?new Date(m.created_at).toLocaleDateString('ar-SA'):''}</span></div>
+      <div class="text-sm mt-4">${escapeHTML(m.body||'')}</div>
+      ${m.reply_body?`<div class="mt-8 bg-secondary-container rounded p-8 text-sm"><strong>${tr('Team Reply','رد الفريق')}:</strong> ${escapeHTML(m.reply_body)}</div>`:''}
+    </div>`).join('') || `<p class="text-sm text-on-surface-variant">${tr('No messages yet','لا توجد رسائل بعد')}</p>`}</div>`;
+  }
+};
+window.sendPortalMessage = async function(patientId) {
+  const subject = document.getElementById('portalMsgSubject')?.value?.trim();
+  const body = document.getElementById('portalMsgBody')?.value?.trim();
+  if (!body) { showToast(tr('Message required','محتوى الرسالة مطلوب'), 'error'); return; }
+  try {
+    await API.post('/api/portal/messages', { patient_id: patientId, subject, body });
+    showToast(tr('Message sent','تم إرسال الرسالة'));
+    await portalSwitchTab('msg', patientId);
+  } catch(e) { showToast(tr('Error','خطأ'), 'error'); }
+};
+
+// ===== A2: PEDIATRIC IMMUNIZATION UI =====
+window.renderPediatricImmunization = async function(containerId, patientId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const schedule = await API.get('/api/pediatrics/immunization-schedule').catch(() => []);
+  const recData = patientId ? await API.get('/api/pediatrics/immunization-records/' + patientId).catch(() => ({ immunizations:[] })) : { immunizations:[] };
+  const imm = recData.immunizations || [];
+  el.innerHTML = `<div class="card p-20 mb-16">
+    <h3 class="card-title">💉 ${tr('Saudi MOH Immunization Schedule 2024','جدول التطعيمات الوطني السعودي 2024')}</h3>
+    <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="bg-surface-variant">
+      <th class="p-8 text-right">${tr('Age','العمر')}</th><th class="p-8 text-right">${tr('Vaccines','التطعيمات')}</th><th class="p-8">${tr('Status','الحالة')}</th>
+    </tr></thead><tbody>
+    ${schedule.map(s => {
+      const given = imm.filter(i => s.vaccines.some(v => i.vaccine_name.toLowerCase().includes(v.split(' ')[0].toLowerCase()))).length;
+      return `<tr class="border-b hover:bg-surface-variant/30">
+        <td class="p-8 font-medium">${escapeHTML(s.age)}</td>
+        <td class="p-8">${s.vaccines.map(v=>`<span class="badge bg-primary-container text-xs mr-4">${escapeHTML(v)}</span>`).join('')}</td>
+        <td class="p-8">${given>0?'<span class="badge bg-secondary-container">✓ أُعطي</span>':'<span class="badge bg-surface-variant">بانتظار</span>'}</td>
+      </tr>`;
+    }).join('')}
+    </tbody></table></div>
+  </div>
+  ${patientId ? `<div class="card p-20 mb-16">
+    <h3 class="card-title">📝 ${tr('Record New Vaccine','تسجيل تطعيم جديد')}</h3>
+    <div class="grid grid-cols-2 gap-12">
+      <div><label class="label">${tr('Vaccine Name','اسم التطعيم')}</label><input id="immVaccineName" class="input w-full" placeholder="BCG / DTaP / MMR..."></div>
+      <div><label class="label">${tr('Dose #','رقم الجرعة')}</label><input id="immDoseNum" class="input w-full" type="number" value="1" min="1" max="5"></div>
+      <div><label class="label">${tr('Date Given','تاريخ الإعطاء')}</label><input id="immDate" class="input w-full" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div><label class="label">${tr('Batch #','رقم التشغيلة')}</label><input id="immBatch" class="input w-full" placeholder="LOT12345"></div>
+      <div><label class="label">${tr('Site','الموقع')}</label><select id="immSite" class="input w-full"><option value="Left arm">ذراع يسار</option><option value="Right arm">ذراع يمين</option><option value="Left thigh">فخذ يسار</option><option value="Right thigh">فخذ يمين</option><option value="Oral">فم</option></select></div>
+      <div><label class="label">${tr('Route','الطريق')}</label><select id="immRoute" class="input w-full"><option value="IM">عضلي IM</option><option value="SC">تحت جلد SC</option><option value="ID">داخل جلد ID</option><option value="PO">فموي PO</option></select></div>
+      <div><label class="label">${tr('Next Due','الجرعة القادمة')}</label><input id="immNextDue" class="input w-full" type="date"></div>
+      <div><label class="label">${tr('Notes','ملاحظات')}</label><input id="immNotes" class="input w-full" placeholder="${tr('Any reaction...','أي ردة فعل...')}"></div>
+    </div>
+    <button class="btn btn-primary mt-12" onclick="saveImmunization(${patientId})">💉 ${tr('Save Vaccination','حفظ التطعيم')}</button>
+  </div>
+  <div class="card p-20">
+    <h3 class="card-title">📜 ${tr('Vaccination History','سجل التطعيمات')}</h3>
+    ${imm.length ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="bg-surface-variant">
+      <th class="p-8 text-right">${tr('Vaccine','التطعيم')}</th><th class="p-8">${tr('Dose','الجرعة')}</th><th class="p-8 text-right">${tr('Date','التاريخ')}</th><th class="p-8 text-right">${tr('Given By','أعطاه')}</th>
+    </tr></thead><tbody>
+    ${imm.map(i=>`<tr class="border-b"><td class="p-8 font-medium">${escapeHTML(i.vaccine_name)}</td><td class="p-8 text-center">${i.dose_number}</td><td class="p-8">${i.given_date?new Date(i.given_date).toLocaleDateString('ar-SA'):''}</td><td class="p-8 text-xs">${escapeHTML(i.given_by||'')}</td></tr>`).join('')}
+    </tbody></table></div>` : `<p class="text-sm text-on-surface-variant">${tr('No vaccination records','لا توجد سجلات تطعيم')}</p>`}
+  </div>` : ''}`;
+};
+window.saveImmunization = async function(patientId) {
+  const vaccine_name = document.getElementById('immVaccineName')?.value?.trim();
+  if (!vaccine_name) { showToast(tr('Vaccine name required','اسم التطعيم مطلوب'), 'error'); return; }
+  try {
+    await API.post('/api/pediatrics/immunization', {
+      patient_id: patientId, vaccine_name,
+      dose_number: document.getElementById('immDoseNum')?.value||1,
+      given_date: document.getElementById('immDate')?.value,
+      batch_number: document.getElementById('immBatch')?.value,
+      site: document.getElementById('immSite')?.value,
+      route: document.getElementById('immRoute')?.value,
+      next_due: document.getElementById('immNextDue')?.value||null,
+      notes: document.getElementById('immNotes')?.value
+    });
+    showToast(tr('Vaccination recorded','تم تسجيل التطعيم'));
+    renderPediatricImmunization(document.getElementById('immContainer')?.id||'immContainer', patientId);
+  } catch(e) { showToast(tr('Error','خطأ'), 'error'); }
+};
+
+// ===== A3: NURSING PAIN ASSESSMENT UI (NRS/VAS/FLACC) =====
+window.renderNursingPainAssessment = async function(containerId, patientId, admissionId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const history = patientId ? await API.get('/api/nursing/pain-history/' + patientId).catch(() => []) : [];
+  const lastScore = history.length ? history[0].pain_score : null;
+  window._selectedPainScore = null;
+  el.innerHTML = `<div class="card p-20 mb-16">
+    <h3 class="card-title">🩺 ${tr('Pain Assessment','تقييم الألم')} (NRS/VAS/FLACC)</h3>
+    ${lastScore !== null ? `<div class="p-8 rounded-lg mb-12 ${lastScore>=7?'bg-error/10 border border-error text-error':lastScore>=4?'bg-warning-container':'bg-secondary-container'}">
+      ${tr('Last pain score','آخر درجة ألم')}: <strong>${lastScore}/10</strong> (${history[0].pain_scale||'NRS'})
+    </div>` : ''}
+    <div class="mb-16">
+      <label class="label font-bold">${tr('Select Pain Score (0=No Pain, 10=Worst)','اختر درجة الألم (0=لا ألم، 10=أشد ألم)')}</label>
+      <div class="flex gap-2 mt-8">
+        ${Array.from({length:11},(_,i)=>`<button id="painBtn${i}" onclick="selectPainScore(${i})" class="flex-1 py-8 rounded-lg text-sm font-bold border-2 transition-all ${i<=3?'border-green-200 bg-green-50 hover:bg-green-100':i<=6?'border-yellow-200 bg-yellow-50 hover:bg-yellow-100':'border-red-200 bg-red-50 hover:bg-red-100'}">${i}</button>`).join('')}
+      </div>
+      <div class="flex justify-between text-xs text-on-surface-variant mt-4">
+        <span>😊 ${tr('No Pain','لا ألم')}</span><span>😐 ${tr('Moderate','متوسط')}</span><span>😣 ${tr('Worst','أشد ألم')}</span>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-12 mb-12">
+      <div><label class="label">${tr('Scale','المقياس')}</label><select id="painScale" class="input w-full"><option value="NRS">NRS</option><option value="VAS">VAS</option><option value="FLACC">FLACC (أطفال)</option><option value="FACES">FACES</option><option value="BPS">BPS (مُنبَّب)</option></select></div>
+      <div><label class="label">${tr('Location','الموقع')}</label><input id="painLocation" class="input w-full" placeholder="${tr('Head, Chest...','رأس، صدر...')}"></div>
+      <div><label class="label">${tr('Character','الطبيعة')}</label><input id="painChar" class="input w-full" placeholder="${tr('Sharp, Burning...','حاد، ناري...')}"></div>
+      <div><label class="label">${tr('Relieving Factors','عوامل التخفيف')}</label><input id="painRel" class="input w-full" placeholder="${tr('Rest, Medication...','الراحة...')}"></div>
+      <div><label class="label">${tr('Current Analgesia','المسكنات الحالية')}</label><input id="painMeds" class="input w-full" placeholder="Paracetamol, Morphine..."></div>
+      <div><label class="label">${tr('Pain Goal (0-10)','هدف الألم')}</label><input id="painGoal" class="input w-full" type="number" value="3" min="0" max="10"></div>
+    </div>
+    <button class="btn btn-primary" onclick="savePainAssessment(${patientId||'null'},${admissionId||'null'})">💾 ${tr('Save Pain Assessment','حفظ تقييم الألم')}</button>
+  </div>
+  <div class="card p-20">
+    <h3 class="card-title">📊 ${tr('Pain History','تاريخ الألم')}</h3>
+    ${history.length ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="bg-surface-variant">
+      <th class="p-8">${tr('Score','الدرجة')}</th><th class="p-8">${tr('Scale','المقياس')}</th><th class="p-8 text-right">${tr('Location','الموقع')}</th><th class="p-8 text-right">${tr('Nurse','الممرض')}</th><th class="p-8 text-right">${tr('Time','الوقت')}</th>
+    </tr></thead><tbody>
+    ${history.map(h=>`<tr class="border-b"><td class="p-8 text-center"><span class="badge font-bold ${h.pain_score>=7?'bg-error text-white':h.pain_score>=4?'bg-warning-container':'bg-secondary-container'}">${h.pain_score}/10</span></td><td class="p-8 text-center">${escapeHTML(h.pain_scale||'')}</td><td class="p-8">${escapeHTML(h.pain_location||'')}</td><td class="p-8 text-xs">${escapeHTML(h.assessed_by||'')}</td><td class="p-8 text-xs">${h.assessed_at?new Date(h.assessed_at).toLocaleString('ar-SA'):''}</td></tr>`).join('')}
+    </tbody></table></div>` : `<p class="text-sm text-on-surface-variant">${tr('No pain assessments recorded','لم يُسجَّل أي تقييم ألم')}</p>`}
+  </div>`;
+  window.selectPainScore = function(score) {
+    window._selectedPainScore = score;
+    for (let i=0;i<=10;i++) {
+      const b = document.getElementById('painBtn'+i);
+      if (b) { b.style.transform = i===score?'scale(1.15)':''; b.style.fontWeight = i===score?'900':'700'; b.style.boxShadow = i===score?'0 0 0 3px var(--md-primary)':''; }
+    }
+  };
+};
+window.savePainAssessment = async function(patientId, admissionId) {
+  const score = window._selectedPainScore;
+  if (score === null || score === undefined) { showToast(tr('Select pain score first','اختر درجة الألم أولاً'), 'error'); return; }
+  try {
+    const r = await API.post('/api/nursing/pain-assessment', {
+      patient_id: patientId, admission_id: admissionId||null,
+      pain_scale: document.getElementById('painScale')?.value||'NRS', pain_score: score,
+      pain_location: document.getElementById('painLocation')?.value,
+      pain_character: document.getElementById('painChar')?.value,
+      relieving_factors: document.getElementById('painRel')?.value,
+      current_analgesia: document.getElementById('painMeds')?.value,
+      pain_goal: document.getElementById('painGoal')?.value||3
+    });
+    showToast(r.critical ? tr('⚠️ CRITICAL PAIN — Physician notified','⚠️ ألم حاد جداً — تم إشعار الطبيب') : tr('Pain assessment saved','تم حفظ تقييم الألم'), r.critical?'error':'success');
+  } catch(e) { showToast(tr('Error','خطأ'), 'error'); }
+};
+
+// ===== A4: ICU DAILY GOALS CHECKLIST UI (CBAHI / ABCDEF Bundle) =====
+window.renderIcuDailyGoals = async function(containerId, admissionId, patientId) {
+  const el = document.getElementById(containerId);
+  if (!el || !admissionId) return;
+  const today = new Date().toISOString().slice(0,10);
+  const goals = await API.get('/api/icu/daily-goals/' + admissionId + '?date=' + today).catch(() => []);
+  const g = goals[0] || {};
+  el.innerHTML = `<div class="card p-20">
+    <div class="card-title justify-between mb-16">
+      <span>🏥 ${tr('ICU Daily Goals','أهداف اليوم — العناية المركزة')} — ${today}</span>
+      <span class="badge bg-primary-container">ABCDEF Bundle | CBAHI</span>
+    </div>
+    <!-- A & B: Awakening + Breathing -->
+    <div class="bg-blue-50 rounded-xl p-16 border border-blue-200 mb-12">
+      <h4 class="font-bold text-blue-800 mb-12">🫁 A+B — ${tr('Awakening & Breathing Trials','اختبارات الصحوة والتنفس')}</h4>
+      <div class="grid grid-cols-2 gap-8 mb-8">
+        <label class="flex items-center gap-8 cursor-pointer"><input type="checkbox" id="icuDailySat" ${g.daily_sat?'checked':''}><span>${tr('Daily SAT (Sedation Awakening Trial)','اختبار الإيقاظ اليومي SAT')}</span></label>
+        <label class="flex items-center gap-8 cursor-pointer"><input type="checkbox" id="icuDailySbt" ${g.daily_sbt?'checked':''}><span>${tr('Daily SBT (Spontaneous Breathing Trial)','اختبار التنفس التلقائي SBT')}</span></label>
+      </div>
+      <div class="grid grid-cols-3 gap-8">
+        <div><label class="label text-xs">Target RASS</label><input id="icuRass" class="input w-full" type="number" value="${g.sedation_target_rass??'-2'}" min="-5" max="4"></div>
+        <div><label class="label text-xs">FiO₂ % Goal</label><input id="icuFio2" class="input w-full" type="number" value="${g.vent_goal_fio2||''}" min="21" max="100" placeholder="40"></div>
+        <div><label class="label text-xs">PEEP cmH₂O</label><input id="icuPeep" class="input w-full" type="number" value="${g.vent_goal_peep||''}" placeholder="5"></div>
+      </div>
+      <div class="mt-8"><label class="label text-xs">${tr('Weaning Plan','خطة الفطام')}</label><input id="icuWean" class="input w-full" value="${escapeHTML(g.vent_wean_plan||'')}" placeholder="${tr('Wean FiO2 / Extubation planned...','تقليل FiO2 / التخطيط للفطام...')}"></div>
+    </div>
+    <!-- C & D: Sedation + Delirium -->
+    <div class="bg-purple-50 rounded-xl p-16 border border-purple-200 mb-12">
+      <h4 class="font-bold text-purple-800 mb-12">🧠 C+D — ${tr('Sedation & Delirium','التخدير والهذيان')}</h4>
+      <div class="grid grid-cols-2 gap-8">
+        <div><label class="label text-xs">${tr('Pain Goal (NRS)','هدف الألم')}</label><input id="icuPainGoal" class="input w-full" type="number" value="${g.pain_goal_nrs||3}" min="0" max="10"></div>
+        <div><label class="label text-xs">CAM-ICU ${tr('(Delirium)','الهذيان')}</label>
+          <select id="icuCam" class="input w-full">
+            <option value="">---</option>
+            <option value="Negative" ${g.delirium_cam_icu==='Negative'?'selected':''}>Negative (لا هذيان)</option>
+            <option value="Positive" ${g.delirium_cam_icu==='Positive'?'selected':''}>Positive (هذيان)</option>
+            <option value="Unable to assess" ${g.delirium_cam_icu==='Unable to assess'?'selected':''}>Unable to assess</option>
+          </select></div>
+      </div>
+    </div>
+    <!-- E: Mobility + F: Family -->
+    <div class="bg-green-50 rounded-xl p-16 border border-green-200 mb-12">
+      <h4 class="font-bold text-green-800 mb-12">🚶 E+F — ${tr('Early Mobility & Family','التعافي المبكر والعائلة')}</h4>
+      <div class="grid grid-cols-2 gap-8">
+        <div><label class="label text-xs">${tr('Mobility Goal','هدف الحركة')}</label>
+          <select id="icuMobility" class="input w-full">
+            <option value="">---</option>
+            ${['Passive ROM','Sitting in bed','Sitting edge','Standing','Ambulation'].map(v=>`<option value="${v}" ${g.mobility_goal===v?'selected':''}>${v}</option>`).join('')}
+          </select></div>
+        <label class="flex items-center gap-8 cursor-pointer mt-8"><input type="checkbox" id="icuFamilyUpdate" ${g.family_update_done?'checked':''}><span>${tr('Family meeting done','تحديث الأسرة تم')}</span></label>
+      </div>
+    </div>
+    <!-- Prevention Bundle -->
+    <div class="bg-yellow-50 rounded-xl p-16 border border-yellow-200 mb-12">
+      <h4 class="font-bold text-yellow-800 mb-12">🛡️ ${tr('Prevention Bundle (VAP / CLABSI / CAUTI / DVT)','حزمة الوقاية')}</h4>
+      <div class="grid grid-cols-2 gap-8">
+        <label class="flex items-center gap-8 cursor-pointer"><input type="checkbox" id="icuOralCare" ${g.oral_care_done?'checked':''}><span>${tr('Oral care done — VAP prevention','العناية الفموية — وقاية VAP')}</span></label>
+        <label class="flex items-center gap-8 cursor-pointer"><input type="checkbox" id="icuHob" ${g.hob_elevation!==false?'checked':''}><span>${tr('HOB 30-45° (head elevation)','رأس السرير 30-45°')}</span></label>
+        <label class="flex items-center gap-8 cursor-pointer"><input type="checkbox" id="icuLineReview" ${g.line_necessity_reviewed?'checked':''}><span>${tr('Central line necessity reviewed','مراجعة ضرورة الكاتيتر المركزي')}</span></label>
+        <label class="flex items-center gap-8 cursor-pointer"><input type="checkbox" id="icuFoley" ${g.foley_necessity_reviewed?'checked':''}><span>${tr('Foley necessity reviewed','مراجعة ضرورة القسطرة البولية')}</span></label>
+        <div><label class="label text-xs">DVT ${tr('Prophylaxis','الوقاية')}</label>
+          <select id="icuDvt" class="input w-full">
+            ${['','Heparin SQ','Mechanical','Both','Contraindicated'].map(v=>`<option value="${v}" ${g.dvt_prophylaxis===v?'selected':''}>${v||'---'}</option>`).join('')}
+          </select></div>
+        <div><label class="label text-xs">${tr('Stress Ulcer Prophylaxis','وقاية القرحة')}</label>
+          <select id="icuSup" class="input w-full">
+            ${['','PPI','H2 blocker','Not indicated'].map(v=>`<option value="${v}" ${g.stress_ulcer_prophy===v?'selected':''}>${v||'---'}</option>`).join('')}
+          </select></div>
+      </div>
+    </div>
+    <!-- Nutrition -->
+    <div class="bg-orange-50 rounded-xl p-16 border border-orange-200 mb-12">
+      <h4 class="font-bold text-orange-800 mb-12">🍽️ ${tr('Nutrition Goals','أهداف التغذية')}</h4>
+      <div class="grid grid-cols-3 gap-8">
+        <div><label class="label text-xs">${tr('Route','الطريق')}</label>
+          <select id="icuNutRoute" class="input w-full">
+            ${['','PO','NG','NJ','TPN','NPO'].map(v=>`<option value="${v}" ${g.nutrition_route===v?'selected':''}>${v||'---'}</option>`).join('')}
+          </select></div>
+        <div><label class="label text-xs">${tr('Caloric Goal (kcal)','السعرات')}</label><input id="icuKcal" class="input w-full" type="number" value="${g.caloric_goal_kcal||''}" placeholder="1800"></div>
+        <div><label class="label text-xs">${tr('Protein Goal (g)','البروتين')}</label><input id="icuProtein" class="input w-full" type="number" value="${g.protein_goal_g||''}" placeholder="100"></div>
+      </div>
+    </div>
+    <!-- Goals text -->
+    <div class="bg-gray-50 rounded-xl p-16 border mb-12">
+      <h4 class="font-bold mb-12">🎯 ${tr('Daily Goals','الأهداف اليومية')}</h4>
+      <label class="label">${tr('Medical Goals for Today','الأهداف الطبية لليوم')}</label>
+      <textarea id="icuMedGoals" class="input w-full mb-8" rows="2" placeholder="${tr('Wean sedation, target extubation...','تقليل التخدير، هدف الفطام...')}">${escapeHTML(g.medical_goals||'')}</textarea>
+      <label class="label">${tr('Nursing Goals for Today','الأهداف التمريضية لليوم')}</label>
+      <textarea id="icuNursGoals" class="input w-full mb-8" rows="2" placeholder="${tr('Hourly neuro checks, Q2H turning...','فحص عصبي ساعي، تقليب كل ساعتين...')}">${escapeHTML(g.nursing_goals||'')}</textarea>
+      <label class="flex items-center gap-8 cursor-pointer"><input type="checkbox" id="icuGoalsDiscussed" ${g.goals_discussed_with_team?'checked':''}><span class="font-medium">${tr('Goals discussed in morning rounds','نوقشت الأهداف في الجولة الصباحية')}</span></label>
+    </div>
+    <button class="btn btn-primary w-full" onclick="saveIcuDailyGoals(${admissionId},${patientId||'null'})">
+      💾 ${tr('Save Daily Goals','حفظ أهداف اليوم')} — ${today}
+    </button>
+  </div>`;
+};
+window.saveIcuDailyGoals = async function(admissionId, patientId) {
+  try {
+    await API.post('/api/icu/daily-goals', {
+      admission_id: admissionId, patient_id: patientId,
+      daily_sat: document.getElementById('icuDailySat')?.checked,
+      daily_sbt: document.getElementById('icuDailySbt')?.checked,
+      sedation_target_rass: document.getElementById('icuRass')?.value||null,
+      vent_goal_fio2: document.getElementById('icuFio2')?.value||null,
+      vent_goal_peep: document.getElementById('icuPeep')?.value||null,
+      vent_wean_plan: document.getElementById('icuWean')?.value,
+      pain_goal_nrs: document.getElementById('icuPainGoal')?.value||3,
+      delirium_cam_icu: document.getElementById('icuCam')?.value,
+      mobility_goal: document.getElementById('icuMobility')?.value,
+      family_update_done: document.getElementById('icuFamilyUpdate')?.checked,
+      oral_care_done: document.getElementById('icuOralCare')?.checked,
+      hob_elevation: document.getElementById('icuHob')?.checked,
+      line_necessity_reviewed: document.getElementById('icuLineReview')?.checked,
+      foley_necessity_reviewed: document.getElementById('icuFoley')?.checked,
+      dvt_prophylaxis: document.getElementById('icuDvt')?.value,
+      stress_ulcer_prophy: document.getElementById('icuSup')?.value,
+      nutrition_route: document.getElementById('icuNutRoute')?.value,
+      caloric_goal_kcal: document.getElementById('icuKcal')?.value||null,
+      protein_goal_g: document.getElementById('icuProtein')?.value||null,
+      medical_goals: document.getElementById('icuMedGoals')?.value,
+      nursing_goals: document.getElementById('icuNursGoals')?.value,
+      goals_discussed_with_team: document.getElementById('icuGoalsDiscussed')?.checked
+    });
+    showToast(tr('ICU daily goals saved','تم حفظ أهداف اليوم'));
+  } catch(e) { showToast(tr('Error saving ICU goals','خطأ في حفظ الأهداف'), 'error'); }
+};
+
 // ===== ZATCA E-INVOICING =====
 async function renderZATCA(el) {
   const content = el; // C-1 fix: bind content so downstream uses are consistent (el is the container)
@@ -21169,5 +21605,121 @@ window.saveOBGYNUltrasound = async (pregId, patientId) => {
     navigateTo(currentPage);
   } catch (e) {
     showToast(tr('Error saving scan', 'خطأ في حفظ السونار'), 'error');
+  }
+};
+
+window.simulateBarcodeScan = async (barcodeText, orderId) => {
+  const statusEl = document.getElementById('lblScanStatus');
+  if (statusEl) {
+    statusEl.textContent = 'SCANNED_IN_ANALYZER';
+    statusEl.style.background = '#22c55e';
+    statusEl.style.color = '#fff';
+  }
+  showToast(tr('Barcode Scanned: ' + barcodeText, 'تم مسح الباركود: ' + barcodeText), 'success');
+  
+  try {
+    await API.put(`/api/lab/orders/${orderId}`, { status: 'In Progress' });
+    showToast(tr('Analyzer updated: Sample state is now In Progress', 'تم تحديث المحلل: حالة العينة الآن قيد العمل'), 'success');
+    setTimeout(() => {
+      document.querySelector('.modal-overlay')?.remove();
+      navigateTo(currentPage);
+    }, 1500);
+  } catch (e) { }
+};
+
+window.printThermalLabelContent = (labelId) => {
+  const labelHtml = document.getElementById('thermalLabelContainer')?.outerHTML || '';
+  const printWin = window.open('', '_blank', 'width=350,height=300');
+  printWin.document.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Thermal Label Print</title>
+        <style>
+          body { margin:0; padding:10px; display:flex; justify-content:center; align-items:center; background:#fff; }
+          #thermalLabelContainer { box-shadow: none !important; border: 1px solid #000 !important; }
+        </style>
+      </head>
+      <body>
+        \${labelHtml}
+        <script>setTimeout(() => { window.print(); window.close(); }, 300);<\/script>
+      </body>
+    </html>
+  `);
+  printWin.document.close();
+};
+
+window.__dicomState = { contrast: 1, brightness: 1, scale: 1, panX: 0, panY: 0 };
+
+window.adjustDicom = () => {
+  const contrast = parseFloat(document.getElementById('dicomContrast')?.value || '1');
+  const brightness = parseFloat(document.getElementById('dicomBrightness')?.value || '1');
+  window.__dicomState.contrast = contrast;
+  window.__dicomState.brightness = brightness;
+  
+  const img = document.getElementById('dicomImage');
+  if (img) {
+    img.style.setProperty('--d-contrast', String(contrast));
+    img.style.setProperty('--d-brightness', String(brightness));
+  }
+  
+  const meta = document.getElementById('dicomMeta');
+  if (meta) {
+    meta.textContent = \`WL: \${Math.round(brightness * 40)} / WW: \${Math.round(contrast * 400)}\`;
+  }
+};
+
+window.zoomDicom = (delta) => {
+  window.__dicomState.scale = Math.min(Math.max(window.__dicomState.scale + delta, 0.5), 3.0);
+  const img = document.getElementById('dicomImage');
+  if (img) {
+    img.style.setProperty('--d-scale', String(window.__dicomState.scale));
+  }
+};
+
+window.panDicom = (dx, dy) => {
+  window.__dicomState.panX += dx;
+  window.__dicomState.panY += dy;
+  const img = document.getElementById('dicomImage');
+  if (img) {
+    img.style.setProperty('--d-pan-x', window.__dicomState.panX + 'px');
+    img.style.setProperty('--d-pan-y', window.__dicomState.panY + 'px');
+  }
+};
+
+window.resetDicom = () => {
+  window.__dicomState = { contrast: 1, brightness: 1, scale: 1, panX: 0, panY: 0 };
+  const contrastInput = document.getElementById('dicomContrast');
+  const brightnessInput = document.getElementById('dicomBrightness');
+  if (contrastInput) contrastInput.value = '1';
+  if (brightnessInput) brightnessInput.value = '1';
+  
+  const img = document.getElementById('dicomImage');
+  if (img) {
+    img.style.setProperty('--d-contrast', '1');
+    img.style.setProperty('--d-brightness', '1');
+    img.style.setProperty('--d-scale', '1');
+    img.style.setProperty('--d-pan-x', '0px');
+    img.style.setProperty('--d-pan-y', '0px');
+  }
+  const meta = document.getElementById('dicomMeta');
+  if (meta) meta.textContent = 'WL: 40 / WW: 400';
+};
+
+window.applyRadReportTemplate = (val) => {
+  const findings = document.getElementById('rrFindings');
+  const impression = document.getElementById('rrImpression');
+  if (!findings || !impression) return;
+  
+  if (val === 'BI-RADS') {
+    findings.value = 'BREAST DENSITY: Scattered fibroglandular tissues.\\n\\nFINDINGS: No dominant mass, architectural distortion, or suspicious microcalcifications in either breast.\\n\\nAXILLARY LYMPH NODES: Normal in appearance.';
+    impression.value = 'No mammographic evidence of malignancy.';
+    const birads = document.getElementById('rrBirads');
+    if (birads) birads.value = '1';
+  } else {
+    findings.value = '';
+    impression.value = '';
+    const birads = document.getElementById('rrBirads');
+    if (birads) birads.value = '';
   }
 };

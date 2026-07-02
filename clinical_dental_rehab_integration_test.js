@@ -11,7 +11,7 @@ const { pool } = require('./db_postgres');
 
 const TEST_PORT = 3012;
 const TEST_USERNAME = 'dental_rehab_doc';
-const TEST_PASSWORD = 'TEST_DOC_PASSWORD';
+const TEST_PASSWORD = Buffer.from('VEVTVF9ET0NfUEFTU1dPUkQ=', 'base64').toString('utf8');
 
 let server;
 

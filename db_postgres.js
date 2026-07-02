@@ -2319,6 +2319,319 @@ UPDATE maintenance_equipment SET tenant_id = 1 WHERE tenant_id IS NULL;
             `);
         } catch (e) { console.error('Migration error:', e.message); }
 
+        // ===== PHASE A — NEW TABLES (A1-A4) =====
+        try {
+            await client.query(`
+                -- A1: Patient Portal Messages
+                CREATE TABLE IF NOT EXISTS portal_messages (
+                    id SERIAL PRIMARY KEY,
+                    patient_id INTEGER REFERENCES patients(id),
+                    sender_type VARCHAR(20) DEFAULT 'patient' CHECK (sender_type IN ('patient','staff')),
+                    sender_name TEXT NOT NULL DEFAULT '',
+                    subject TEXT NOT NULL DEFAULT '',
+                    body TEXT NOT NULL DEFAULT '',
+                    department VARCHAR(100) DEFAULT 'General',
+                    is_read BOOLEAN DEFAULT FALSE,
+                    replied_at TIMESTAMPTZ,
+                    replied_by TEXT,
+                    reply_body TEXT,
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_portal_messages_patient ON portal_messages(patient_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_portal_messages_tenant ON portal_messages(tenant_id, is_read);
+
+                -- A2: Pediatric Immunizations (Saudi MOH National Immunization Program)
+                CREATE TABLE IF NOT EXISTS pediatric_immunizations (
+                    id SERIAL PRIMARY KEY,
+                    patient_id INTEGER NOT NULL REFERENCES patients(id),
+                    vaccine_name VARCHAR(200) NOT NULL,
+                    dose_number INTEGER DEFAULT 1,
+                    given_date DATE NOT NULL,
+                    batch_number VARCHAR(100) DEFAULT '',
+                    site VARCHAR(50) DEFAULT '',      -- Left arm / Right thigh / etc.
+                    route VARCHAR(30) DEFAULT 'IM',   -- IM / SC / ID / PO
+                    next_due DATE,
+                    reaction TEXT DEFAULT '',          -- أي ردة فعل
+                    given_by TEXT NOT NULL DEFAULT '',
+                    notes TEXT DEFAULT '',
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_pediatric_immunizations_patient ON pediatric_immunizations(patient_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_pediatric_immunizations_vaccine ON pediatric_immunizations(vaccine_name, tenant_id);
+
+                -- A3: Nursing Pain Assessments (NRS/VAS/FLACC/FACES)
+                CREATE TABLE IF NOT EXISTS nursing_pain_assessments (
+                    id SERIAL PRIMARY KEY,
+                    patient_id INTEGER NOT NULL REFERENCES patients(id),
+                    patient_name TEXT DEFAULT '',
+                    admission_id INTEGER REFERENCES admissions(id),
+                    pain_scale VARCHAR(20) DEFAULT 'NRS' CHECK (pain_scale IN ('NRS','VAS','FLACC','FACES','BPS')),
+                    pain_score INTEGER NOT NULL CHECK (pain_score BETWEEN 0 AND 10),
+                    pain_location TEXT DEFAULT '',        -- موقع الألم
+                    pain_character TEXT DEFAULT '',       -- طبيعة الألم
+                    pain_radiation TEXT DEFAULT '',       -- انتشار الألم
+                    pain_onset TEXT DEFAULT '',           -- متى بدأ
+                    pain_duration TEXT DEFAULT '',        -- المدة
+                    aggravating_factors TEXT DEFAULT '',  -- عوامل مُفاقِمة
+                    relieving_factors TEXT DEFAULT '',    -- عوامل مُخففة
+                    current_analgesia TEXT DEFAULT '',    -- مسكنات حالية
+                    pain_goal INTEGER DEFAULT 3,          -- هدف النقرس (0-10)
+                    reassessment_time TIMESTAMPTZ,        -- وقت إعادة التقييم
+                    notes TEXT DEFAULT '',
+                    assessed_by TEXT NOT NULL DEFAULT '',
+                    assessed_at TIMESTAMPTZ DEFAULT NOW(),
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_nursing_pain_patient ON nursing_pain_assessments(patient_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_nursing_pain_admission ON nursing_pain_assessments(admission_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_nursing_pain_score ON nursing_pain_assessments(pain_score, tenant_id);
+
+                -- A4: ICU Daily Goals Checklist (CBAHI Requirement — Intensivist Bundle)
+                CREATE TABLE IF NOT EXISTS icu_daily_goals (
+                    id SERIAL PRIMARY KEY,
+                    admission_id INTEGER NOT NULL REFERENCES admissions(id),
+                    patient_id INTEGER NOT NULL REFERENCES patients(id),
+                    patient_name TEXT DEFAULT '',
+                    goal_date DATE NOT NULL DEFAULT CURRENT_DATE,
+                    -- Ventilator
+                    vent_goal_fio2 NUMERIC(5,2),          -- Target FiO2 %
+                    vent_goal_peep NUMERIC(5,1),           -- Target PEEP cmH2O
+                    vent_goal_tv NUMERIC(6,1),             -- Target Tidal Volume mL
+                    vent_wean_plan TEXT DEFAULT '',         -- خطة الفطام
+                    -- Sedation / Analgesia / Delirium (ABCDEF Bundle)
+                    sedation_target_rass SMALLINT,         -- Target RASS (-5 to +4)
+                    daily_sat BOOLEAN DEFAULT FALSE,        -- Daily Sedation Awakening Trial
+                    daily_sbt BOOLEAN DEFAULT FALSE,        -- Daily Spontaneous Breathing Trial
+                    pain_goal_nrs SMALLINT DEFAULT 3,
+                    delirium_cam_icu TEXT DEFAULT '',       -- CAM-ICU result (Positive/Negative/Unable)
+                    -- DVT / Stress Ulcer Prevention
+                    dvt_prophylaxis TEXT DEFAULT '',        -- Heparin SQ / Mechanical / Contraindicated
+                    stress_ulcer_prophy TEXT DEFAULT '',    -- PPI / H2 / Not Indicated
+                    -- Nutrition
+                    nutrition_route TEXT DEFAULT '',        -- PO / NG / NJ / TPN / NPO
+                    caloric_goal_kcal NUMERIC(8,1),
+                    protein_goal_g NUMERIC(6,1),
+                    -- Infection / Lines / VAP Prevention
+                    line_necessity_reviewed BOOLEAN DEFAULT FALSE,
+                    foley_necessity_reviewed BOOLEAN DEFAULT FALSE,
+                    oral_care_done BOOLEAN DEFAULT FALSE,   -- VAP Prevention
+                    hob_elevation BOOLEAN DEFAULT TRUE,     -- Head Of Bed 30-45°
+                    -- Early Mobility
+                    mobility_goal TEXT DEFAULT '',          -- Passive / Sitting / Standing / Ambulate
+                    -- Family Engagement
+                    family_update_done BOOLEAN DEFAULT FALSE,
+                    -- Free-text goals
+                    medical_goals TEXT DEFAULT '',
+                    nursing_goals TEXT DEFAULT '',
+                    goals_discussed_with_team BOOLEAN DEFAULT FALSE,
+                    notes TEXT DEFAULT '',
+                    -- Audit
+                    created_by TEXT DEFAULT '',
+                    updated_by TEXT,
+                    updated_at TIMESTAMPTZ,
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    UNIQUE(admission_id, goal_date, tenant_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_icu_daily_goals_admission ON icu_daily_goals(admission_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_icu_daily_goals_date ON icu_daily_goals(goal_date, tenant_id);
+            `);
+            console.log('  ✅ Phase A tables created (portal_messages, pediatric_immunizations, nursing_pain_assessments, icu_daily_goals)');
+        } catch (e) { console.error('Phase A tables migration error:', e.message); }
+
+        // ===== PHASE B — SAUDI COMPLIANCE TABLES (B1-B3) =====
+        try {
+            await client.query(`
+                -- B1: NPHIES Remittance Advice (RA) from payer → provider
+                CREATE TABLE IF NOT EXISTS nphies_remittance_advice (
+                    id SERIAL PRIMARY KEY,
+                    claim_id INTEGER REFERENCES insurance_claims(id),
+                    payer_id INTEGER REFERENCES insurance_companies(id),
+                    remittance_date DATE NOT NULL DEFAULT CURRENT_DATE,
+                    fhir_bundle_id TEXT DEFAULT '',           -- NPHIES Bundle.id
+                    payment_amount NUMERIC(12,2) DEFAULT 0,
+                    adjustment_amount NUMERIC(12,2) DEFAULT 0,
+                    denial_amount NUMERIC(12,2) DEFAULT 0,
+                    payment_date DATE,
+                    payment_reference TEXT DEFAULT '',
+                    adjudication_status VARCHAR(30) DEFAULT 'pending'
+                        CHECK (adjudication_status IN ('pending','approved','partial','denied','appealed')),
+                    denial_reason TEXT DEFAULT '',
+                    nphies_request_json JSONB,
+                    nphies_response_json JSONB,
+                    posted_to_gl BOOLEAN DEFAULT FALSE,   -- once posted to AR, lock
+                    posted_at TIMESTAMPTZ,
+                    posted_by TEXT,
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_nphies_ra_claim ON nphies_remittance_advice(claim_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_nphies_ra_payer ON nphies_remittance_advice(payer_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_nphies_ra_status ON nphies_remittance_advice(adjudication_status, tenant_id);
+
+                -- B1b: NPHIES Claim Status Inquiry log
+                CREATE TABLE IF NOT EXISTS nphies_claim_status_inquiry (
+                    id SERIAL PRIMARY KEY,
+                    claim_id INTEGER REFERENCES insurance_claims(id),
+                    inquiry_date TIMESTAMPTZ DEFAULT NOW(),
+                    fhir_task_id TEXT DEFAULT '',
+                    status_code VARCHAR(50) DEFAULT '',
+                    status_description TEXT DEFAULT '',
+                    nphies_request_json JSONB,
+                    nphies_response_json JSONB,
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_nphies_csi_claim ON nphies_claim_status_inquiry(claim_id, tenant_id);
+
+                -- B2: ZATCA Credit Notes (إشعارات الخصم/الائتمان)
+                CREATE TABLE IF NOT EXISTS zatca_credit_notes (
+                    id SERIAL PRIMARY KEY,
+                    original_invoice_id INTEGER REFERENCES zatca_invoices(id),
+                    credit_note_number TEXT NOT NULL DEFAULT '',
+                    buyer_name TEXT DEFAULT '',
+                    buyer_vat TEXT DEFAULT '',
+                    credit_reason TEXT DEFAULT '',         -- Cancellation / Return / Discount
+                    credit_reason_code VARCHAR(10) DEFAULT '', -- ZATCA reason codes
+                    subtotal NUMERIC(12,2) DEFAULT 0,
+                    vat_amount NUMERIC(12,2) DEFAULT 0,
+                    total_with_vat NUMERIC(12,2) DEFAULT 0,
+                    ubl_xml TEXT DEFAULT '',
+                    xml_hash TEXT DEFAULT '',
+                    digital_stamp TEXT DEFAULT '',
+                    qr_code TEXT DEFAULT '',
+                    clearance_status VARCHAR(30) DEFAULT 'pending',
+                    submission_status VARCHAR(30) DEFAULT 'pending',
+                    zatca_response JSONB,
+                    invoice_counter INTEGER DEFAULT 1,     -- ICV — sequential counter
+                    prev_invoice_hash TEXT DEFAULT '',     -- chaining
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_zatca_cn_invoice ON zatca_credit_notes(original_invoice_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_zatca_cn_tenant ON zatca_credit_notes(tenant_id, clearance_status);
+
+                -- B3a: HR Credentialing & Privileging (Physician / Nurse licenses & privileges)
+                CREATE TABLE IF NOT EXISTS hr_credentialing (
+                    id SERIAL PRIMARY KEY,
+                    employee_id INTEGER NOT NULL REFERENCES hr_employees(id),
+                    employee_name TEXT DEFAULT '',
+                    credential_type VARCHAR(50) NOT NULL  -- Medical License / DEA / Board Cert / Saudi Commission
+                        DEFAULT 'Medical License',
+                    credential_number TEXT NOT NULL DEFAULT '',
+                    issuing_body TEXT DEFAULT '',           -- Saudi Commission, MOH, SCHS...
+                    issue_date DATE,
+                    expiry_date DATE,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    privilege_area TEXT DEFAULT '',         -- General Surgery / Cardiology...
+                    privilege_level VARCHAR(30) DEFAULT 'Full'
+                        CHECK (privilege_level IN ('Full','Supervised','Limited','Provisional')),
+                    verification_status VARCHAR(20) DEFAULT 'pending'
+                        CHECK (verification_status IN ('pending','verified','expired','revoked')),
+                    verified_by TEXT,
+                    verified_at TIMESTAMPTZ,
+                    alert_sent_30d BOOLEAN DEFAULT FALSE,  -- expiry alert 30 days
+                    alert_sent_7d BOOLEAN DEFAULT FALSE,   -- expiry alert 7 days
+                    document_url TEXT DEFAULT '',
+                    notes TEXT DEFAULT '',
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_hr_cred_employee ON hr_credentialing(employee_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_hr_cred_expiry ON hr_credentialing(expiry_date, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_hr_cred_type ON hr_credentialing(credential_type, tenant_id);
+
+                -- B3b: GOSI Records (General Organization for Social Insurance)
+                CREATE TABLE IF NOT EXISTS hr_gosi_records (
+                    id SERIAL PRIMARY KEY,
+                    employee_id INTEGER NOT NULL REFERENCES hr_employees(id),
+                    employee_name TEXT DEFAULT '',
+                    national_id TEXT DEFAULT '',
+                    iqama_number TEXT DEFAULT '',
+                    gosi_number TEXT DEFAULT '',           -- رقم التأمينات
+                    nationality VARCHAR(50) DEFAULT '',
+                    is_saudi BOOLEAN DEFAULT FALSE,
+                    basic_salary NUMERIC(12,2) DEFAULT 0,
+                    gosi_base_salary NUMERIC(12,2) DEFAULT 0,
+                    employee_share_pct NUMERIC(5,2) DEFAULT 9.75,  -- % موظف
+                    employer_share_pct NUMERIC(5,2) DEFAULT 12.00, -- % صاحب عمل (سعودي) أو 2% (غير سعودي - hazard only)
+                    employee_contribution NUMERIC(12,2) DEFAULT 0,
+                    employer_contribution NUMERIC(12,2) DEFAULT 0,
+                    total_contribution NUMERIC(12,2) DEFAULT 0,
+                    month_year DATE NOT NULL,              -- الشهر والسنة
+                    submission_status VARCHAR(20) DEFAULT 'pending'
+                        CHECK (submission_status IN ('pending','submitted','confirmed','error')),
+                    gosi_response JSONB,
+                    submitted_at TIMESTAMPTZ,
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    UNIQUE(employee_id, month_year, tenant_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_gosi_employee ON hr_gosi_records(employee_id, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_gosi_month ON hr_gosi_records(month_year, tenant_id);
+
+                -- B3c: WPS Payroll File (Wage Protection System — نظام حماية الأجور)
+                CREATE TABLE IF NOT EXISTS hr_wps_files (
+                    id SERIAL PRIMARY KEY,
+                    file_reference TEXT NOT NULL DEFAULT '', -- WPS file reference number
+                    payroll_month DATE NOT NULL,             -- الشهر
+                    total_employees INTEGER DEFAULT 0,
+                    total_wages NUMERIC(14,2) DEFAULT 0,
+                    file_format VARCHAR(20) DEFAULT 'SIF',   -- SIF (Salary Information File)
+                    sif_content TEXT DEFAULT '',             -- محتوى ملف SIF
+                    bank_code TEXT DEFAULT '',               -- رمز البنك
+                    entity_id TEXT DEFAULT '',               -- Entity ID (MOL)
+                    mol_reference TEXT DEFAULT '',           -- Ministry of Labour ref
+                    submission_status VARCHAR(20) DEFAULT 'pending'
+                        CHECK (submission_status IN ('pending','submitted','approved','rejected')),
+                    submitted_at TIMESTAMPTZ,
+                    approved_at TIMESTAMPTZ,
+                    wps_response JSONB,
+                    notes TEXT DEFAULT '',
+                    created_by TEXT DEFAULT '',
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    UNIQUE(payroll_month, tenant_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_wps_month ON hr_wps_files(payroll_month, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_wps_status ON hr_wps_files(submission_status, tenant_id);
+
+                -- B3d: Nitaqat / Saudization Tracking
+                CREATE TABLE IF NOT EXISTS hr_nitaqat_records (
+                    id SERIAL PRIMARY KEY,
+                    snapshot_date DATE NOT NULL DEFAULT CURRENT_DATE,
+                    total_employees INTEGER DEFAULT 0,
+                    saudi_employees INTEGER DEFAULT 0,
+                    non_saudi_employees INTEGER DEFAULT 0,
+                    saudization_pct NUMERIC(5,2) DEFAULT 0,
+                    required_pct NUMERIC(5,2) DEFAULT 0,    -- الحد المطلوب حسب القطاع
+                    nitaqat_band VARCHAR(30) DEFAULT '',     -- Excellent/High/Medium/Low/Déficiente
+                    activity_code TEXT DEFAULT '',           -- GOSI activity code
+                    facility_size VARCHAR(20) DEFAULT '',    -- Small/Medium/Large/Giant
+                    exempted_employees INTEGER DEFAULT 0,    -- معفيون (مدير، طبيب أجنبي...)
+                    details_json JSONB,
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_nitaqat_date ON hr_nitaqat_records(snapshot_date, tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_nitaqat_tenant ON hr_nitaqat_records(tenant_id, nitaqat_band);
+            `);
+            console.log('  ✅ Phase B tables created (nphies_remittance_advice, nphies_claim_status_inquiry, zatca_credit_notes, hr_credentialing, hr_gosi_records, hr_wps_files, hr_nitaqat_records)');
+        } catch (e) { console.error('Phase B tables migration error:', e.message); }
+
         console.log('  ✅ PostgreSQL tables created');
     } finally {
         client.release();

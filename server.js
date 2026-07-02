@@ -10648,6 +10648,410 @@ app.put('/api/portal/appointments/:id', requireAuth, requireTenantScope, async (
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
+// ===== A1: PATIENT PORTAL — Lab Results, Medications, Visit Summary, Messages =====
+// Portal endpoints secured with IDOR protection: patient_id must match tenant scope.
+
+// GET /api/portal/lab-results?patient_id=X — نتائج المختبر للمريض عبر البوابة
+app.get('/api/portal/lab-results', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const { patient_id } = req.query;
+        if (!patient_id) return res.status(400).json({ error: 'patient_id required' });
+        // IDOR: verify patient belongs to tenant
+        const pOwn = (await pool.query('SELECT id FROM patients WHERE id=$1 AND tenant_id=$2', [patient_id, tenantId])).rows[0];
+        if (!pOwn) return res.status(404).json({ error: 'Patient not found' });
+        const results = (await pool.query(
+            `SELECT lr.id, lr.test_name, lr.result_value, lr.reference_range, lr.unit, lr.status,
+                    lr.critical_flag, lr.verified_by, lr.verified_at, lr.created_at,
+                    lo.order_date, lo.priority, lo.notes
+             FROM lab_results lr
+             JOIN lab_radiology_orders lo ON lr.order_id = lo.id
+             WHERE lo.patient_id=$1 AND lo.tenant_id=$2 AND lr.status IN ('Verified','Final')
+             ORDER BY lr.created_at DESC LIMIT 100`,
+            [patient_id, tenantId]
+        )).rows;
+        logAudit(req.session.user.id, req.session.user.name, 'PORTAL_VIEW_LAB_RESULTS', 'Patient Portal',
+            `Patient #${patient_id} lab results viewed`, req.ip);
+        res.json(results);
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// GET /api/portal/medications?patient_id=X — الأدوية الحالية للمريض
+app.get('/api/portal/medications', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const { patient_id } = req.query;
+        if (!patient_id) return res.status(400).json({ error: 'patient_id required' });
+        const pOwn = (await pool.query('SELECT id FROM patients WHERE id=$1 AND tenant_id=$2', [patient_id, tenantId])).rows[0];
+        if (!pOwn) return res.status(404).json({ error: 'Patient not found' });
+        // Active prescriptions from pharmacy queue
+        const meds = (await pool.query(
+            `SELECT pq.id, pq.medication_name, pq.dosage, pq.frequency, pq.duration_days,
+                    pq.route, pq.instructions, pq.status, pq.prescribed_by, pq.prescribed_date,
+                    pq.dispensed_at, pq.dispensed_by
+             FROM pharmacy_prescriptions_queue pq
+             WHERE pq.patient_id=$1 AND pq.tenant_id=$2 AND pq.status IN ('Dispensed','Pending','Verified')
+             ORDER BY pq.prescribed_date DESC LIMIT 50`,
+            [patient_id, tenantId]
+        )).rows;
+        logAudit(req.session.user.id, req.session.user.name, 'PORTAL_VIEW_MEDICATIONS', 'Patient Portal',
+            `Patient #${patient_id} medications viewed`, req.ip);
+        res.json(meds);
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// GET /api/portal/visit-summary?patient_id=X — ملخص زيارات المريض
+app.get('/api/portal/visit-summary', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const { patient_id } = req.query;
+        if (!patient_id) return res.status(400).json({ error: 'patient_id required' });
+        const pOwn = (await pool.query('SELECT id, name_ar, name_en, file_number, dob, gender FROM patients WHERE id=$1 AND tenant_id=$2', [patient_id, tenantId])).rows[0];
+        if (!pOwn) return res.status(404).json({ error: 'Patient not found' });
+        // Recent visits/encounters
+        const visits = (await pool.query(
+            `SELECT v.id, v.visit_date, v.visit_type, v.chief_complaint, v.diagnosis, v.attending_doctor,
+                    v.department, v.status, v.discharge_date, v.discharge_summary
+             FROM visits v
+             WHERE v.patient_id=$1 AND v.tenant_id=$2
+             ORDER BY v.visit_date DESC LIMIT 20`,
+            [patient_id, tenantId]
+        )).rows;
+        // Recent admissions
+        const admissions = (await pool.query(
+            `SELECT a.id, a.admission_date, a.discharge_date, a.diagnosis, a.attending_doctor,
+                    a.ward_name, a.status, a.discharge_summary
+             FROM admissions a
+             WHERE a.patient_id=$1 AND a.tenant_id=$2
+             ORDER BY a.admission_date DESC LIMIT 10`,
+            [patient_id, tenantId]
+        )).rows;
+        logAudit(req.session.user.id, req.session.user.name, 'PORTAL_VIEW_VISIT_SUMMARY', 'Patient Portal',
+            `Patient #${patient_id} visit summary viewed`, req.ip);
+        res.json({ patient: pOwn, visits, admissions });
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// GET /api/portal/messages?patient_id=X — رسائل المريض
+app.get('/api/portal/messages', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const { patient_id } = req.query;
+        if (!patient_id) return res.status(400).json({ error: 'patient_id required' });
+        const pOwn = (await pool.query('SELECT id FROM patients WHERE id=$1 AND tenant_id=$2', [patient_id, tenantId])).rows[0];
+        if (!pOwn) return res.status(404).json({ error: 'Patient not found' });
+        const msgs = (await pool.query(
+            `SELECT pm.id, pm.sender_type, pm.sender_name, pm.subject, pm.body,
+                    pm.is_read, pm.created_at, pm.replied_at
+             FROM portal_messages pm
+             WHERE pm.patient_id=$1 AND pm.tenant_id=$2
+             ORDER BY pm.created_at DESC LIMIT 50`,
+            [patient_id, tenantId]
+        )).rows;
+        res.json(msgs);
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// POST /api/portal/messages — إرسال رسالة من المريض للطاقم
+app.post('/api/portal/messages', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId, facilityId } = getRequestTenantContext(req);
+        const { patient_id, subject, body, department } = req.body;
+        if (!patient_id || !body) return res.status(400).json({ error: 'patient_id and body required' });
+        const pOwn = (await pool.query('SELECT id FROM patients WHERE id=$1 AND tenant_id=$2', [patient_id, tenantId])).rows[0];
+        if (!pOwn) return res.status(404).json({ error: 'Patient not found' });
+        const result = await pool.query(
+            `INSERT INTO portal_messages (patient_id, sender_type, sender_name, subject, body, department, is_read, tenant_id, facility_id, created_at)
+             VALUES ($1, 'patient', (SELECT COALESCE(name_ar, name_en, 'مريض') FROM patients WHERE id=$1 AND tenant_id=$2), $3, $4, $5, false, $2, $6, NOW())
+             RETURNING id`,
+            [patient_id, tenantId, subject || 'رسالة من المريض', body, department || 'General', facilityId || null]
+        );
+        logAudit(req.session.user.id, req.session.user.name, 'PORTAL_PATIENT_MESSAGE', 'Patient Portal',
+            `Patient #${patient_id} sent message: ${(subject||'').substring(0,50)}`, req.ip);
+        res.json({ id: result.rows[0].id, success: true });
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// ===== A2: PEDIATRICS — Immunization Schedule (Saudi MOH National Immunization Program) =====
+
+// GET /api/pediatrics/immunization-schedule — جدول التطعيمات الوطني السعودي
+app.get('/api/pediatrics/immunization-schedule', requireAuth, async (req, res) => {
+    // Saudi MOH National Immunization Program 2024 — جدول التطعيمات الوطني السعودي
+    const schedule = [
+        { age: 'عند الولادة', age_en: 'Birth', vaccines: ['BCG (سل)', 'HBV1 (التهاب الكبد B الجرعة الأولى)'] },
+        { age: 'شهرين', age_en: '2 months', vaccines: ['DTaP-IPV-Hib-HBV2', 'PCV13-1', 'RV1'] },
+        { age: '4 أشهر', age_en: '4 months', vaccines: ['DTaP-IPV-Hib2', 'PCV13-2', 'RV2'] },
+        { age: '6 أشهر', age_en: '6 months', vaccines: ['DTaP-IPV-Hib-HBV3', 'PCV13-3', 'RV3 (إذا لزم)'] },
+        { age: '12 شهراً', age_en: '12 months', vaccines: ['MMR1 (حصبة نكاف حصبة ألمانية)', 'Varicella1 (جديري ماء)', 'HBV3 (إذا لم يُعطَ سابقاً)'] },
+        { age: '18 شهراً', age_en: '18 months', vaccines: ['DTaP-IPV-Hib Booster', 'PCV13 Booster', 'MMR2', 'Varicella2'] },
+        { age: '4-6 سنوات', age_en: '4-6 years', vaccines: ['DTaP-IPV Booster', 'MMR3 (إذا لزم)'] },
+        { age: '11-12 سنة', age_en: '11-12 years', vaccines: ['Tdap', 'HPV (2 جرعات)', 'MenACWY-1'] },
+        { age: '16-18 سنة', age_en: '16-18 years', vaccines: ['MenACWY Booster', 'Influenza سنوياً'] },
+        { age: 'سنوي', age_en: 'Annual', vaccines: ['Influenza (كل سنة من عمر 6 شهور)'] },
+    ];
+    res.json(schedule);
+});
+
+// GET /api/pediatrics/immunization-records/:patientId — سجلات التطعيم للمريض
+app.get('/api/pediatrics/immunization-records/:patientId', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const { patientId } = req.params;
+        const pOwn = (await pool.query('SELECT id, name_ar, dob, gender FROM patients WHERE id=$1 AND tenant_id=$2', [patientId, tenantId])).rows[0];
+        if (!pOwn) return res.status(404).json({ error: 'Patient not found' });
+        const records = (await pool.query(
+            'SELECT * FROM pediatric_immunizations WHERE patient_id=$1 AND tenant_id=$2 ORDER BY given_date DESC',
+            [patientId, tenantId]
+        )).rows;
+        res.json({ patient: pOwn, immunizations: records });
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// POST /api/pediatrics/immunization — تسجيل تطعيم جديد
+app.post('/api/pediatrics/immunization', requireAuth, requireRole('doctor', 'nursing', 'patients'), requireTenantScope, async (req, res) => {
+    try {
+        const { patient_id, vaccine_name, dose_number, given_date, batch_number, site, route, next_due, notes } = req.body;
+        const { tenantId, facilityId } = getRequestTenantContext(req);
+        if (!patient_id || !vaccine_name) return res.status(400).json({ error: 'patient_id and vaccine_name required' });
+        const pOwn = (await pool.query('SELECT id FROM patients WHERE id=$1 AND tenant_id=$2', [patient_id, tenantId])).rows[0];
+        if (!pOwn) return res.status(404).json({ error: 'Patient not found' });
+        const result = await pool.query(
+            `INSERT INTO pediatric_immunizations
+             (patient_id, vaccine_name, dose_number, given_date, batch_number, site, route, next_due, notes, given_by, tenant_id, facility_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+            [patient_id, vaccine_name, dose_number || 1, given_date || new Date().toISOString().slice(0,10),
+             batch_number || '', site || '', route || 'IM', next_due || null, notes || '',
+             req.session.user.name, tenantId, facilityId || null]
+        );
+        logAudit(req.session.user.id, req.session.user.name, 'PEDIATRIC_IMMUNIZATION', 'Pediatrics',
+            `Vaccine ${vaccine_name} given to patient #${patient_id}`, req.ip);
+        res.json({ id: result.rows[0].id, success: true });
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// GET /api/pediatrics/weight-based-dose — حاسبة الجرعة حسب الوزن
+app.get('/api/pediatrics/weight-based-dose', requireAuth, async (req, res) => {
+    const { drug, weight_kg, age_months } = req.query;
+    if (!drug || !weight_kg) return res.status(400).json({ error: 'drug and weight_kg required' });
+    const wt = parseFloat(weight_kg);
+    if (isNaN(wt) || wt <= 0 || wt > 200) return res.status(400).json({ error: 'Invalid weight' });
+    // Common pediatric dose reference (mg/kg/dose) — FOR REFERENCE ONLY, not a prescription
+    const DOSE_REF = {
+        'Paracetamol': { mg_per_kg: 15, max_dose_mg: 1000, frequency: 'Q4-6H PRN', max_daily_mg_per_kg: 90 },
+        'Ibuprofen':   { mg_per_kg: 10, max_dose_mg: 400,  frequency: 'Q6-8H PRN', max_daily_mg_per_kg: 40 },
+        'Amoxicillin': { mg_per_kg: 25, max_dose_mg: 500,  frequency: 'Q8H', max_daily_mg_per_kg: 90 },
+        'Azithromycin':{ mg_per_kg: 10, max_dose_mg: 500,  frequency: 'Once daily 5 days', max_daily_mg_per_kg: 10 },
+        'Cetirizine':  { mg_per_kg: 0.25,max_dose_mg: 10,  frequency: 'Once daily', max_daily_mg_per_kg: 0.25 },
+        'Salbutamol':  { mg_per_kg: 0.15,max_dose_mg: 5,   frequency: 'Q4-6H PRN (inhaler preferred)', max_daily_mg_per_kg: 1 },
+    };
+    const drugKey = Object.keys(DOSE_REF).find(k => k.toLowerCase() === (drug||'').toLowerCase().trim());
+    if (!drugKey) return res.json({
+        disclaimer: 'CLINICAL_DECISION_SUPPORT_ONLY — Not a prescription. Verify with pharmacist.',
+        message: `Drug "${drug}" not in reference. Please consult pharmacy formulary.`,
+        available_drugs: Object.keys(DOSE_REF)
+    });
+    const ref = DOSE_REF[drugKey];
+    const calculated_mg = +(wt * ref.mg_per_kg).toFixed(1);
+    const dose_mg = +Math.min(calculated_mg, ref.max_dose_mg).toFixed(1);
+    const max_daily = +(wt * ref.max_daily_mg_per_kg).toFixed(1);
+    res.json({
+        drug: drugKey, weight_kg: wt,
+        calculated_dose_mg: dose_mg,
+        frequency: ref.frequency,
+        max_single_dose_mg: ref.max_dose_mg,
+        max_daily_dose_mg: max_daily,
+        disclaimer: 'CLINICAL_DECISION_SUPPORT_ONLY — For physician/pharmacist reference only. Always verify with licensed pharmacist before prescribing.',
+        disclaimer_ar: 'نظام دعم القرار السريري فقط — للإشارة فقط. التحقق من الصيدلاني المرخص إلزامي قبل الوصف.'
+    });
+});
+
+// ===== A3: NURSING — Pain Assessment (NRS/VAS/FLACC) =====
+
+// POST /api/nursing/pain-assessment — تسجيل تقييم الألم
+app.post('/api/nursing/pain-assessment', requireAuth, requireRole('nursing', 'doctor'), requireTenantScope, async (req, res) => {
+    try {
+        const {
+            patient_id, patient_name, admission_id,
+            pain_scale,        // 'NRS' | 'VAS' | 'FLACC' | 'FACES'
+            pain_score,        // 0-10
+            pain_location,     // موقع الألم
+            pain_character,    // طبيعة الألم (حاد، ناري، ضاغط...)
+            pain_radiation,    // انتشار الألم
+            pain_onset,        // متى بدأ
+            pain_duration,     // المدة
+            aggravating_factors,
+            relieving_factors,
+            current_analgesia, // مسكنات حالية
+            pain_goal,         // هدف السيطرة على الألم
+            reassessment_time, // وقت إعادة التقييم
+            notes
+        } = req.body;
+        const { tenantId, facilityId } = getRequestTenantContext(req);
+        if (!patient_id) return res.status(400).json({ error: 'patient_id required' });
+        if (pain_score === undefined || pain_score === null || pain_score < 0 || pain_score > 10) {
+            return res.status(400).json({ error: 'pain_score must be 0-10' });
+        }
+        const pOwn = (await pool.query('SELECT id FROM patients WHERE id=$1 AND tenant_id=$2', [patient_id, tenantId])).rows[0];
+        if (!pOwn) return res.status(404).json({ error: 'Patient not found' });
+        const result = await pool.query(
+            `INSERT INTO nursing_pain_assessments
+             (patient_id, patient_name, admission_id, pain_scale, pain_score, pain_location,
+              pain_character, pain_radiation, pain_onset, pain_duration, aggravating_factors,
+              relieving_factors, current_analgesia, pain_goal, reassessment_time, notes,
+              assessed_by, assessed_at, tenant_id, facility_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW(),$18,$19)
+             RETURNING id`,
+            [patient_id, patient_name || '', admission_id || null,
+             pain_scale || 'NRS', parseInt(pain_score), pain_location || '',
+             pain_character || '', pain_radiation || '', pain_onset || '',
+             pain_duration || '', aggravating_factors || '',
+             relieving_factors || '', current_analgesia || '',
+             pain_goal || 3, reassessment_time || null, notes || '',
+             req.session.user.name, tenantId, facilityId || null]
+        );
+        // Critical pain alert if score >= 7
+        if (parseInt(pain_score) >= 7) {
+            await pool.query(
+                `INSERT INTO notifications (user_id, title, title_ar, body, body_ar, type, tenant_id, created_at)
+                 SELECT id, 'Critical Pain Alert', 'تنبيه ألم حاد',
+                        'Patient pain score ${pain_score}/10 — immediate attention required',
+                        'درجة ألم المريض ${pain_score}/10 — مطلوب تدخل فوري',
+                        'clinical_alert', $1, NOW()
+                 FROM system_users WHERE role IN ('doctor','nursing') AND tenant_id=$1 LIMIT 5`,
+                [tenantId]
+            ).catch(() => {}); // non-fatal
+        }
+        logAudit(req.session.user.id, req.session.user.name, 'NURSING_PAIN_ASSESSMENT', 'Nursing',
+            `Pain score ${pain_score}/10 (${pain_scale}) for patient #${patient_id}`, req.ip);
+        res.json({ id: result.rows[0].id, pain_score, critical: parseInt(pain_score) >= 7, success: true });
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// GET /api/nursing/pain-history/:patientId — تاريخ الألم للمريض
+app.get('/api/nursing/pain-history/:patientId', requireAuth, requireRole('nursing', 'doctor'), requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const pOwn = (await pool.query('SELECT id FROM patients WHERE id=$1 AND tenant_id=$2', [req.params.patientId, tenantId])).rows[0];
+        if (!pOwn) return res.status(404).json({ error: 'Patient not found' });
+        const records = (await pool.query(
+            `SELECT * FROM nursing_pain_assessments WHERE patient_id=$1 AND tenant_id=$2
+             ORDER BY assessed_at DESC LIMIT 50`,
+            [req.params.patientId, tenantId]
+        )).rows;
+        res.json(records);
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// ===== A4: ICU DAILY GOALS CHECKLIST (CBAHI Requirement) =====
+
+// POST /api/icu/daily-goals — تسجيل أهداف اليوم للمريض ICU
+app.post('/api/icu/daily-goals', requireAuth, requireRole('icu', 'doctor', 'nursing'), requireTenantScope, async (req, res) => {
+    try {
+        const {
+            admission_id, patient_id, patient_name, goal_date,
+            // Ventilator goals
+            vent_goal_fio2, vent_goal_peep, vent_goal_tv, vent_wean_plan,
+            // Sedation / Analgesia
+            sedation_target_rass,   // Target RASS score (-2 to 0 typically)
+            daily_sat,              // Daily Sedation Awakening Trial (SAT)
+            daily_sbt,              // Daily Spontaneous Breathing Trial (SBT)
+            pain_goal_nrs,          // Pain target (NRS)
+            delirium_cam_icu,       // CAM-ICU assessment
+            // DVT / VTE Prevention
+            dvt_prophylaxis,        // هيبارين / ضغط ميكانيكي
+            stress_ulcer_prophy,    // PPI / H2 blocker
+            // Nutrition
+            nutrition_route,        // PO / NG / TPN
+            caloric_goal_kcal,
+            protein_goal_g,
+            // Infection / Lines
+            line_necessity_reviewed, // هل مراجعة ضرورة الكاتيتر
+            foley_necessity_reviewed,
+            oral_care_done,         // VAP prevention
+            hob_elevation,          // رأس السرير 30-45 درجة
+            // Mobility
+            mobility_goal,          // Sitting / Standing / Ambulate
+            // Family
+            family_update_done,
+            // Daily goals text
+            medical_goals, nursing_goals, goals_discussed_with_team,
+            notes
+        } = req.body;
+        const { tenantId, facilityId } = getRequestTenantContext(req);
+        if (!admission_id || !patient_id) return res.status(400).json({ error: 'admission_id and patient_id required' });
+        // Verify admission belongs to tenant
+        const admCheck = (await pool.query('SELECT id FROM admissions WHERE id=$1 AND tenant_id=$2', [admission_id, tenantId])).rows[0];
+        if (!admCheck) return res.status(404).json({ error: 'Admission not found' });
+        const today = goal_date || new Date().toISOString().slice(0,10);
+        // Upsert: one record per admission per day
+        const existing = (await pool.query(
+            'SELECT id FROM icu_daily_goals WHERE admission_id=$1 AND goal_date=$2 AND tenant_id=$3',
+            [admission_id, today, tenantId]
+        )).rows[0];
+        let result;
+        if (existing) {
+            result = await pool.query(
+                `UPDATE icu_daily_goals SET
+                 patient_name=$1, vent_goal_fio2=$2, vent_goal_peep=$3, vent_goal_tv=$4, vent_wean_plan=$5,
+                 sedation_target_rass=$6, daily_sat=$7, daily_sbt=$8, pain_goal_nrs=$9, delirium_cam_icu=$10,
+                 dvt_prophylaxis=$11, stress_ulcer_prophy=$12, nutrition_route=$13, caloric_goal_kcal=$14,
+                 protein_goal_g=$15, line_necessity_reviewed=$16, foley_necessity_reviewed=$17,
+                 oral_care_done=$18, hob_elevation=$19, mobility_goal=$20, family_update_done=$21,
+                 medical_goals=$22, nursing_goals=$23, goals_discussed_with_team=$24, notes=$25,
+                 updated_by=$26, updated_at=NOW()
+                 WHERE id=$27 RETURNING id`,
+                [patient_name||'', vent_goal_fio2||null, vent_goal_peep||null, vent_goal_tv||null, vent_wean_plan||'',
+                 sedation_target_rass||null, daily_sat||false, daily_sbt||false, pain_goal_nrs||3, delirium_cam_icu||'',
+                 dvt_prophylaxis||'', stress_ulcer_prophy||'', nutrition_route||'', caloric_goal_kcal||null,
+                 protein_goal_g||null, line_necessity_reviewed||false, foley_necessity_reviewed||false,
+                 oral_care_done||false, hob_elevation||true, mobility_goal||'', family_update_done||false,
+                 medical_goals||'', nursing_goals||'', goals_discussed_with_team||false, notes||'',
+                 req.session.user.name, existing.id]
+            );
+        } else {
+            result = await pool.query(
+                `INSERT INTO icu_daily_goals
+                 (admission_id, patient_id, patient_name, goal_date,
+                  vent_goal_fio2, vent_goal_peep, vent_goal_tv, vent_wean_plan,
+                  sedation_target_rass, daily_sat, daily_sbt, pain_goal_nrs, delirium_cam_icu,
+                  dvt_prophylaxis, stress_ulcer_prophy, nutrition_route, caloric_goal_kcal, protein_goal_g,
+                  line_necessity_reviewed, foley_necessity_reviewed, oral_care_done, hob_elevation,
+                  mobility_goal, family_update_done, medical_goals, nursing_goals,
+                  goals_discussed_with_team, notes, created_by, tenant_id, facility_id)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31)
+                 RETURNING id`,
+                [admission_id, patient_id, patient_name||'', today,
+                 vent_goal_fio2||null, vent_goal_peep||null, vent_goal_tv||null, vent_wean_plan||'',
+                 sedation_target_rass||null, daily_sat||false, daily_sbt||false, pain_goal_nrs||3, delirium_cam_icu||'',
+                 dvt_prophylaxis||'', stress_ulcer_prophy||'', nutrition_route||'', caloric_goal_kcal||null,
+                 protein_goal_g||null, line_necessity_reviewed||false, foley_necessity_reviewed||false,
+                 oral_care_done||false, hob_elevation||true, mobility_goal||'', family_update_done||false,
+                 medical_goals||'', nursing_goals||'', goals_discussed_with_team||false, notes||'',
+                 req.session.user.name, tenantId, facilityId||null]
+            );
+        }
+        logAudit(req.session.user.id, req.session.user.name, 'ICU_DAILY_GOALS', 'ICU',
+            `Daily goals ${existing?'updated':'created'} for admission #${admission_id} date ${today}`, req.ip);
+        res.json({ id: result.rows[0].id, date: today, upserted: !!existing, success: true });
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// GET /api/icu/daily-goals/:admissionId — استرجاع أهداف اليوم
+app.get('/api/icu/daily-goals/:admissionId', requireAuth, requireRole('icu', 'doctor', 'nursing'), requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const { date } = req.query;
+        const admCheck = (await pool.query('SELECT id FROM admissions WHERE id=$1 AND tenant_id=$2', [req.params.admissionId, tenantId])).rows[0];
+        if (!admCheck) return res.status(404).json({ error: 'Admission not found' });
+        let q = 'SELECT * FROM icu_daily_goals WHERE admission_id=$1 AND tenant_id=$2';
+        const params = [req.params.admissionId, tenantId];
+        if (date) { q += ' AND goal_date=$3'; params.push(date); }
+        q += ' ORDER BY goal_date DESC LIMIT 30';
+        const records = (await pool.query(q, params)).rows;
+        res.json(records);
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
 // ===== ZATCA E-INVOICING =====
 // ===== E10 ZATCA PHASE-2 E-INVOICE (tenant-scoped, role-gated; clearance GATED off) =====
 // generate => deterministic UBL 2.1 XML + TLV base64 QR + stamp PLACEHOLDER (no CSID => no real stamp).
@@ -16355,6 +16759,516 @@ app.post('/api/billing/webhooks/stripe', async (req, res) => {
         console.error('[Stripe Webhook Error]', e.message);
         res.status(500).json({ error: 'Server error' });
     }
+});
+
+
+// ===== PHASE B: SAUDI COMPLIANCE (B1: NPHIES Remittance, B2: ZATCA Credit Notes, B3: HR Saudi) =====
+
+// ─── B1: NPHIES REMITTANCE ADVICE ───────────────────────────────────────────
+// GET /api/nphies/remittance — list remittance advice records
+app.get('/api/nphies/remittance', requireAuth, requireRole('finance', 'accounts', 'insurance'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { claim_id, status, page = 1, limit = 50 } = req.query;
+        let q = 'SELECT r.*, ic.claim_number, ic.patient_name FROM nphies_remittance_advice r LEFT JOIN insurance_claims ic ON r.claim_id=ic.id WHERE r.tenant_id=$1';
+        const params = [tid];
+        if (claim_id) { params.push(parseInt(claim_id)); q += ` AND r.claim_id=$${params.length}`; }
+        if (status) { params.push(status); q += ` AND r.adjudication_status=$${params.length}`; }
+        q += ` ORDER BY r.remittance_date DESC LIMIT ${Math.min(parseInt(limit)||50,200)} OFFSET ${(Math.max(parseInt(page)||1,1)-1)*(Math.min(parseInt(limit)||50,200))}`;
+        const rows = await pool.query(q, params);
+        res.json(rows.rows);
+    } catch (e) { console.error(e); res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/nphies/remittance — record a remittance advice (manual or from NPHIES response)
+app.post('/api/nphies/remittance', requireAuth, requireRole('finance', 'accounts', 'insurance'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { claim_id, payer_id, remittance_date, payment_amount = 0, adjustment_amount = 0,
+                denial_amount = 0, payment_date, payment_reference, adjudication_status = 'pending',
+                denial_reason, fhir_bundle_id } = req.body;
+        if (!claim_id) return res.status(400).json({ error: 'claim_id required' });
+        // IDOR: verify claim belongs to tenant
+        const claimCheck = await pool.query('SELECT id FROM insurance_claims WHERE id=$1 AND tenant_id=$2', [parseInt(claim_id), tid]);
+        if (!claimCheck.rows.length) return res.status(403).json({ error: 'Claim not found or access denied' });
+        const r = await pool.query(
+            `INSERT INTO nphies_remittance_advice (claim_id, payer_id, remittance_date, fhir_bundle_id, payment_amount,
+             adjustment_amount, denial_amount, payment_date, payment_reference, adjudication_status, denial_reason, tenant_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+            [parseInt(claim_id), payer_id||null, remittance_date||new Date().toISOString().slice(0,10),
+             fhir_bundle_id||'', parseFloat(payment_amount)||0, parseFloat(adjustment_amount)||0,
+             parseFloat(denial_amount)||0, payment_date||null, payment_reference||'',
+             adjudication_status, denial_reason||'', tid]
+        );
+        logAudit(req.session.user.id, req.session.user.display_name, 'NPHIES_RA_CREATE', 'NPHIES', `Remittance RA#${r.rows[0].id} for Claim#${claim_id}`, tid);
+        res.json({ success: true, remittance: r.rows[0] });
+    } catch (e) { console.error(e); res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/nphies/remittance/:id/post-to-ar — post remittance to AR (Accounts Receivable)
+app.post('/api/nphies/remittance/:id/post-to-ar', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const id = parseInt(req.params.id);
+        const ra = (await pool.query('SELECT * FROM nphies_remittance_advice WHERE id=$1 AND tenant_id=$2', [id, tid])).rows[0];
+        if (!ra) return res.status(404).json({ error: 'Remittance not found' });
+        if (ra.posted_to_gl) return res.status(409).json({ error: 'Already posted to GL/AR' });
+        // Mark posted
+        await pool.query('UPDATE nphies_remittance_advice SET posted_to_gl=TRUE, posted_at=NOW(), posted_by=$1 WHERE id=$2 AND tenant_id=$3',
+            [req.session.user.display_name, id, tid]);
+        // Update claim payment status
+        if (ra.claim_id) {
+            await pool.query("UPDATE insurance_claims SET payment_status='Paid', paid_amount=$1, payment_date=$2 WHERE id=$3 AND tenant_id=$4",
+                [ra.payment_amount, ra.payment_date||new Date().toISOString().slice(0,10), ra.claim_id, tid]);
+        }
+        logAudit(req.session.user.id, req.session.user.display_name, 'NPHIES_RA_POST_AR', 'NPHIES', `RA#${id} posted to AR, Claim#${ra.claim_id} paid SAR${ra.payment_amount}`, tid);
+        res.json({ success: true, message: 'Remittance posted to AR successfully' });
+    } catch (e) { console.error(e); res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/nphies/claim-status-inquiry — FHIR Task-based claim status inquiry (gated)
+app.post('/api/nphies/claim-status-inquiry', requireAuth, requireRole('finance', 'accounts', 'insurance'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { claim_id } = req.body;
+        if (!claim_id) return res.status(400).json({ error: 'claim_id required' });
+        const claimCheck = await pool.query('SELECT * FROM insurance_claims WHERE id=$1 AND tenant_id=$2', [parseInt(claim_id), tid]);
+        if (!claimCheck.rows.length) return res.status(403).json({ error: 'Claim not found or access denied' });
+        const claim = claimCheck.rows[0];
+        // Build FHIR Task bundle (Status Inquiry)
+        const taskBundle = {
+            resourceType: 'Bundle', type: 'message',
+            entry: [{
+                resource: {
+                    resourceType: 'Task', status: 'requested',
+                    intent: 'order', code: { coding: [{ system: 'http://nphies.sa/CodeSystem/task-code', code: 'status-check' }] },
+                    focus: { reference: `Claim/${claim.nphies_claim_id || claim.id}` },
+                    for: { identifier: { system: 'https://nphies.sa/national-id', value: claim.national_id || '' } },
+                    authoredOn: new Date().toISOString()
+                }
+            }]
+        };
+        // Log inquiry
+        const r = await pool.query(
+            `INSERT INTO nphies_claim_status_inquiry (claim_id, fhir_task_id, nphies_request_json, tenant_id)
+             VALUES ($1,$2,$3,$4) RETURNING id`,
+            [parseInt(claim_id), `task-${Date.now()}`, JSON.stringify(taskBundle), tid]
+        );
+        // GATED: if NPHIES disabled, return stub
+        if (!e11NphiesEnabled()) {
+            await pool.query("UPDATE nphies_claim_status_inquiry SET status_code='GATED', status_description='NPHIES integration disabled - inquiry recorded' WHERE id=$1", [r.rows[0].id]);
+            logAudit(req.session.user.id, req.session.user.display_name, 'NPHIES_STATUS_INQUIRY_GATED', 'NPHIES', `Claim#${claim_id} status inquiry gated`, tid);
+            return res.status(503).json({ gated: true, inquiry_id: r.rows[0].id, fhir_bundle: taskBundle, message: 'NPHIES disabled – inquiry logged' });
+        }
+        // Real NPHIES call (when enabled)
+        logAudit(req.session.user.id, req.session.user.display_name, 'NPHIES_STATUS_INQUIRY', 'NPHIES', `Claim#${claim_id} status inquiry sent`, tid);
+        res.json({ success: true, inquiry_id: r.rows[0].id, fhir_bundle: taskBundle });
+    } catch (e) { console.error(e); res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/nphies/remittance/summary — dashboard summary
+app.get('/api/nphies/remittance/summary', requireAuth, requireRole('finance', 'accounts', 'insurance'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const r = await pool.query(`
+            SELECT
+                COUNT(*) total_records,
+                COALESCE(SUM(payment_amount),0) total_paid,
+                COALESCE(SUM(adjustment_amount),0) total_adjusted,
+                COALESCE(SUM(denial_amount),0) total_denied,
+                COUNT(*) FILTER (WHERE adjudication_status='approved') approved_count,
+                COUNT(*) FILTER (WHERE adjudication_status='denied') denied_count,
+                COUNT(*) FILTER (WHERE adjudication_status='pending') pending_count,
+                COUNT(*) FILTER (WHERE posted_to_gl=FALSE AND adjudication_status='approved') unposted_approved
+            FROM nphies_remittance_advice WHERE tenant_id=$1`, [tid]);
+        res.json(r.rows[0]);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── B2: ZATCA CREDIT NOTES ─────────────────────────────────────────────────
+const ZATCA_CREDIT_REASON_CODES = {
+    'CANCEL': 'Cancellation of invoice',
+    'RETURN': 'Return of goods/services',
+    'DISCOUNT': 'Discount adjustment',
+    'ERROR': 'Correction of billing error',
+    'OVERPAY': 'Overpayment correction'
+};
+
+// GET /api/zatca/credit-notes — list credit notes
+app.get('/api/zatca/credit-notes', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const rows = await pool.query(
+            `SELECT cn.*, zi.invoice_number as original_invoice_number
+             FROM zatca_credit_notes cn
+             LEFT JOIN zatca_invoices zi ON cn.original_invoice_id=zi.id
+             WHERE cn.tenant_id=$1 ORDER BY cn.created_at DESC LIMIT 200`, [tid]);
+        res.json(rows.rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/zatca/credit-note — generate credit note for an invoice
+app.post('/api/zatca/credit-note', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { invoice_id, credit_reason = 'CANCEL', credit_reason_description, items_to_credit } = req.body;
+        if (!invoice_id) return res.status(400).json({ error: 'invoice_id required' });
+        // IDOR: verify invoice belongs to tenant
+        const inv = (await pool.query('SELECT * FROM zatca_invoices WHERE invoice_id=$1 AND tenant_id=$2', [parseInt(invoice_id), tid])).rows[0]
+                 || (await pool.query('SELECT * FROM zatca_invoices WHERE id=$1 AND tenant_id=$2', [parseInt(invoice_id), tid])).rows[0];
+        if (!inv) return res.status(403).json({ error: 'Invoice not found or access denied' });
+        // Get last credit note for chaining
+        const lastCN = (await pool.query('SELECT * FROM zatca_credit_notes WHERE tenant_id=$1 ORDER BY invoice_counter DESC LIMIT 1', [tid])).rows[0];
+        const lastInv = (await pool.query('SELECT * FROM zatca_invoices WHERE tenant_id=$1 ORDER BY id DESC LIMIT 1', [tid])).rows[0];
+        const prevHash = lastCN?.xml_hash || lastInv?.xml_hash || '';
+        const counter = (lastCN?.invoice_counter || 0) + 1;
+        // Credit note values — full invoice or partial
+        const subtotal = parseFloat(inv.total_amount || inv.subtotal || 0);
+        const vat_amount = parseFloat(inv.vat_amount || 0);
+        const total_with_vat = subtotal + vat_amount;
+        // Credit note number: CN-{year}-{counter}
+        const cn_number = `CN-${new Date().getFullYear()}-${String(counter).padStart(4,'0')}`;
+        // Build minimal UBL XML for credit note
+        const now = new Date().toISOString();
+        const ubl_xml = `<?xml version="1.0" encoding="UTF-8"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2"
+         xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+         xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:ProfileID>reporting:1.0</cbc:ProfileID>
+  <cbc:ID>${escapeHtml(cn_number)}</cbc:ID>
+  <cbc:UUID>${cn_number}-${Date.now()}</cbc:UUID>
+  <cbc:IssueDate>${now.slice(0,10)}</cbc:IssueDate>
+  <cbc:IssueTime>${now.slice(11,19)}</cbc:IssueTime>
+  <cbc:CreditNoteTypeCode>381</cbc:CreditNoteTypeCode>
+  <cbc:Note>${escapeHtml(credit_reason_description || ZATCA_CREDIT_REASON_CODES[credit_reason] || credit_reason)}</cbc:Note>
+  <cac:BillingReference><cac:InvoiceDocumentReference><cbc:ID>${escapeHtml(inv.invoice_number||String(inv.id))}</cbc:ID></cac:InvoiceDocumentReference></cac:BillingReference>
+  <cac:TaxTotal><cbc:TaxAmount currencyID="SAR">${vat_amount.toFixed(2)}</cbc:TaxAmount></cac:TaxTotal>
+  <cac:LegalMonetaryTotal>
+    <cbc:TaxExclusiveAmount currencyID="SAR">${subtotal.toFixed(2)}</cbc:TaxExclusiveAmount>
+    <cbc:TaxInclusiveAmount currencyID="SAR">${total_with_vat.toFixed(2)}</cbc:TaxInclusiveAmount>
+  </cac:LegalMonetaryTotal>
+</Invoice>`;
+        // Hash the XML (SHA-256)
+        const crypto = require('crypto');
+        const xml_hash = crypto.createHash('sha256').update(ubl_xml).digest('base64');
+        // Build QR (TLV for Phase 2)
+        let qr_code = '';
+        try {
+            const fe = require('./finance_engine');
+            qr_code = fe.buildZatcaQR({ seller_name: 'Nama Medical', vat_number: '300000000000003',
+                timestamp: now, total_with_vat, vat_amount, xml_hash, prev_hash: prevHash }) || '';
+        } catch (_) {}
+        const r = await pool.query(
+            `INSERT INTO zatca_credit_notes (original_invoice_id, credit_note_number, buyer_name, buyer_vat,
+             credit_reason, credit_reason_code, subtotal, vat_amount, total_with_vat, ubl_xml, xml_hash,
+             qr_code, invoice_counter, prev_invoice_hash, tenant_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+            [inv.id, cn_number, inv.buyer_name||'', inv.buyer_vat||'',
+             credit_reason_description || ZATCA_CREDIT_REASON_CODES[credit_reason] || credit_reason,
+             credit_reason, subtotal, vat_amount, total_with_vat, ubl_xml, xml_hash,
+             qr_code, counter, prevHash, tid]
+        );
+        logAudit(req.session.user.id, req.session.user.display_name, 'ZATCA_CN_GENERATE', 'ZATCA', `Credit note ${cn_number} generated for invoice ${inv.invoice_number||inv.id}`, tid);
+        res.json({ success: true, credit_note: r.rows[0] });
+    } catch (e) { console.error(e); res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/zatca/credit-note/:id/submit — submit credit note to ZATCA (gated)
+app.post('/api/zatca/credit-note/:id/submit', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const id = parseInt(req.params.id);
+        const cn = (await pool.query('SELECT * FROM zatca_credit_notes WHERE id=$1 AND tenant_id=$2', [id, tid])).rows[0];
+        if (!cn) return res.status(404).json({ error: 'Credit note not found' });
+        // GATED: if ZATCA disabled, record intent
+        const settings = (await pool.query("SELECT * FROM integration_settings WHERE tenant_id=$1 AND integration_name='ZATCA'", [tid])).rows[0];
+        const isEnabled = e10ZatcaEnabled() && settings?.is_enabled === 1 && settings?.api_key;
+        if (!isEnabled) {
+            await pool.query("UPDATE zatca_credit_notes SET clearance_status='RECORDED', submission_status='Submitted_Mock' WHERE id=$1 AND tenant_id=$2", [id, tid]);
+            logAudit(req.session.user.id, req.session.user.display_name, 'ZATCA_CN_SUBMIT_GATED', 'ZATCA', `Credit note ${cn.credit_note_number} submission intent recorded`, tid);
+            return res.status(503).json({ gated: true, clearance_status: 'RECORDED', message: 'ZATCA clearance gated – intent recorded' });
+        }
+        logAudit(req.session.user.id, req.session.user.display_name, 'ZATCA_CN_SUBMIT', 'ZATCA', `Credit note ${cn.credit_note_number} submitted to ZATCA`, tid);
+        res.json({ success: true, message: 'Credit note submitted to ZATCA' });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/zatca/invoice-chain — verify hash chain integrity
+app.get('/api/zatca/invoice-chain', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const invoices = (await pool.query('SELECT id, invoice_number, xml_hash, prev_invoice_hash, invoice_counter FROM zatca_invoices WHERE tenant_id=$1 ORDER BY invoice_counter ASC NULLS LAST', [tid])).rows;
+        const creditNotes = (await pool.query('SELECT id, credit_note_number as invoice_number, xml_hash, prev_invoice_hash, invoice_counter FROM zatca_credit_notes WHERE tenant_id=$1 ORDER BY invoice_counter ASC', [tid])).rows;
+        // Verify chain integrity
+        let chain_valid = true;
+        const chain_issues = [];
+        for (let i = 1; i < invoices.length; i++) {
+            if (invoices[i].prev_invoice_hash && invoices[i-1].xml_hash &&
+                invoices[i].prev_invoice_hash !== invoices[i-1].xml_hash) {
+                chain_valid = false;
+                chain_issues.push(`Invoice #${invoices[i].invoice_number}: hash chain break at position ${i}`);
+            }
+        }
+        res.json({ chain_valid, chain_issues, total_invoices: invoices.length, total_credit_notes: creditNotes.length, invoices: invoices.slice(-20), credit_notes: creditNotes });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── B3a: HR CREDENTIALING & PRIVILEGING ────────────────────────────────────
+// GET /api/hr/credentialing — list credentials
+app.get('/api/hr/credentialing', requireAuth, requireRole('hr', 'admin'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { employee_id, status, expiring_days } = req.query;
+        let q = 'SELECT c.*, e.full_name, e.specialization FROM hr_credentialing c LEFT JOIN hr_employees e ON c.employee_id=e.id WHERE c.tenant_id=$1';
+        const params = [tid];
+        if (employee_id) { params.push(parseInt(employee_id)); q += ` AND c.employee_id=$${params.length}`; }
+        if (status) { params.push(status); q += ` AND c.verification_status=$${params.length}`; }
+        if (expiring_days) {
+            const days = parseInt(expiring_days) || 30;
+            q += ` AND c.expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '${days} days'`;
+        }
+        q += ' ORDER BY c.expiry_date ASC NULLS LAST';
+        const rows = await pool.query(q, params);
+        res.json(rows.rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/hr/credentialing/alerts — expiring soon
+app.get('/api/hr/credentialing/alerts', requireAuth, requireRole('hr', 'admin'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const rows = await pool.query(`
+            SELECT c.*, e.full_name, e.email
+            FROM hr_credentialing c
+            LEFT JOIN hr_employees e ON c.employee_id=e.id
+            WHERE c.tenant_id=$1 AND c.is_active=TRUE
+              AND c.expiry_date IS NOT NULL
+              AND c.expiry_date <= CURRENT_DATE + INTERVAL '30 days'
+            ORDER BY c.expiry_date ASC`, [tid]);
+        // Mark alert_sent_7d / alert_sent_30d
+        const expiring7 = rows.rows.filter(r => new Date(r.expiry_date) <= new Date(Date.now() + 7*86400000));
+        const expiring30 = rows.rows.filter(r => new Date(r.expiry_date) <= new Date(Date.now() + 30*86400000));
+        res.json({ total: rows.rows.length, expiring_7_days: expiring7.length, expiring_30_days: expiring30.length, credentials: rows.rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/hr/credentialing — add credential
+app.post('/api/hr/credentialing', requireAuth, requireRole('hr', 'admin'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { employee_id, credential_type, credential_number, issuing_body, issue_date, expiry_date,
+                privilege_area, privilege_level = 'Full', notes, document_url } = req.body;
+        if (!employee_id || !credential_number) return res.status(400).json({ error: 'employee_id and credential_number required' });
+        // IDOR: verify employee belongs to tenant
+        const emp = (await pool.query('SELECT id, full_name FROM hr_employees WHERE id=$1 AND tenant_id=$2', [parseInt(employee_id), tid])).rows[0];
+        if (!emp) return res.status(403).json({ error: 'Employee not found or access denied' });
+        const r = await pool.query(
+            `INSERT INTO hr_credentialing (employee_id, employee_name, credential_type, credential_number,
+             issuing_body, issue_date, expiry_date, privilege_area, privilege_level, notes, document_url, tenant_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+            [parseInt(employee_id), emp.full_name, credential_type||'Medical License', credential_number,
+             issuing_body||'', issue_date||null, expiry_date||null, privilege_area||'', privilege_level,
+             notes||'', document_url||'', tid]
+        );
+        logAudit(req.session.user.id, req.session.user.display_name, 'HR_CRED_ADD', 'HR', `Credential ${credential_number} added for ${emp.full_name}`, tid);
+        res.json({ success: true, credential: r.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/hr/credentialing/:id/verify — verify credential
+app.put('/api/hr/credentialing/:id/verify', requireAuth, requireRole('hr', 'admin'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const id = parseInt(req.params.id);
+        const { verification_status = 'verified' } = req.body;
+        const r = await pool.query(
+            'UPDATE hr_credentialing SET verification_status=$1, verified_by=$2, verified_at=NOW() WHERE id=$3 AND tenant_id=$4 RETURNING *',
+            [verification_status, req.session.user.display_name, id, tid]);
+        if (!r.rows.length) return res.status(404).json({ error: 'Credential not found' });
+        logAudit(req.session.user.id, req.session.user.display_name, 'HR_CRED_VERIFY', 'HR', `Credential #${id} marked ${verification_status}`, tid);
+        res.json({ success: true, credential: r.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── B3b: GOSI INTEGRATION ──────────────────────────────────────────────────
+// GET /api/hr/gosi — list GOSI records
+app.get('/api/hr/gosi', requireAuth, requireRole('hr', 'finance'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { month_year } = req.query;
+        let q = 'SELECT g.*, e.full_name, e.national_id as emp_national_id FROM hr_gosi_records g LEFT JOIN hr_employees e ON g.employee_id=e.id WHERE g.tenant_id=$1';
+        const params = [tid];
+        if (month_year) { params.push(month_year); q += ` AND g.month_year=$${params.length}`; }
+        q += ' ORDER BY g.month_year DESC, g.employee_name ASC';
+        res.json((await pool.query(q, params)).rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/hr/gosi/calculate — calculate GOSI contributions for a month
+app.post('/api/hr/gosi/calculate', requireAuth, requireRole('hr', 'finance'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { month_year } = req.body; // e.g. '2026-07-01'
+        if (!month_year) return res.status(400).json({ error: 'month_year required (YYYY-MM-01)' });
+        // Get all active employees
+        const emps = (await pool.query(`
+            SELECT e.id, e.full_name, e.nationality, e.national_id, e.iqama_number,
+                   COALESCE(s.basic_salary, e.basic_salary, 0) basic_salary
+            FROM hr_employees e
+            LEFT JOIN hr_salaries s ON s.employee_id=e.id AND s.is_current=TRUE
+            WHERE e.tenant_id=$1 AND e.employment_status='Active'`, [tid])).rows;
+        const results = [];
+        for (const emp of emps) {
+            const is_saudi = /saudi|سعودي/i.test(emp.nationality || '');
+            const basic = parseFloat(emp.basic_salary) || 0;
+            // GOSI 2024 rates:
+            // Saudi: Employee 9.75% (pension) + Employer 12% (pension 9% + OH 1% + unemployment 2%)
+            // Non-Saudi: Employee 0% + Employer 2% (occupational hazard only)
+            const emp_pct = is_saudi ? 9.75 : 0;
+            const empl_pct = is_saudi ? 12.00 : 2.00;
+            const emp_contribution = Math.round((basic * emp_pct / 100) * 100) / 100;
+            const empl_contribution = Math.round((basic * empl_pct / 100) * 100) / 100;
+            const total = emp_contribution + empl_contribution;
+            // Upsert
+            const r = await pool.query(
+                `INSERT INTO hr_gosi_records (employee_id, employee_name, national_id, iqama_number, nationality,
+                 is_saudi, basic_salary, gosi_base_salary, employee_share_pct, employer_share_pct,
+                 employee_contribution, employer_contribution, total_contribution, month_year, tenant_id)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$7,$8,$9,$10,$11,$12,$13,$14)
+                 ON CONFLICT (employee_id, month_year, tenant_id)
+                 DO UPDATE SET employee_contribution=$10, employer_contribution=$11, total_contribution=$12
+                 RETURNING *`,
+                [emp.id, emp.full_name, emp.national_id||'', emp.iqama_number||'', emp.nationality||'',
+                 is_saudi, basic, emp_pct, empl_pct, emp_contribution, empl_contribution, total, month_year, tid]
+            );
+            results.push(r.rows[0]);
+        }
+        const totalContrib = results.reduce((s, r) => s + parseFloat(r.total_contribution), 0);
+        logAudit(req.session.user.id, req.session.user.display_name, 'GOSI_CALCULATE', 'HR', `GOSI calculated for ${month_year}: ${results.length} employees, SAR ${totalContrib.toFixed(2)} total`, tid);
+        res.json({ success: true, month_year, employee_count: results.length, total_contributions: totalContrib.toFixed(2), records: results });
+    } catch (e) { console.error(e); res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/hr/gosi/summary/:month — monthly GOSI summary
+app.get('/api/hr/gosi/summary/:month', requireAuth, requireRole('hr', 'finance'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const r = await pool.query(`
+            SELECT COUNT(*) total_employees,
+                   COUNT(*) FILTER (WHERE is_saudi=TRUE) saudi_employees,
+                   COUNT(*) FILTER (WHERE is_saudi=FALSE) non_saudi_employees,
+                   COALESCE(SUM(employee_contribution),0) total_employee_share,
+                   COALESCE(SUM(employer_contribution),0) total_employer_share,
+                   COALESCE(SUM(total_contribution),0) grand_total,
+                   COALESCE(SUM(basic_salary),0) total_payroll_base
+            FROM hr_gosi_records WHERE tenant_id=$1 AND month_year=$2`, [tid, req.params.month]);
+        res.json(r.rows[0]);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── B3c: WPS — WAGE PROTECTION SYSTEM ─────────────────────────────────────
+// GET /api/hr/wps — list WPS files
+app.get('/api/hr/wps', requireAuth, requireRole('hr', 'finance'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        res.json((await pool.query('SELECT * FROM hr_wps_files WHERE tenant_id=$1 ORDER BY payroll_month DESC LIMIT 24', [tid])).rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/hr/wps/generate — generate SIF file for a payroll month
+app.post('/api/hr/wps/generate', requireAuth, requireRole('hr', 'finance'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { payroll_month, bank_code = 'RIBL', entity_id } = req.body;
+        if (!payroll_month) return res.status(400).json({ error: 'payroll_month required' });
+        // Get payroll slips for the month
+        const slips = (await pool.query(`
+            SELECT ps.*, e.national_id, e.iqama_number, e.bank_account_number, e.nationality
+            FROM hr_payroll_slips ps
+            LEFT JOIN hr_employees e ON ps.employee_id=e.id
+            WHERE ps.tenant_id=$1 AND DATE_TRUNC('month', ps.pay_date)=DATE_TRUNC('month',$2::date)
+              AND ps.status='Approved'
+            ORDER BY e.full_name`, [tid, payroll_month])).rows;
+        if (!slips.length) return res.status(400).json({ error: `No approved payroll slips for ${payroll_month}` });
+        // Build SIF (Salary Information File) — MOL WPS format
+        const sifHeader = `EMP|${entity_id||tid}|${payroll_month.slice(0,7)}|${slips.length}|${slips.reduce((s,r)=>s+parseFloat(r.net_salary||0),0).toFixed(2)}|SAR`;
+        const sifLines = slips.map((s, i) => {
+            const accountId = s.iqama_number || s.national_id || `EMP${s.employee_id}`;
+            const netSalary = parseFloat(s.net_salary || 0).toFixed(2);
+            return `SLR|${String(i+1).padStart(4,'0')}|${accountId}|${s.bank_account_number||''}|${bank_code}|SAR|${netSalary}|${payroll_month.slice(0,10)}|REG`;
+        });
+        const sifContent = [sifHeader, ...sifLines].join('\n');
+        const totalWages = slips.reduce((s,r) => s + parseFloat(r.net_salary||0), 0);
+        const fileRef = `WPS-${tid}-${payroll_month.slice(0,7)}-${Date.now().toString(36).toUpperCase()}`;
+        const r = await pool.query(
+            `INSERT INTO hr_wps_files (file_reference, payroll_month, total_employees, total_wages, sif_content, bank_code, entity_id, created_by, tenant_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+             ON CONFLICT (payroll_month, tenant_id) DO UPDATE SET sif_content=$5, total_employees=$3, total_wages=$4, file_reference=$1
+             RETURNING *`,
+            [fileRef, payroll_month, slips.length, totalWages.toFixed(2), sifContent, bank_code, entity_id||String(tid), req.session.user.display_name, tid]
+        );
+        logAudit(req.session.user.id, req.session.user.display_name, 'WPS_GENERATE', 'HR', `WPS SIF generated for ${payroll_month}: ${slips.length} employees, SAR ${totalWages.toFixed(2)}`, tid);
+        res.json({ success: true, wps_file: r.rows[0], preview: sifContent.split('\n').slice(0,3) });
+    } catch (e) { console.error(e); res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/hr/wps/:id/submit — mark WPS file as submitted
+app.put('/api/hr/wps/:id/submit', requireAuth, requireRole('hr', 'finance'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const id = parseInt(req.params.id);
+        const r = await pool.query(
+            "UPDATE hr_wps_files SET submission_status='submitted', submitted_at=NOW(), mol_reference=$1 WHERE id=$2 AND tenant_id=$3 RETURNING *",
+            [req.body.mol_reference||'', id, tid]);
+        if (!r.rows.length) return res.status(404).json({ error: 'WPS file not found' });
+        logAudit(req.session.user.id, req.session.user.display_name, 'WPS_SUBMIT', 'HR', `WPS file #${id} submitted to MOL`, tid);
+        res.json({ success: true, wps_file: r.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── B3d: NITAQAT / SAUDIZATION ─────────────────────────────────────────────
+// GET /api/hr/nitaqat — get latest Nitaqat snapshot
+app.get('/api/hr/nitaqat', requireAuth, requireRole('hr', 'admin'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const latest = (await pool.query('SELECT * FROM hr_nitaqat_records WHERE tenant_id=$1 ORDER BY snapshot_date DESC LIMIT 12', [tid])).rows;
+        res.json(latest);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/hr/nitaqat/calculate — calculate current Saudization %
+app.post('/api/hr/nitaqat/calculate', requireAuth, requireRole('hr', 'admin'), requireTenantScope, async (req, res) => {
+    try {
+        const tid = getRequestTenantContext(req);
+        const { required_pct = 0, activity_code = '', facility_size = 'Medium' } = req.body;
+        // Count employees by nationality
+        const counts = (await pool.query(`
+            SELECT
+                COUNT(*) total,
+                COUNT(*) FILTER (WHERE nationality ILIKE '%saudi%' OR nationality ILIKE '%سعودي%') saudi_count,
+                COUNT(*) FILTER (WHERE nationality NOT ILIKE '%saudi%' AND nationality NOT ILIKE '%سعودي%') non_saudi_count
+            FROM hr_employees WHERE tenant_id=$1 AND employment_status='Active'`, [tid])).rows[0];
+        const total = parseInt(counts.total);
+        const saudi = parseInt(counts.saudi_count);
+        const non_saudi = parseInt(counts.non_saudi_count);
+        const pct = total > 0 ? Math.round((saudi / total) * 10000) / 100 : 0;
+        const req_pct = parseFloat(required_pct) || 0;
+        // Nitaqat band (simplified — healthcare sector)
+        let band = 'Low';
+        if (pct >= req_pct + 10) band = 'Excellent (بلاتيني)';
+        else if (pct >= req_pct + 5) band = 'High (أخضر عالٍ)';
+        else if (pct >= req_pct) band = 'Medium (أخضر)';
+        else if (pct >= req_pct - 5) band = 'Low (أصفر)';
+        else band = 'Déficiente (أحمر)';
+        const r = await pool.query(
+            `INSERT INTO hr_nitaqat_records (snapshot_date, total_employees, saudi_employees, non_saudi_employees,
+             saudization_pct, required_pct, nitaqat_band, activity_code, facility_size, tenant_id)
+             VALUES (CURRENT_DATE,$1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+            [total, saudi, non_saudi, pct, req_pct, band, activity_code, facility_size, tid]
+        );
+        logAudit(req.session.user.id, req.session.user.display_name, 'NITAQAT_CALCULATE', 'HR', `Nitaqat: ${pct}% Saudization, Band: ${band}`, tid);
+        res.json({ success: true, snapshot: r.rows[0], summary: { total_employees: total, saudi_employees: saudi, non_saudi_employees: non_saudi, saudization_pct: pct, nitaqat_band: band, required_pct: req_pct, compliant: pct >= req_pct } });
+    } catch (e) { console.error(e); res.status(500).json({ error: e.message }); }
 });
 
 // ===== SPA CATCH-ALL (must be LAST route) =====
