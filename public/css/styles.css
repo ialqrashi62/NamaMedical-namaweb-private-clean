@@ -2039,6 +2039,52 @@ body {
   gap: 6px;
 }
 
+/* Wristband & Payment Badges styling */
+.payment-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.payment-badge.paid {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.payment-badge.unpaid {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.payment-badge.unpaid:hover {
+  background: rgba(239, 68, 68, 0.25);
+  transform: scale(1.05);
+}
+
+@media print {
+  body.printing-wristband #app {
+    display: none !important;
+  }
+  body.printing-wristband #wristbandPrintArea {
+    display: block !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 280px;
+    height: auto;
+    font-family: 'IBM Plex Sans Arabic', sans-serif;
+    color: #000 !important;
+    background: #fff !important;
+    padding: 10px;
+  }
+}
+
+
 
 
 

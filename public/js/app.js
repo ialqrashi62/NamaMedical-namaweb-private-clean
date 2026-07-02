@@ -3721,11 +3721,16 @@ async function renderReception(el) {
 
   let patients = [];
   let doctors = [];
+  let invoices = [];
   try {
-    [patients, doctors] = await Promise.all([
+    [patients, doctors, invoices] = await Promise.all([
       API.get('/api/patients'),
-      API.get('/api/employees?role=Doctor')
+      API.get('/api/employees?role=Doctor'),
+      API.get('/api/invoices').catch(() => [])
     ]);
+    window.currentPatientsList = patients;
+    window.currentDoctorsList = doctors;
+    window.currentInvoicesList = invoices;
   } catch (e) {
     el.innerHTML = `
       <div class="page-title">🏥 ${tr('Reception', 'الاستقبال')}</div>
@@ -4166,7 +4171,56 @@ async function renderReception(el) {
           <button class="btn" onclick="document.getElementById('newInvoiceModal').style.display='none'" style="flex:1">❌ ${tr('Cancel', 'إلغاء')}</button>
         </div>
       </div>
-    </div>`;
+    </div>
+    
+    <!-- Quick Clinic Check-In Modal -->
+    <div id="quickCheckInModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center">
+      <div style="background:#fff;padding:30px;border-radius:16px;width:450px;max-width:90%;direction:rtl;box-shadow:0 10px 30px rgba(0,0,0,0.2)">
+        <h3 style="margin-bottom:16px;display:flex;align-items:center;gap:8px;color:var(--primary)">📅 ${tr('Quick Clinic Check-In', 'تسجيل دخول عيادة فوري')}</h3>
+        <input type="hidden" id="qciPId">
+        <p id="qciPLabel" style="font-weight:700;margin-bottom:16px;background:rgba(var(--primary-rgb),0.05);padding:10px;border-radius:8px;border-right:4px solid var(--primary)"></p>
+        
+        <div class="reception-form-group mb-12">
+          <label class="reception-form-label">🩺 ${tr('Select Department', 'القسم / العيادة')}</label>
+          <div class="reception-input-wrapper">
+            <span class="material-symbols-outlined reception-input-icon">medical_services</span>
+            <select id="qciDept" class="reception-form-input" onchange="window.filterQuickDoctors(this.value)">
+              <option value="">-- اختر القسم --</option>
+              ${depts.map((d, i) => `<option value="${isArabic ? d : deptsEn[i]}">${isArabic ? d : deptsEn[i]}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+
+        <div class="reception-form-group mb-12">
+          <label class="reception-form-label">👤 ${tr('Select Doctor', 'الطبيب المعالج')}</label>
+          <div class="reception-input-wrapper">
+            <span class="material-symbols-outlined reception-input-icon">person</span>
+            <select id="qciDoctor" class="reception-form-input">
+              <option value="">${tr('Select Doctor', 'اختر الطبيب')}</option>
+              ${(doctors || []).map(d => `<option value="${escapeHTML(d.name)}" data-dept="${escapeHTML(d.department || '')}">${escapeHTML(d.name)}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+
+        <div class="reception-form-group mb-16">
+          <label class="reception-form-label">⚡ ${tr('Priority', 'أولوية المريض')}</label>
+          <div class="reception-input-wrapper">
+            <span class="material-symbols-outlined reception-input-icon">priority_high</span>
+            <select id="qciPriority" class="reception-form-input">
+              <option value="عادي">🟢 ${tr('Routine', 'عادي')}</option>
+              <option value="مستعجل">🟡 ${tr('Urgent', 'مستعجل')}</option>
+              <option value="طوارئ">🔴 ${tr('Emergency', 'طوارئ')}</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:20px">
+          <button class="btn btn-primary" onclick="confirmQuickCheckIn()" style="flex:1;height:42px">✅ ${tr('Confirm Check-in', 'تأكيد تسجيل الدخول')}</button>
+          <button class="btn btn-secondary" onclick="document.getElementById('quickCheckInModal').style.display='none'" style="flex:1;height:42px">❌ ${tr('Cancel', 'إلغاء')}</button>
+        </div>
+      </div>
+    </div>
+    `;
 
   renderPatientTable(patients);
   loadPendingPaymentOrders();
@@ -4586,22 +4640,35 @@ function renderPatientTable(patients) {
     `;
     return;
   }
-  const headers = [tr('MRN/File#', 'رقم الملف'), tr('Name', 'الاسم'), tr('ID', 'الهوية'), tr('Phone', 'الجوال'), tr('Blood', 'فصيلة'), tr('Insurance', 'التأمين'), tr('Date/Time', 'التاريخ/الوقت'), tr('Status', 'الحالة'), tr('Actions', 'إجراءات')];
+  const headers = [tr('MRN/File#', 'رقم الملف'), tr('Name', 'الاسم'), tr('ID', 'الهوية'), tr('Phone', 'الجوال'), tr('Insurance', 'التأمين'), tr('Consultation Fee', 'رسوم الكشفية'), tr('Date/Time', 'التاريخ/الوقت'), tr('Status', 'الحالة'), tr('Actions', 'إجراءات')];
   const rows = patients.map(p => ({
     cells: [
       p.mrn || p.file_number,
       rawHtml(`${p.gender === 'ذكر' ? '👨' : '👩'} ${escapeHTML(isArabic ? (p.name_ar || p.name_en) : (p.name_en || p.name_ar))}${p.allergies ? ' <span style="color:#ef4444;font-weight:700" title="' + escapeHTML(p.allergies) + '">⚠️</span>' : ''}`),
       p.national_id,
       p.phone,
-      p.blood_type ? rawHtml(`<span class="badge" style="background:#dc2626;color:#fff;font-size:10px">${escapeHTML(p.blood_type)}</span>`) : '-',
       p.insurance_company ? rawHtml(`<span style="font-size:11px">${escapeHTML(p.insurance_company)}${p.insurance_class ? ' (' + escapeHTML(p.insurance_class) + ')' : ''}</span>`) : '-',
+      (() => {
+        const pInvoices = (window.currentInvoicesList || []).filter(inv => inv.patient_id === p.id);
+        const hasPaidToday = pInvoices.some(inv => {
+          const isToday = new Date(inv.created_at || inv.date).toDateString() === new Date().toDateString();
+          return isToday && (inv.status === 'Paid' || inv.status === 'مدفوعة' || inv.status === 'مدفوع');
+        });
+        if (hasPaidToday) {
+          return rawHtml(`<span class="payment-badge paid">مدفوع 🟢</span>`);
+        } else if (p.insurance_company) {
+          return rawHtml(`<span class="payment-badge paid" title="تأمين: ${escapeHTML(p.insurance_company)}">تأمين 🟢</span>`);
+        } else {
+          return rawHtml(`<span class="payment-badge unpaid" onclick="showNewInvoiceModal(${safeId(p.id)},'${jsStr(p.name_ar || p.name_en || '')}')" title="${tr('Click to generate invoice', 'انقر لتحصيل الكشفية')}">معلق 🔴</span>`);
+        }
+      })(),
       p.created_at ? new Date(p.created_at).toLocaleString('ar-SA', { dateStyle: 'short', timeStyle: 'short' }) : '-',
       statusBadge(p.status)
     ],
     id: p.id, raw: p
   }));
   document.getElementById('rTable').innerHTML = makeTable(headers, rows, (row) =>
-    `<button class="btn btn-sm btn-info" onclick="selectPatient(${safeId(row.id)})" title="${tr('View Banner', 'عرض البانر')}">👁️</button> <button class="btn btn-sm" onclick="editPatient(${safeId(row.id)})" title="${tr('Edit', 'تعديل')}">✏️</button> <button class="btn btn-sm btn-success" onclick="showNewInvoiceModal(${safeId(row.id)},'${jsStr(row.raw.name_ar || row.raw.name_en || '')}')" title="${tr('Invoice', 'فاتورة')}">🧾</button> <button class="btn btn-danger btn-sm" onclick="deletePatient(${safeId(row.id)})" title="${tr('Delete', 'حذف')}">🗑</button>`
+    `<button class="btn btn-sm btn-info" onclick="selectPatient(${safeId(row.id)})" title="${tr('View Banner', 'عرض البانر')}">👁️</button> <button class="btn btn-sm" onclick="showQuickCheckInModal(${safeId(row.id)},'${jsStr(row.raw.name_ar || row.raw.name_en || '')}')" title="${tr('Quick Clinic Check-in', 'تسجيل وصول للعيادة')}" style="background:rgba(var(--primary-rgb),0.1);color:var(--primary);margin:0 2px">📅</button> <button class="btn btn-sm" onclick="editPatient(${safeId(row.id)})" title="${tr('Edit', 'تعديل')}">✏️</button> <button class="btn btn-sm btn-success" onclick="showNewInvoiceModal(${safeId(row.id)},'${jsStr(row.raw.name_ar || row.raw.name_en || '')}')" title="${tr('Invoice', 'فاتورة')}">🧾</button> <button class="btn btn-danger btn-sm" onclick="deletePatient(${safeId(row.id)})" title="${tr('Delete', 'حذف')}">🗑</button>`
   );
 }
 
@@ -4648,7 +4715,10 @@ window.selectPatient = async (id) => {
           </div>
           <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim)">
             <span>🏢 ${tr('Facility Context', 'سياق المنشأة')}: M-${escapeHTML(p.tenant_id || currentUser.tenantId)}</span>
-            <button class="btn btn-sm btn-secondary" onclick="document.getElementById('rPatientBannerContainer').innerHTML=''" style="padding: 2px 8px">${tr('Clear Banner', 'إغلاق البانر')}</button>
+            <div style="display: flex; gap: 8px">
+              <button class="btn btn-sm btn-info" onclick="printPatientWristband(${safeId(p.id)})" style="padding: 2px 8px">🖨️ ${tr('Print Wristband', 'طباعة السوار')}</button>
+              <button class="btn btn-sm btn-secondary" onclick="document.getElementById('rPatientBannerContainer').innerHTML=''" style="padding: 2px 8px">${tr('Clear Banner', 'إغلاق البانر')}</button>
+            </div>
           </div>
         </div>
       `;
@@ -4656,6 +4726,126 @@ window.selectPatient = async (id) => {
   } catch (e) {
     showToast(tr('Error loading patient banner', 'خطأ في تحميل تفاصيل المريض'), 'error');
   }
+};
+
+window.filterQuickDoctors = (dept) => {
+  const select = document.getElementById('qciDoctor');
+  if (!select) return;
+  
+  const firstOption = select.options[0];
+  select.innerHTML = '';
+  select.appendChild(firstOption);
+  
+  if (window.currentDoctorsList) {
+    window.currentDoctorsList.forEach(d => {
+      if (!dept || d.department === dept) {
+        const opt = document.createElement('option');
+        opt.value = d.name;
+        opt.textContent = d.name;
+        opt.setAttribute('data-dept', d.department || '');
+        select.appendChild(opt);
+      }
+    });
+  }
+};
+
+window.showQuickCheckInModal = (patientId, patientName) => {
+  document.getElementById('qciPId').value = patientId;
+  document.getElementById('qciPLabel').innerHTML = `👤 المريض: ${escapeHTML(patientName)}`;
+  document.getElementById('qciDept').value = '';
+  document.getElementById('qciDoctor').value = '';
+  document.getElementById('qciPriority').value = 'عادي';
+  document.getElementById('quickCheckInModal').style.display = 'flex';
+};
+
+window.confirmQuickCheckIn = async () => {
+  const patientId = document.getElementById('qciPId').value;
+  const dept = document.getElementById('qciDept').value;
+  const doctorName = document.getElementById('qciDoctor').value;
+  const priority = document.getElementById('qciPriority').value;
+  
+  if (!dept) return showToast(tr('Please select clinic', 'الرجاء اختيار العيادة'), 'error');
+  
+  try {
+    await API.put(`/api/patients/${patientId}`, {
+      department: dept,
+      doctor: doctorName || null,
+      status: 'Waiting'
+    });
+    
+    await API.post('/api/appointments', {
+      patient_id: patientId,
+      doctor_name: doctorName || 'طبيب مناوب',
+      department: dept,
+      appointment_date: new Date().toISOString().split('T')[0],
+      appointment_time: new Date().toTimeString().split(' ')[0].substring(0, 5),
+      status: 'Checked-in',
+      notes: `تسجيل دخول عاجل من الاستقبال - الأولوية: ${priority}`
+    });
+    
+    showToast(tr('Patient Checked-in successfully', 'تم تسجيل دخول المريض للعيادة بنجاح'));
+    document.getElementById('quickCheckInModal').style.display = 'none';
+    navigateTo(1);
+  } catch (e) {
+    showToast(tr('Error during check-in', 'خطأ أثناء تسجيل الدخول للعيادة'), 'error');
+  }
+};
+
+window.printPatientWristband = (patientId) => {
+  const p = window.currentPatientsList ? window.currentPatientsList.find(x => x.id === patientId) : null;
+  if (!p) return showToast(tr('Patient not found', 'المريض غير موجود'), 'error');
+  
+  let printArea = document.getElementById('wristbandPrintArea');
+  if (!printArea) {
+    printArea = document.createElement('div');
+    printArea.id = 'wristbandPrintArea';
+    printArea.style.display = 'none';
+    document.body.appendChild(printArea);
+  }
+  
+  printArea.innerHTML = `
+    <div style="border: 2px solid #000; padding: 15px; border-radius: 8px; text-align: center; direction: rtl; background: #fff; color: #000">
+      <div style="font-size: 14px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 8px">
+        🏥 مجمع جمانة الطبي - EMR Wristband
+      </div>
+      <div style="font-size: 13px; font-weight: bold; margin-bottom: 4px">
+        الاسم: ${escapeHTML(p.name_ar || '')}
+      </div>
+      <div style="font-size: 12px; margin-bottom: 4px">
+        Name: ${escapeHTML(p.name_en || '')}
+      </div>
+      <div style="font-size: 12px; margin-bottom: 6px; display: flex; justify-content: space-between">
+        <span><strong>الملف (MRN):</strong> ${escapeHTML(p.mrn || p.file_number)}</span>
+        <span><strong>الجنس:</strong> ${escapeHTML(p.gender || '-')}</span>
+      </div>
+      <div style="font-size: 12px; margin-bottom: 6px; display: flex; justify-content: space-between">
+        <span><strong>الميلاد:</strong> ${p.dob ? new Date(p.dob).toLocaleDateString('en-US') : '-'}</span>
+        <span><strong>الفصيلة:</strong> ${escapeHTML(p.blood_type || '-')}</span>
+      </div>
+      <div style="margin: 8px 0; display: flex; justify-content: center">
+        <svg id="wristbandBarcode"></svg>
+      </div>
+      <div style="font-size: 10px; color: #555; margin-top: 6px">
+        تمت الطباعة: ${new Date().toLocaleString('ar-SA')}
+      </div>
+    </div>
+  `;
+  
+  setTimeout(() => {
+    if (window.JsBarcode) {
+      JsBarcode("#wristbandBarcode", p.mrn || p.file_number || '000000', {
+        format: "CODE128",
+        width: 1.5,
+        height: 35,
+        displayValue: true,
+        fontSize: 10
+      });
+    }
+    
+    document.body.classList.add('printing-wristband');
+    window.print();
+    document.body.classList.remove('printing-wristband');
+  }, 100);
 };
 
 window.deletePatient = async (id) => {
