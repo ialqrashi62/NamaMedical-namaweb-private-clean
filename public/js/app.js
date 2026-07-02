@@ -223,7 +223,51 @@ function buildNav() {
   const userPerms = currentUser?.permissions ? currentUser.permissions.split(',') : [];
   const isAdmin = currentUser?.role === 'Admin';
 
-  const CLINICAL_ORDER = [0, 40, 29, 30, 31, 39, 50, 51, 49, 32, 33, 34, 41, 36, 37, 38, 58, 42, 70];
+  const CLINICAL_ORDER = [
+    0,   // Dashboard (لوحة التحكم)
+    1,   // Reception (الاستقبال)
+    2,   // Appointments (المواعيد)
+    12,  // Waiting Queue (قائمة الانتظار)
+    3,   // Doctor Station (محطة الطبيب)
+    11,  // Nursing (التمريض)
+    21,  // Emergency (الطوارئ)
+    22,  // Inpatient ADT (التنويم)
+    23,  // ICU (العناية المركزة)
+    18,  // Surgery & Pre-Op (العمليات وما قبلها)
+    41,  // OB/GYN (النساء والتوليد)
+    40,  // Cosmetic Surgery (جراحة التجميل)
+    4,   // Laboratory (المختبر)
+    5,   // Radiology (الأشعة)
+    36,  // Pathology (علم الأمراض)
+    19,  // Blood Bank (بنك الدم)
+    32,  // Rehabilitation (إعادة التأهيل)
+    6,   // Pharmacy (الصيدلية)
+    31,  // Clinical Pharmacy (الصيدلية السريرية)
+    34,  // ZATCA E-Invoice (فوترة إلكترونية)
+    13,  // Patient Accounts (حسابات المرضى)
+    9,   // Insurance (التأمين)
+    8,   // Finance (المالية)
+    14,  // Reports (التقارير)
+    7,   // HR (الموارد البشرية)
+    10,  // Inventory (المخازن)
+    16,  // Catalog (الأصناف)
+    17,  // Dept Requests (طلبات الأقسام)
+    24,  // CSSD (التعقيم المركزي)
+    26,  // Infection Control (مكافحة العدوى)
+    27,  // Quality (الجودة)
+    25,  // Dietary (التغذية)
+    29,  // Transport (نقل المرضى)
+    37,  // Social Work (الخدمة الاجتماعية)
+    28,  // Maintenance (الصيانة)
+    20,  // Consent Forms (الإقرارات)
+    30,  // Medical Records (السجلات الطبية)
+    33,  // Patient Portal (بوابة المرضى)
+    35,  // Telemedicine (الطب عن بعد)
+    15,  // Messaging (الرسائل)
+    39,  // CME (التعليم الطبي)
+    38,  // Mortuary (خدمة الوفيات)
+    42   // Settings (الإعدادات)
+  ];
   const allIndices = [...CLINICAL_ORDER];
   for (let idx = 0; idx < NAV_ITEMS.length; idx++) {
     if (!allIndices.includes(idx)) {
