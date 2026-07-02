@@ -67,3 +67,19 @@
 ## Data Mutation Audit
 * **Record Created/Updated**: During browser validation, no persistent backend database records were mutated or added for testing, other than the LOGIN audit trail event logged in PostgreSQL when signing in.
 * **Safety**: Fully safe to keep.
+
+---
+
+## Phase 6: ZATCA Phase 2 Cryptographic Integration
+
+### 1. الإجراءات المنجزة والتغييرات (Completed Actions & Changes)
+* **تفعيل وتوصيل موديول التشفير**: تم دمج موديول التشفير التلقائي [zatca_phase2.js](file:///c:/Users/ice/Desktop/NamaMedical/namaweb/zatca_phase2.js) لعمل الفحوصات والهاش والتوقيع التشفيري (ECDSA secp256k1) داخل نهاية الخدمة `POST /api/zatca/submit` في [server.js](file:///c:/Users/ice/Desktop/NamaMedical/namaweb/server.js).
+* **العزل التام للمستأجرين**: استدعاء وتحميل بيانات الربط التشفيري الفعالة ديناميكياً لكل مستأجر (CSID والمفتاح الخاص) من جدول `integration_settings`.
+* **التعامل الذكي والآمن عند غياب الإعدادات (Mock Fallback)**: عند إيقاف تشغيل التكامل أو عدم وجود بيانات ربط، يعود النظام تلقائياً للوضع المالي التجريبي وتوثيق الحدث بوضعية `RECORDED` وسجل التدقيق `ZATCA_SUBMIT_INTENT` لضمان استمرارية تشغيل المشفى.
+* **الاختبارات الآلية المتكاملة**: كتابة وتشغيل اختبار التكامل [zatca_phase2_integration_test.js](file:///c:/Users/ice/Desktop/NamaMedical/namaweb/zatca_phase2_integration_test.js) للتأكد من دورة الهاش والتوقيع الرقمي وإرسال الفواتير لبيئة الفحص التجريبية بنجاح (**8/8 PASS**).
+
+### 2. مخرجات الفحص والتحقق والتدقيق
+* **اختبارات الدمج**: `zatca_phase2_integration_test.js` - **8/8 PASS**
+* **اختبارات الأمان وحظر الأسرار**: `tracked_secret_redaction_test.js` - **2/2 PASS** (صفر انتهاكات للأسرار والرموز في الملفات المعدلة).
+* **اختبارات الوحدة العامة المارة**: **103/103 فحص وحدة بنجاح 100%**.
+
