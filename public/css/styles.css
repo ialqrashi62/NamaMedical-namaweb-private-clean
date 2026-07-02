@@ -1896,5 +1896,149 @@ body {
   background: linear-gradient(135deg, var(--primary) 0%, var(--primary-container) 100%);
 }
 
+/* EMR Redesign: Premium Reception Styles */
+.reception-kpi-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.reception-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(var(--primary-rgb), 0.12);
+}
+
+.step-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0.6;
+  transition: opacity 0.3s ease;
+}
+.step-indicator.active {
+  opacity: 1;
+}
+.step-indicator.completed {
+  opacity: 0.9;
+}
+
+.step-number-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+}
+
+.step-number-badge.pending {
+  background: var(--surface-container-high, #f3f4f6);
+  color: var(--text-dim);
+  border-color: var(--border);
+}
+
+.step-number-badge.active {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-container) 100%);
+  color: var(--on-primary);
+  box-shadow: 0 0 12px var(--primary-glow);
+}
+
+.step-number-badge.completed {
+  background: #10b981;
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+}
+
+.reception-form-group {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reception-form-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.reception-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.reception-input-icon {
+  position: absolute;
+  left: 12px;
+  color: var(--text-dim);
+  font-size: 18px;
+  pointer-events: none;
+}
+[dir="rtl"] .reception-input-icon {
+  left: auto;
+  right: 12px;
+}
+
+.reception-form-input {
+  width: 100%;
+  height: 42px;
+  padding: 0 14px 0 38px;
+  background: var(--input, #ffffff);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--text);
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+[dir="rtl"] .reception-form-input {
+  padding: 0 38px 0 14px;
+}
+
+.reception-form-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px var(--primary-glow);
+  background: var(--card-bg);
+}
+
+.reception-form-input.readonly {
+  background: var(--hover, #f9fafb);
+  border-color: var(--border);
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
+
+.reception-card-section {
+  background: rgba(var(--primary-rgb), 0.02);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  transition: all 0.3s ease;
+}
+
+.reception-card-section:hover {
+  background: rgba(var(--primary-rgb), 0.04);
+  border-color: rgba(var(--primary-rgb), 0.15);
+}
+
+.reception-section-title {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+
 
 
