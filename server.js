@@ -1422,7 +1422,8 @@ app.post('/api/insurance/eligibility', requireAuth, requireRole(...E11_INS_ROLES
         const patient = patientId ? (await pool.query('SELECT * FROM patients WHERE id=$1 AND tenant_id=$2', [patientId, tenantId])).rows[0] : null;
         const company = companyId ? (await pool.query('SELECT * FROM insurance_companies WHERE id=$1 AND tenant_id=$2', [companyId, tenantId])).rows[0] : null;
         
-        const bundle = nphiesClient.buildEligibilityBundle({ patient, company, policy: policyNumber });
+        // Gate 8: KSA-conformant FHIR message bundle (was a minimal collection bundle).
+        const bundle = nphiesClient.buildEligibilityMessage({ patient, company, policy: policyNumber });
         const client = new nphiesClient.NphiesClient({
             endpointUrl: settings.endpoint_url,
             apiKey: settings.api_key,
@@ -1496,8 +1497,9 @@ app.post('/api/insurance/pre-auth', requireAuth, requireRole(...E11_INS_ROLES), 
         const patient = patientId ? (await pool.query('SELECT * FROM patients WHERE id=$1 AND tenant_id=$2', [patientId, tenantId])).rows[0] : null;
         const company = companyId ? (await pool.query('SELECT * FROM insurance_companies WHERE id=$1 AND tenant_id=$2', [companyId, tenantId])).rows[0] : null;
         
-        const preAuthRecord = { id: paId, requested_amount: requested };
-        const bundle = nphiesClient.buildPreAuthBundle({ patient, company, preAuth: preAuthRecord });
+        const preAuthRecord = { id: paId, requested_amount: requested, amount: requested };
+        // Gate 8: KSA-conformant FHIR message bundle (priorauth-request).
+        const bundle = nphiesClient.buildPreAuthMessage({ patient, company, preAuth: preAuthRecord });
         
         const client = new nphiesClient.NphiesClient({
             endpointUrl: settings.endpoint_url,
@@ -1864,7 +1866,12 @@ app.post('/api/nphies/submit-claim/:id', requireAuth, requireRole(...E11_INS_ROL
         const company = (await client.query('SELECT * FROM insurance_companies WHERE id=$1 AND tenant_id=$2', [claim.insurance_company_id, tenantId])).rows[0];
         const lines = (await client.query('SELECT * FROM insurance_claim_lines WHERE claim_id=$1 AND tenant_id=$2', [claimId, tenantId])).rows;
         
-        const bundle = nphiesClient.buildClaimBundle({ patient, company, claim, lines });
+        // Gate 8: KSA-conformant FHIR message bundle (claim-request) with ICD-10-AM diagnoses
+        // (from claim.diagnosis_icd10 when present) and SBS-coded items (line.sbs_code when present).
+        const diagnoses = claim && claim.diagnosis_icd10
+            ? [{ icd10: claim.diagnosis_icd10, description: claim.diagnosis_text || '' }]
+            : [];
+        const bundle = nphiesClient.buildClaimMessage({ patient, company, claim, lines, diagnoses });
         
         const nClient = new nphiesClient.NphiesClient({
             endpointUrl: settings.endpoint_url,
