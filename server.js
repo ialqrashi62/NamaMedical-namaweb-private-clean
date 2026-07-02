@@ -42,6 +42,8 @@ const ewsEngine = require('./ews_engine');
 const resultLoop = require('./result_loop');
 // Gate 4: tenant-context resolution (session precedence over x-tenant-id header, anti-spoof).
 const { resolveTenantContext } = require('./tenant_resolve');
+// Gate 7: opt-in, fail-open idempotency guard for money/claim-mutating routes.
+const { makeIdempotencyGuard } = require('./idempotency');
 const e11Engine = require('./e11_insurance_engine'); // E11 insurance/NPHIES pure engine (state machines + co-pay math)
 const pathologyEngine = require('./pathology_engine'); // E15: pure state-machine + accession + flag engine
 const e16 = require('./e16_inventory_engine'); // E16 inventory/CSSD pure engine (FEFO, no-negative, BI gate)
@@ -465,6 +467,17 @@ function requireFacilityContext(req, res, next) {
     req.facilityId = facilityId;
     next();
 }
+
+// Gate 7: idempotency guard for money/claim-mutating routes. OPT-IN (only engages when the
+// client sends an Idempotency-Key header) and FAIL-OPEN (never blocks billing on an infra
+// error), so applying it is a zero-behavior-change addition for existing clients. Backed by
+// the RLS-scoped idempotency_keys table (e23); replays return the stored response instead of
+// re-running the handler (no duplicate claim/invoice/AR posting).
+const idempotencyGuard = makeIdempotencyGuard({
+    pool,
+    getTenantId: (req) => getRequestTenantContext(req).tenantId,
+    logger: console,
+});
 
 function withTenantFilter(queryText, params, tenantId) {
     if (!tenantId) return { queryText, params };
@@ -1547,7 +1560,7 @@ app.get('/api/insurance/claims', requireAuth, requireRole(...E11_INS_ROLES), req
 });
 
 // create claim — always 'draft'/'Pending'; amounts requested only, adjudication is server-side later
-app.post('/api/insurance/claims', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, async (req, res) => {
+app.post('/api/insurance/claims', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e11RequireTenant(req);
         const patientId = e11IntId(req.body.patient_id);
@@ -1584,7 +1597,7 @@ app.post('/api/insurance/claims', requireAuth, requireRole(...E11_INS_ROLES), re
 });
 
 // claim state transition — single server-authoritative endpoint (replaces direct status PUT)
-app.put('/api/insurance/claims/:id/transition', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, async (req, res) => {
+app.put('/api/insurance/claims/:id/transition', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const tenantId = e11RequireTenant(req);
@@ -11365,7 +11378,7 @@ app.post('/api/zatca/generate', requireAuth, requireRole('finance', 'accounts'),
     } catch (e) { e10Err(res, e); }
 });
 
-app.post('/api/zatca/submit', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, async (req, res) => {
+app.post('/api/zatca/submit', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e10RequireTenant(req);
         const invoiceId = e10IntId(req.body.invoice_id);
@@ -17157,7 +17170,7 @@ app.post('/api/nphies/remittance', requireAuth, requireRole('finance', 'accounts
 });
 
 // POST /api/nphies/remittance/:id/post-to-ar — post remittance to AR (Accounts Receivable)
-app.post('/api/nphies/remittance/:id/post-to-ar', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, async (req, res) => {
+app.post('/api/nphies/remittance/:id/post-to-ar', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const id = parseInt(req.params.id);
