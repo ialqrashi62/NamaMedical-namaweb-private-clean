@@ -92,7 +92,7 @@ async function runTests() {
     });
 
     // Wait for server to boot
-    await new Promise(resolve => setTimeout(resolve, 2500));
+    await new Promise(resolve => setTimeout(resolve, 6000));
 
     try {
         // Log in

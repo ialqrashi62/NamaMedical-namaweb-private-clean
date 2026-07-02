@@ -100,8 +100,8 @@ async function runTests() {
             console.error(`[SERVER ERR] ${data.toString().trim()}`);
         });
 
-        // Wait 3 seconds for server to boot
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        // Wait 6 seconds for server to boot
+        await new Promise(resolve => setTimeout(resolve, 6000));
 
         console.log('Logging in...');
         const loginRes = await makeRequest('POST', '/api/auth/login', {

@@ -14,7 +14,12 @@ if (process.env.NODE_ENV === 'staging') {
     delete process.env.DB_USER;
     delete process.env.DB_PASSWORD;
     
+    const existingPort = process.env.PORT;
     require('dotenv').config({ path: envPath, override: true });
+    if (existingPort) {
+        process.env.PORT = existingPort;
+    }
+    
     if (!process.env.DB_NAME || process.env.DB_NAME === 'nama_medical_web') {
         throw new Error('CRITICAL: Invalid DB_NAME in staging mode! Must not connect to production database.');
     }
@@ -3077,6 +3082,104 @@ UPDATE maintenance_equipment SET tenant_id = 1 WHERE tenant_id IS NULL;
             `);
             console.log('  ✅ Phase E tables created (fhir_resources, hl7_messages, ai_cds_log, ai_voice_sessions)');
         } catch (e) { console.error('Phase E tables migration error:', e.message); }
+
+        // ===== PHASE F — WORLD-CLASS CLINICAL QUALITY TABLES (F1-F3) =====
+        try {
+            await client.query(`
+                -- F1: Nursing Risk Assessments (Braden Scale & Morse Fall Risk)
+                CREATE TABLE IF NOT EXISTS nursing_risk_assessments (
+                    id SERIAL PRIMARY KEY,
+                    patient_id INTEGER REFERENCES patients(id),
+                    admission_id INTEGER,
+                    assessment_type VARCHAR(30) NOT NULL, -- 'Braden Scale' / 'Morse Fall Risk'
+                    total_score INTEGER NOT NULL,
+                    risk_level VARCHAR(20) NOT NULL,      -- Low / Moderate / High
+                    details JSONB NOT NULL DEFAULT '{}',  -- breakdown of parameters
+                    assessed_by TEXT DEFAULT '',
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_nurs_risk_pat ON nursing_risk_assessments(patient_id, tenant_id);
+
+                -- F2: Surgery Count Sheets (Sponge/Needle/Instrument counts)
+                CREATE TABLE IF NOT EXISTS surgery_count_sheets (
+                    id SERIAL PRIMARY KEY,
+                    surgery_id INTEGER,
+                    sponge_count_initial INTEGER DEFAULT 0,
+                    sponge_count_final INTEGER DEFAULT 0,
+                    needle_count_initial INTEGER DEFAULT 0,
+                    needle_count_final INTEGER DEFAULT 0,
+                    instrument_count_initial INTEGER DEFAULT 0,
+                    instrument_count_final INTEGER DEFAULT 0,
+                    counts_match BOOLEAN DEFAULT FALSE,
+                    witness1_name TEXT DEFAULT '',
+                    witness2_name TEXT DEFAULT '',
+                    notes TEXT DEFAULT '',
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_surg_count ON surgery_count_sheets(surgery_id, tenant_id);
+
+                -- F3: Neonatal Apgar Scores (Apgar scoring for newborns)
+                CREATE TABLE IF NOT EXISTS neonatal_apgar_scores (
+                    id SERIAL PRIMARY KEY,
+                    patient_id INTEGER REFERENCES patients(id),
+                    mother_id INTEGER REFERENCES patients(id),
+                    apgar_1min INTEGER DEFAULT 0,
+                    apgar_5min INTEGER DEFAULT 0,
+                    apgar_10min INTEGER DEFAULT 0,
+                    details JSONB NOT NULL DEFAULT '{}', -- details of individual scores
+                    assessed_by TEXT DEFAULT '',
+                    notes TEXT DEFAULT '',
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_neo_apgar_pat ON neonatal_apgar_scores(patient_id, tenant_id);
+
+                -- F: Notifications table (needed for low-stock and clinical alerts)
+                CREATE TABLE IF NOT EXISTS notifications (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER,
+                    target_role VARCHAR(50) DEFAULT '',
+                    title TEXT DEFAULT '',
+                    title_ar TEXT DEFAULT '',
+                    message TEXT DEFAULT '',
+                    body TEXT DEFAULT '',
+                    body_ar TEXT DEFAULT '',
+                    type VARCHAR(50) DEFAULT '',
+                    module VARCHAR(50) DEFAULT '',
+                    record_id INTEGER,
+                    is_read INTEGER DEFAULT 0,
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_notifications_tenant ON notifications(tenant_id);
+
+                -- Enable RLS and create policy for all four tables
+                ALTER TABLE nursing_risk_assessments ENABLE ROW LEVEL SECURITY;
+                ALTER TABLE nursing_risk_assessments FORCE ROW LEVEL SECURITY;
+                
+                ALTER TABLE surgery_count_sheets ENABLE ROW LEVEL SECURITY;
+                ALTER TABLE surgery_count_sheets FORCE ROW LEVEL SECURITY;
+                
+                ALTER TABLE neonatal_apgar_scores ENABLE ROW LEVEL SECURITY;
+                ALTER TABLE neonatal_apgar_scores FORCE ROW LEVEL SECURITY;
+
+                ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+                ALTER TABLE notifications FORCE ROW LEVEL SECURITY;
+            `);
+
+            // Creating policies separately to prevent failure if they already exist
+            try { await client.query("CREATE POLICY tenant_sec_nurs_risk ON nursing_risk_assessments FOR ALL USING (tenant_id = current_setting('app.tenant_id')::integer)"); } catch (e) { /* already exists */ }
+            try { await client.query("CREATE POLICY tenant_sec_surg_count ON surgery_count_sheets FOR ALL USING (tenant_id = current_setting('app.tenant_id')::integer)"); } catch (e) { /* already exists */ }
+            try { await client.query("CREATE POLICY tenant_sec_neo_apgar ON neonatal_apgar_scores FOR ALL USING (tenant_id = current_setting('app.tenant_id')::integer)"); } catch (e) { /* already exists */ }
+            try { await client.query("CREATE POLICY tenant_sec_notifications ON notifications FOR ALL USING (tenant_id = current_setting('app.tenant_id')::integer)"); } catch (e) { /* already exists */ }
+
+            console.log('  ✅ Phase F tables created (nursing_risk_assessments, surgery_count_sheets, neonatal_apgar_scores, notifications) with FORCE RLS enabled.');
+        } catch (e) { console.error('Phase F tables migration error:', e.message); }
 
         console.log('  ✅ PostgreSQL tables created');
     } finally {

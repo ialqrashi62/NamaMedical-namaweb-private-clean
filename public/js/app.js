@@ -2523,6 +2523,27 @@ window.checkAllergyBeforePrescribe = async (patientId, drugs) => {
   try {
     if (!patientId || !drugs || drugs.length === 0) return true;
     const result = await API.post('/api/allergy-check', { patient_id: patientId, drugs });
+    
+    // Merge clinical safety check alerts (scanning nursing vitals and patient problem list)
+    try {
+      const safetyCheck = await API.post('/api/clinical/safety-check', { patient_id: patientId, drug_name: drugs[0] });
+      if (safetyCheck && safetyCheck.alert) {
+        if (!result.alerts) result.alerts = [];
+        const alreadyAlerted = result.alerts.some(a => a.drug.toLowerCase() === drugs[0].toLowerCase());
+        if (!alreadyAlerted) {
+          result.alerts.push({
+            drug: drugs[0],
+            message_en: safetyCheck.message || 'Potential allergy conflict detected.',
+            message_ar: 'تم كشف تعارض حساسية محتمل من خلال الفحوصات السريرية: ' + (safetyCheck.details || '')
+          });
+          result.patient_allergies = (result.patient_allergies ? result.patient_allergies + ', ' : '') + 
+            (safetyCheck.details || tr('Nursing vitals/problem list', 'العلامات الحيوية/قائمة المشاكل'));
+        }
+      }
+    } catch (e) {
+      console.error('Clinical safety allergy check failed:', e);
+    }
+
     if (result.alerts && result.alerts.length > 0) {
       let alertHtml = '<div style="background:#ffe0e0;border:3px solid #ff0000;border-radius:12px;padding:20px;direction:rtl">';
       alertHtml += '<h3 style="color:#cc0000;margin:0 0 12px">🚨 ' + tr('ALLERGY ALERT!', 'تحذير حساسية!') + '</h3>';
@@ -10239,14 +10260,17 @@ async function renderNursing(el) {
   let emarOrders = [];
   let carePlans = [];
   let assessments = [];
+  let riskAssessments = [];
   try {
-    [patients, vitals, emarOrders, carePlans, assessments] = await Promise.all([
+    [patients, vitals, emarOrders, carePlans, assessments, riskAssessments] = await Promise.all([
       API.get('/api/patients'),
       API.get('/api/nursing/vitals').catch(() => []),
       API.get('/api/emar/orders').catch(() => []),
       API.get('/api/nursing/care-plans').catch(() => []),
-      API.get('/api/nursing/assessments').catch(() => [])
+      API.get('/api/nursing/assessments').catch(() => []),
+      API.get('/api/nursing/risk-assessments').catch(() => [])
     ]);
+    window.nursingPatients = patients; // Store globally for access by modal dialogs
   } catch (e) {
     el.innerHTML = `
       <div class="page-title">👩‍⚕️ ${tr('Nursing Station', 'محطة التمريض')}</div>
@@ -10287,7 +10311,7 @@ async function renderNursing(el) {
     ) : `<div class="empty-state-card"><div class="empty-state-icon">📋</div><div>${tr('No care plans', 'لا توجد خطط رعاية')}</div></div>`}
     </div>`;
   } else if (nurseTab === 'assess') {
-    el.innerHTML += `<div class="card glass-card-premium"><h3>📊 ${tr('Nursing Assessments', 'التقييمات التمريضية')}</h3>
+    el.innerHTML += `<div class="card glass-card-premium"><h3>📊 ${tr('Nursing Assessments (Legacy)', 'التقييمات التمريضية')}</h3>
     ${assessments.length ? makeTable(
       [tr('Patient', 'المريض'), tr('Type', 'النوع'), tr('Fall Risk', 'خطر السقوط'), tr('Braden', 'Braden'), tr('Pain', 'ألم'), tr('GCS', 'GCS'), tr('Nurse', 'الممرض'), tr('Shift', 'الوردية')],
       assessments.map(a => ({
@@ -10299,6 +10323,29 @@ async function renderNursing(el) {
         ]
       }))
     ) : `<div class="empty-state-card"><div class="empty-state-icon">📊</div><div>${tr('No assessments', 'لا توجد تقييمات')}</div></div>`}
+    </div>
+    
+    <div class="card glass-card-premium" style="margin-top:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3>📊 ${tr('Braden Scale & Morse Fall Risk Assessments', 'تقييمات مقياس برادن ومورس لمخاطر السقوط')}</h3>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-sm btn-primary" onclick="openBradenModal()">➕ ${tr('Record Braden Scale', 'تسجيل مقياس برادن')}</button>
+          <button class="btn btn-sm btn-warning" onclick="openMorseModal()">➕ ${tr('Record Morse Fall Risk', 'تسجيل مقياس مورس')}</button>
+        </div>
+      </div>
+      ${riskAssessments.length ? makeTable(
+        [tr('Patient', 'المريض'), tr('Type', 'نوع التقييم'), tr('Total Score', 'الدرجة الإجمالية'), tr('Risk Level', 'مستوى الخطورة'), tr('Assessed By', 'المقيم'), tr('Date', 'التاريخ')],
+        riskAssessments.map(r => ({
+          cells: [
+            `${r.file_number || ''} - ${isArabic ? (r.name_ar || r.name_en) : (r.name_en || r.name_ar)}`,
+            r.assessment_type,
+            r.total_score,
+            rawHtml(`<span class="badge ${r.risk_level.toLowerCase().includes('high') || r.risk_level.toLowerCase().includes('severe') ? 'badge-danger' : r.risk_level.toLowerCase().includes('moderate') || r.risk_level.toLowerCase().includes('mild') ? 'badge-warning' : 'badge-success'}">${escapeHTML(r.risk_level)}</span>`),
+            r.assessed_by || '-',
+            new Date(r.created_at).toLocaleString()
+          ]
+        }))
+      ) : `<div class="empty-state-card"><div class="empty-state-icon">📊</div><div>${tr('No Braden or Morse assessments recorded', 'لا توجد تقييمات مسجلة لمقياس برادن أو مورس')}</div></div>`}
     </div>`;
   } else if (nurseTab === 'newplan') {
     el.innerHTML += `<div class="card glass-card-premium"><h3>➕ ${tr('New Care Plan', 'خطة رعاية جديدة')}</h3>
@@ -12168,6 +12215,11 @@ window.loadOrWorkflow = async () => {
         <div class="form-group mb-8"><label>${tr('Complications', 'المضاعفات')}</label><input class="form-input" id="op_comp" value="${escapeHTML(op && op.complications || '')}"></div>
         <div class="flex gap-8"><div class="form-group mb-8" style="flex:1"><label>${tr('Blood Loss (ml)', 'فقدان الدم')}</label><input class="form-input" type="number" id="op_blood" value="${escapeHTML(op && op.blood_loss_final || 0)}"></div>
           <div class="form-group mb-8" style="flex:1"><label>${tr('Counts Verified?', 'تأكيد العد؟')}</label><select class="form-input" id="op_counts"><option value="0">${tr('No / Incomplete', 'لا / غير مكتمل')}</option><option value="1" ${op && op.counts_verified === 'Verified' ? 'selected' : ''}>${tr('Yes — Verified', 'نعم — مؤكد')}</option></select></div></div>
+        
+        <div style="margin-bottom:12px">
+          <button class="btn btn-outline btn-sm w-full" type="button" onclick="openSurgicalCountModal(${safeId(orWorkflowSurgery)})">📋 ${tr('Record/Verify Surgical Count Sheet', 'تسجيل/تحقق جرد الأدوات الجراحية والشاش')}</button>
+        </div>
+
         <div class="card mt-8"><div class="card-title" style="font-size:13px">📦 ${tr('Consumption (decrements inventory)', 'المستهلكات (تخصم من المخزون)')}</div>
           <div id="op_cons_rows">${cons.map(c => orConsRowHtml(c.item_id, c.qty_used)).join('')}</div>
           <button class="btn btn-secondary btn-sm mt-8" onclick="addConsumptionRow()">➕ ${tr('Add Item', 'إضافة صنف')}</button>
@@ -12589,6 +12641,7 @@ async function renderEmergency(el) {
     `;
     return;
   }
+  window.erVisits = visits;
   const drs = (doctors || []).filter(d => d.role === 'Doctor' || d.department_en === 'Emergency');
   const triageColors = { Red: '#e74c3c', Orange: '#e67e22', Yellow: '#f1c40f', Green: '#2ecc71', Blue: '#3498db' };
   const active = (visits || []).filter(v => v.status === 'Active');
@@ -12675,8 +12728,11 @@ async function renderEmergency(el) {
   } else if (erTab === 'triage') {
     c.innerHTML = `<h3>🩺 ${tr('ESI Triage (server computes the level)', 'فرز ESI (المستوى يُحسب خادمياً)')}</h3>
       <p style="color:#888;font-size:.9em">${tr('Enter vitals and presentation. The ESI level is computed on the server from danger-zone vitals, high-risk presentation, and anticipated resources — it cannot be set by hand.', 'أدخل العلامات الحيوية والعرض السريري. يُحسب مستوى ESI على الخادم من العلامات الحرجة والعرض عالي الخطورة والموارد المتوقعة — ولا يمكن تعيينه يدوياً.')}</p>
+      
+      <div id="pediatricTriageTip" class="hidden mb-12 p-12 rounded border-l-4" style="background:rgba(230,126,34,0.1);border-left-color:#e67e22;font-size:12px"></div>
+
       <div class="form-grid">
-        <div><label>${tr('Active ER Visit', 'زيارة طوارئ نشطة')}</label><select id="trVisit" class="form-control"><option value="">${tr('Select', 'اختر')}</option>${active.map(v => `<option value="${safeId(v.id)}">#${escapeHTML(v.id)} - ${escapeHTML(v.patient_name)} (${escapeHTML(v.chief_complaint_ar || v.chief_complaint || '')})</option>`).join('')}</select></div>
+        <div><label>${tr('Active ER Visit', 'زيارة طوارئ نشطة')}</label><select id="trVisit" class="form-control" onchange="window.onERTriageVisitChange(this.value)"><option value="">${tr('Select', 'اختر')}</option>${active.map(v => `<option value="${safeId(v.id)}">#${escapeHTML(v.id)} - ${escapeHTML(v.patient_name)} (${escapeHTML(v.chief_complaint_ar || v.chief_complaint || '')})</option>`).join('')}</select></div>
         <div><label>${tr('Heart Rate (HR)', 'النبض')}</label><input id="trHr" type="number" class="form-control"></div>
         <div><label>${tr('Resp Rate (RR)', 'التنفس')}</label><input id="trRr" type="number" class="form-control"></div>
         <div><label>${tr('SpO2 %', 'الأكسجين %')}</label><input id="trSpo2" type="number" class="form-control"></div>
@@ -12795,8 +12851,70 @@ window.showERTriageModal = function (visitId) {
   erTab = 'triage';
   navigateTo(21).then(() => {
     const sel = document.getElementById('trVisit');
-    if (sel && visitId) sel.value = String(visitId);
+    if (sel && visitId) {
+      sel.value = String(visitId);
+      window.onERTriageVisitChange(visitId);
+    }
   });
+};
+
+window.onERTriageVisitChange = async function(visitId) {
+  if (!visitId) {
+    const tip = document.getElementById('pediatricTriageTip');
+    if (tip) { tip.innerHTML = ''; tip.classList.add('hidden'); }
+    return;
+  }
+  try {
+    const visit = (window.erVisits || []).find(v => String(v.id) === String(visitId));
+    if (visit && visit.patient_id) {
+      const patient = await API.get('/api/patients/' + visit.patient_id);
+      if (patient && patient.birth_date) {
+        const birth = new Date(patient.birth_date);
+        const ageDifMs = Date.now() - birth.getTime();
+        const ageDate = new Date(ageDifMs);
+        const ageYears = Math.abs(ageDate.getUTCFullYear() - 1970);
+        
+        const ageInput = document.getElementById('trAge');
+        if (ageInput) ageInput.value = ageYears;
+        
+        const tip = document.getElementById('pediatricTriageTip');
+        if (tip) {
+          if (ageYears < 1) {
+            tip.innerHTML = `👶 <strong>${tr('Pediatric Neonate/Infant Danger Thresholds:', 'حدود الخطورة لحديثي الولادة والرضع (أقل من سنة):')}</strong><br>
+                             • ${tr('Heart Rate (HR) > 180 bpm', 'سرعة ضربات القلب > 180 نبضة/دقيقة')}<br>
+                             • ${tr('Respiratory Rate (RR) > 50 bpm', 'معدل التنفس > 50 نفس/دقيقة')}<br>
+                             • ${tr('Temperature > 38.0°C (100.4°F) is a critical sepsis indicator', 'الحرارة > 38.0°م (مؤشر خطير للإنتان)')}`;
+            tip.className = 'mb-12 p-12 rounded border-l-4 block';
+            tip.style.background = 'rgba(239, 68, 68, 0.1)';
+            tip.style.borderLeftColor = 'red';
+          } else if (ageYears <= 3) {
+            tip.innerHTML = `👦 <strong>${tr('Pediatric Toddler Danger Thresholds (1-3 years):', 'حدود الخطورة للأطفال الدارجين (1-3 سنوات):')}</strong><br>
+                             • ${tr('Heart Rate (HR) > 160 bpm', 'سرعة ضربات القلب > 160 نبضة/دقيقة')}<br>
+                             • ${tr('Respiratory Rate (RR) > 40 bpm', 'معدل التنفس > 40 نفس/دقيقة')}`;
+            tip.className = 'mb-12 p-12 rounded border-l-4 block';
+            tip.style.background = 'rgba(245, 158, 11, 0.1)';
+            tip.style.borderLeftColor = '#f59e0b';
+          } else if (ageYears <= 8) {
+            tip.innerHTML = `👧 <strong>${tr('Pediatric Child Danger Thresholds (4-8 years):', 'حدود الخطورة للأطفال (4-8 سنوات):')}</strong><br>
+                             • ${tr('Heart Rate (HR) > 140 bpm', 'سرعة ضربات القلب > 140 نبضة/دقيقة')}<br>
+                             • ${tr('Respiratory Rate (RR) > 30 bpm', 'معدل التنفس > 30 نفس/دقيقة')}`;
+            tip.className = 'mb-12 p-12 rounded border-l-4 block';
+            tip.style.background = 'rgba(245, 158, 11, 0.1)';
+            tip.style.borderLeftColor = '#f59e0b';
+          } else {
+            tip.innerHTML = `🩺 <strong>${tr('Adult ESI Danger Thresholds (>8 years):', 'حدود الخطورة للبالغين (>8 سنوات):')}</strong><br>
+                             • ${tr('Heart Rate (HR) > 100 bpm or Respiratory Rate (RR) > 20 bpm', 'النبض > 100 أو التنفس > 20 نفس/دقيقة')}<br>
+                             • ${tr('Oxygen Saturation SpO2 < 92%', 'نسبة الأكسجين SpO2 < 92%')}`;
+            tip.className = 'mb-12 p-12 rounded border-l-4 block';
+            tip.style.background = 'rgba(59, 130, 246, 0.1)';
+            tip.style.borderLeftColor = '#3b82f6';
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Failed to pre-populate patient triage details:', e);
+  }
 };
 window.submitERTriage = async function () {
   const visitId = document.getElementById('trVisit').value;
@@ -20632,16 +20750,39 @@ window.e1AddPedRecord = async (pid) => {
   const getVal = (id) => document.getElementById(id)?.value || '';
   
   try {
-    await API.post('/api/pediatrics/growth', {
-      patient_id: pid,
-      apgar_1min: getVal('e1ApgarApp') !== '' ? (parseInt(document.getElementById('e1ApgarApp').value) + parseInt(document.getElementById('e1ApgarPulse').value) + parseInt(document.getElementById('e1ApgarGrim').value) + parseInt(document.getElementById('e1ApgarAct').value) + parseInt(document.getElementById('e1ApgarResp').value)) : null,
-      apgar_5min: getVal('e1ApgarApp') !== '' ? (parseInt(document.getElementById('e1ApgarApp').value) + parseInt(document.getElementById('e1ApgarPulse').value) + parseInt(document.getElementById('e1ApgarGrim').value) + parseInt(document.getElementById('e1ApgarAct').value) + parseInt(document.getElementById('e1ApgarResp').value)) : null, // Simplification for test
-      weight_kg: getVal('e1PedWeight'),
-      height_cm: getVal('e1PedHeight'),
-      head_circ_cm: getVal('e1PedHead')
-    });
+    const apgarScore = parseInt(document.getElementById('e1ApgarApp').value) +
+                       parseInt(document.getElementById('e1ApgarPulse').value) +
+                       parseInt(document.getElementById('e1ApgarGrim').value) +
+                       parseInt(document.getElementById('e1ApgarAct').value) +
+                       parseInt(document.getElementById('e1ApgarResp').value);
+
+    await Promise.all([
+      API.post('/api/pediatrics/growth', {
+        patient_id: pid,
+        apgar_1min: apgarScore,
+        apgar_5min: apgarScore,
+        weight_kg: getVal('e1PedWeight'),
+        height_cm: getVal('e1PedHeight'),
+        head_circ_cm: getVal('e1PedHead')
+      }),
+      API.post('/api/pediatrics/apgar', {
+        patient_id: pid,
+        mother_id: null,
+        apgar_1min: apgarScore,
+        apgar_5min: apgarScore,
+        apgar_10min: null,
+        details: {
+          appearance: parseInt(document.getElementById('e1ApgarApp').value),
+          pulse: parseInt(document.getElementById('e1ApgarPulse').value),
+          grimace: parseInt(document.getElementById('e1ApgarGrim').value),
+          activity: parseInt(document.getElementById('e1ApgarAct').value),
+          respiration: parseInt(document.getElementById('e1ApgarResp').value)
+        },
+        notes: 'Logged via growth parameters screen.'
+      })
+    ]);
     
-    showToast(tr('Pediatric record saved successfully!', 'تم حفظ سجل الطفل بنجاح!'));
+    showToast(tr('Pediatric & APGAR record saved successfully!', 'تم حفظ سجل الطفل وتقييم أبغار بنجاح!'));
     window.e1LoadPedHistory(pid);
     
     document.getElementById('e1PedWeight').value = '';
@@ -21665,7 +21806,7 @@ window.adjustDicom = () => {
   
   const meta = document.getElementById('dicomMeta');
   if (meta) {
-    meta.textContent = \`WL: \${Math.round(brightness * 40)} / WW: \${Math.round(contrast * 400)}\`;
+    meta.textContent = `WL: ${Math.round(brightness * 40)} / WW: ${Math.round(contrast * 400)}`;
   }
 };
 
@@ -21704,8 +21845,6 @@ window.resetDicom = () => {
   }
   const meta = document.getElementById('dicomMeta');
   if (meta) meta.textContent = 'WL: 40 / WW: 400';
-};
-
 };
 
 window.applyRadReportTemplate = (val) => {
@@ -22696,5 +22835,439 @@ window.triggerCdsHooks = async function(patientId) {
       </div>
     `;
   } catch (e) { showToast(e.message, 'error'); }
+};
+
+// ===== INTERACTIVE CLINICAL ASSESSMENTS MODALS =====
+window.openBradenModal = function() {
+  const patients = window.nursingPatients || [];
+  if (!patients.length) { showToast(tr('No patient records loaded', 'لا توجد سجلات مرضى محملة'), 'error'); return; }
+  
+  let patientOptions = patients.map(p => `<option value="${p.id}">${escapeHTML(p.file_number)} - ${escapeHTML(isArabic ? (p.name_ar || p.name_en) : (p.name_en || p.name_ar))}</option>`).join('');
+  
+  const modal = document.createElement('div');
+  modal.id = 'bradenModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto';
+  
+  modal.innerHTML = `
+    <div class="card glass-card-premium" style="width:100%;max-width:550px;max-height:90vh;overflow-y:auto;padding:24px;border:1px solid rgba(255,255,255,0.2)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid var(--border-color);padding-bottom:8px">
+        <h3 style="margin:0;color:var(--primary)">📊 ${tr('Braden Scale Assessment', 'تقييم مقياس برادن لسلامة الجلد')}</h3>
+        <button class="btn btn-sm btn-secondary" onclick="document.getElementById('bradenModal').remove()">✖</button>
+      </div>
+      
+      <div class="form-group mb-12">
+        <label>👤 ${tr('Select Patient', 'اختر المريض')}</label>
+        <select id="bradenPatientId" class="form-input">${patientOptions}</select>
+      </div>
+      
+      <div style="font-size:12px;margin-bottom:16px">
+        <div class="form-group mb-8">
+          <label>👁️ ${tr('Sensory Perception', 'الإدراك الحسي')}</label>
+          <select id="bradenSensory" class="form-input" onchange="calcBradenTotal()">
+            <option value="1">1 - Completely Limited (محدود تماماً)</option>
+            <option value="2">2 - Very Limited (محدود للغاية)</option>
+            <option value="3">3 - Slightly Limited (محدود قليلاً)</option>
+            <option value="4" selected>4 - No Impairment (لا يوجد ضعف)</option>
+          </select>
+        </div>
+        <div class="form-group mb-8">
+          <label>💧 ${tr('Moisture', 'الرطوبة')}</label>
+          <select id="bradenMoisture" class="form-input" onchange="calcBradenTotal()">
+            <option value="1">1 - Constantly Moist (رطب باستمرار)</option>
+            <option value="2">2 - Very Moist (رطب جداً)</option>
+            <option value="3">3 - Occasionally Moist (رطب أحياناً)</option>
+            <option value="4" selected>4 - Rarely Moist (نادراً ما يكون رطباً)</option>
+          </select>
+        </div>
+        <div class="form-group mb-8">
+          <label>🚶 ${tr('Activity', 'النشاط البدني')}</label>
+          <select id="bradenActivity" class="form-input" onchange="calcBradenTotal()">
+            <option value="1">1 - Bedfast (طريح الفراش)</option>
+            <option value="2">2 - Chairfast (جليس الكرسي)</option>
+            <option value="3">3 - Walks Occasionally (يمشي أحياناً)</option>
+            <option value="4" selected>4 - Walks Frequently (يمشي بشكل متكرر)</option>
+          </select>
+        </div>
+        <div class="form-group mb-8">
+          <label>🔄 ${tr('Mobility', 'القدرة على الحركة')}</label>
+          <select id="bradenMobility" class="form-input" onchange="calcBradenTotal()">
+            <option value="1">1 - Completely Immobile (عديم الحركة تماماً)</option>
+            <option value="2">2 - Very Limited (محدود للغاية)</option>
+            <option value="3">3 - Slightly Limited (محدود قليلاً)</option>
+            <option value="4" selected>4 - No Limitation (لا توجد قيود)</option>
+          </select>
+        </div>
+        <div class="form-group mb-8">
+          <label>🍎 ${tr('Nutrition', 'التغذية')}</label>
+          <select id="bradenNutrition" class="form-input" onchange="calcBradenTotal()">
+            <option value="1">1 - Very Poor (سيئة للغاية)</option>
+            <option value="2">2 - Probably Inadequate (غير كافية على الأرجح)</option>
+            <option value="3">3 - Adequate (كافية)</option>
+            <option value="4" selected>4 - Excellent (ممتازة)</option>
+          </select>
+        </div>
+        <div class="form-group mb-8">
+          <label>⚡ ${tr('Friction & Shear', 'الاحتكاك والقص')}</label>
+          <select id="bradenFriction" class="form-input" onchange="calcBradenTotal()">
+            <option value="1">1 - Problem (مشكلة قائمة)</option>
+            <option value="2">2 - Potential Problem (مشكلة محتملة)</option>
+            <option value="3" selected>3 - No Apparent Problem (لا توجد مشكلة ظاهرة)</option>
+          </select>
+        </div>
+      </div>
+      
+      <div id="bradenResultPanel" style="background:var(--hover,#f8f9fa);padding:12px;border-radius:8px;font-size:14px;border-left:4px solid #10b981;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+        <span><strong>${tr('Total Score', 'الدرجة الإجمالية')}:</strong> <span id="bradenInterpretation">${tr('No Risk', 'لا يوجد خطر')}</span></span>
+        <span id="bradenScoreVal" class="badge badge-success" style="font-size:16px;padding:4px 10px">23 / 23</span>
+      </div>
+      
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('bradenModal').remove()">${tr('Cancel', 'إلغاء')}</button>
+        <button class="btn btn-primary" style="flex:2" onclick="saveBradenAssessment()">${tr('Save Assessment', 'حفظ التقييم')}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  window.calcBradenTotal();
+};
+
+window.calcBradenTotal = () => {
+  const getSel = id => parseInt(document.getElementById(id)?.value || 0);
+  const total = getSel('bradenSensory') + getSel('bradenMoisture') + getSel('bradenActivity') + getSel('bradenMobility') + getSel('bradenNutrition') + getSel('bradenFriction');
+  
+  const panel = document.getElementById('bradenResultPanel');
+  const interp = document.getElementById('bradenInterpretation');
+  const scoreVal = document.getElementById('bradenScoreVal');
+  if (!panel || !interp || !scoreVal) return;
+  
+  scoreVal.innerText = `${total} / 23`;
+  
+  if (total <= 9) {
+    panel.style.borderLeftColor = 'red';
+    interp.innerText = tr('Severe Risk (≤9)', 'خطر شديد جداً (حالة حرجة)');
+    scoreVal.className = 'badge badge-danger';
+  } else if (total <= 12) {
+    panel.style.borderLeftColor = '#ef4444';
+    interp.innerText = tr('High Risk (10-12)', 'خطر مرتفع');
+    scoreVal.className = 'badge badge-danger';
+  } else if (total <= 14) {
+    panel.style.borderLeftColor = '#f59e0b';
+    interp.innerText = tr('Moderate Risk (13-14)', 'خطر متوسط');
+    scoreVal.className = 'badge badge-warning';
+  } else if (total <= 18) {
+    panel.style.borderLeftColor = '#3b82f6';
+    interp.innerText = tr('Mild Risk (15-18)', 'خطر طفيف');
+    scoreVal.className = 'badge badge-info';
+  } else {
+    panel.style.borderLeftColor = '#10b981';
+    interp.innerText = tr('No Risk (19-23)', 'لا يوجد خطر');
+    scoreVal.className = 'badge badge-success';
+  }
+};
+
+window.saveBradenAssessment = async () => {
+  const patientId = document.getElementById('bradenPatientId').value;
+  const getSel = id => parseInt(document.getElementById(id)?.value || 0);
+  const total = getSel('bradenSensory') + getSel('bradenMoisture') + getSel('bradenActivity') + getSel('bradenMobility') + getSel('bradenNutrition') + getSel('bradenFriction');
+  
+  let riskLevel = 'No Risk';
+  if (total <= 9) riskLevel = 'Severe Risk';
+  else if (total <= 12) riskLevel = 'High Risk';
+  else if (total <= 14) riskLevel = 'Moderate Risk';
+  else if (total <= 18) riskLevel = 'Mild Risk';
+  
+  try {
+    await API.post('/api/nursing/risk-assessment', {
+      patient_id: patientId,
+      assessment_type: 'Braden Scale',
+      total_score: total,
+      risk_level: riskLevel,
+      details: {
+        sensory: getSel('bradenSensory'),
+        moisture: getSel('bradenMoisture'),
+        activity: getSel('bradenActivity'),
+        mobility: getSel('bradenMobility'),
+        nutrition: getSel('bradenNutrition'),
+        friction: getSel('bradenFriction')
+      }
+    });
+    showToast(tr('Braden Scale assessment saved!', 'تم حفظ تقييم مقياس برادن بنجاح!'));
+    document.getElementById('bradenModal').remove();
+    await navigateTo(11);
+  } catch (e) {
+    showToast(e.message || tr('Error saving assessment', 'خطأ في حفظ التقييم'), 'error');
+  }
+};
+
+window.openMorseModal = function() {
+  const patients = window.nursingPatients || [];
+  if (!patients.length) { showToast(tr('No patient records loaded', 'لا توجد سجلات مرضى محملة'), 'error'); return; }
+  
+  let patientOptions = patients.map(p => `<option value="${p.id}">${escapeHTML(p.file_number)} - ${escapeHTML(isArabic ? (p.name_ar || p.name_en) : (p.name_en || p.name_ar))}</option>`).join('');
+  
+  const modal = document.createElement('div');
+  modal.id = 'morseModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto';
+  
+  modal.innerHTML = `
+    <div class="card glass-card-premium" style="width:100%;max-width:550px;max-height:90vh;overflow-y:auto;padding:24px;border:1px solid rgba(255,255,255,0.2)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid var(--border-color);padding-bottom:8px">
+        <h3 style="margin:0;color:var(--primary)">📊 ${tr('Morse Fall Risk Assessment', 'تقييم مخاطر السقوط (مقياس مورس)')}</h3>
+        <button class="btn btn-sm btn-secondary" onclick="document.getElementById('morseModal').remove()">✖</button>
+      </div>
+      
+      <div class="form-group mb-12">
+        <label>👤 ${tr('Select Patient', 'اختر المريض')}</label>
+        <select id="morsePatientId" class="form-input">${patientOptions}</select>
+      </div>
+      
+      <div style="font-size:12px;margin-bottom:16px">
+        <div class="form-group mb-8">
+          <label>📜 ${tr('History of Falling (Within 3 Months)', 'تاريخ السقوط خلال آخر 3 أشهر')}</label>
+          <select id="morseHistory" class="form-input" onchange="calcMorseTotal()">
+            <option value="0" selected>No (0) (لا)</option>
+            <option value="25">Yes (25) (نعم)</option>
+          </select>
+        </div>
+        <div class="form-group mb-8">
+          <label>📋 ${tr('Secondary Diagnosis', 'وجود تشخيص ثانوي إضافي')}</label>
+          <select id="morseSecondary" class="form-input" onchange="calcMorseTotal()">
+            <option value="0" selected>No (0) (لا)</option>
+            <option value="15">Yes (15) (نعم)</option>
+          </select>
+        </div>
+        <div class="form-group mb-8">
+          <label>♿ ${tr('Ambulatory Aid', 'المساعدة في المشي / الأجهزة المساعدة')}</label>
+          <select id="morseAid" class="form-input" onchange="calcMorseTotal()">
+            <option value="0" selected>None / Bed Rest / Nurse Assist (0) (لا يوجد / ملازم للفراش / مساعدة الممرض)</option>
+            <option value="15">Crutches / Cane / Walker (15) (عكازات / عصا / مشاية)</option>
+            <option value="30">Furniture / Clinging to objects (30) (يستند على الأثاث)</option>
+          </select>
+        </div>
+        <div class="form-group mb-8">
+          <label>💉 ${tr('IV / Heparin Lock', 'المحاليل الوريدية / قفل الهيبارين')}</label>
+          <select id="morseIv" class="form-input" onchange="calcMorseTotal()">
+            <option value="0" selected>No (0) (لا)</option>
+            <option value="20">Yes (20) (نعم)</option>
+          </select>
+        </div>
+        <div class="form-group mb-8">
+          <label>🚶 ${tr('Gait / Transferring', 'المشية والقدرة على الانتقال')}</label>
+          <select id="morseGait" class="form-input" onchange="calcMorseTotal()">
+            <option value="0" selected>Normal / Bedrest / Immobile (0) (طبيعي / طريح الفراش)</option>
+            <option value="10">Weak (10) (مشية ضعيفة)</option>
+            <option value="20">Impaired (20) (مشية مضطربة)</option>
+          </select>
+        </div>
+        <div class="form-group mb-8">
+          <label>🧠 ${tr('Mental Status', 'الحالة العقلية والوعي بمخاطر السقوط')}</label>
+          <select id="morseMental" class="form-input" onchange="calcMorseTotal()">
+            <option value="0" selected>Oriented to own ability (0) (مدرك لقدراته البدنية)</option>
+            <option value="15">Overestimates or forgets limitations (15) (يبالغ في تقدير قدرته أو ينسى قيوده)</option>
+          </select>
+        </div>
+      </div>
+      
+      <div id="morseResultPanel" style="background:var(--hover,#f8f9fa);padding:12px;border-radius:8px;font-size:14px;border-left:4px solid #10b981;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+        <span><strong>${tr('Total Score', 'الدرجة الإجمالية')}:</strong> <span id="morseInterpretation">${tr('Low Risk', 'مخاطر منخفضة')}</span></span>
+        <span id="morseScoreVal" class="badge badge-success" style="font-size:16px;padding:4px 10px">0 / 125</span>
+      </div>
+      
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('morseModal').remove()">${tr('Cancel', 'إلغاء')}</button>
+        <button class="btn btn-primary" style="flex:2" onclick="saveMorseAssessment()">${tr('Save Assessment', 'حفظ التقييم')}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  window.calcMorseTotal();
+};
+
+window.calcMorseTotal = () => {
+  const getSel = id => parseInt(document.getElementById(id)?.value || 0);
+  const total = getSel('morseHistory') + getSel('morseSecondary') + getSel('morseAid') + getSel('morseIv') + getSel('morseGait') + getSel('morseMental');
+  
+  const panel = document.getElementById('morseResultPanel');
+  const interp = document.getElementById('morseInterpretation');
+  const scoreVal = document.getElementById('morseScoreVal');
+  if (!panel || !interp || !scoreVal) return;
+  
+  scoreVal.innerText = `${total} / 125`;
+  
+  if (total >= 45) {
+    panel.style.borderLeftColor = 'red';
+    interp.innerText = tr('High Fall Risk (≥45)', 'مخاطر سقوط عالية - يلزم تفعيل بروتوكول منع السقوط');
+    scoreVal.className = 'badge badge-danger';
+  } else if (total >= 25) {
+    panel.style.borderLeftColor = '#f59e0b';
+    interp.innerText = tr('Moderate Fall Risk (25-44)', 'مخاطر سقوط متوسطة - ينصح بأخذ تدابير وقائية');
+    scoreVal.className = 'badge badge-warning';
+  } else {
+    panel.style.borderLeftColor = '#10b981';
+    interp.innerText = tr('Low Fall Risk (0-24)', 'مخاطر سقوط منخفضة');
+    scoreVal.className = 'badge badge-success';
+  }
+};
+
+window.saveMorseAssessment = async () => {
+  const patientId = document.getElementById('morsePatientId').value;
+  const getSel = id => parseInt(document.getElementById(id)?.value || 0);
+  const total = getSel('morseHistory') + getSel('morseSecondary') + getSel('morseAid') + getSel('morseIv') + getSel('morseGait') + getSel('morseMental');
+  
+  let riskLevel = 'Low Risk';
+  if (total >= 45) riskLevel = 'High Risk';
+  else if (total >= 25) riskLevel = 'Moderate Risk';
+  
+  try {
+    await API.post('/api/nursing/risk-assessment', {
+      patient_id: patientId,
+      assessment_type: 'Morse Fall Risk',
+      total_score: total,
+      risk_level: riskLevel,
+      details: {
+        history: getSel('morseHistory'),
+        secondary: getSel('morseSecondary'),
+        aid: getSel('morseAid'),
+        iv: getSel('morseIv'),
+        gait: getSel('morseGait'),
+        mental: getSel('morseMental')
+      }
+    });
+    showToast(tr('Morse Fall Risk assessment saved!', 'تم حفظ تقييم مورس لمخاطر السقوط بنجاح!'));
+    document.getElementById('morseModal').remove();
+    await navigateTo(11);
+  } catch (e) {
+    showToast(e.message || tr('Error saving assessment', 'خطأ في حفظ التقييم'), 'error');
+  }
+};
+
+window.openSurgicalCountModal = function(surgeryId) {
+  if (!surgeryId) { showToast(tr('Select a surgery session first', 'اختر عملية جراحية أولاً'), 'error'); return; }
+  
+  const modal = document.createElement('div');
+  modal.id = 'surgCountModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  
+  modal.innerHTML = `
+    <div class="card glass-card-premium" style="width:100%;max-width:500px;padding:24px;border:1px solid rgba(255,255,255,0.2)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid var(--border-color);padding-bottom:8px">
+        <h3 style="margin:0;color:var(--primary)">📋 ${tr('Surgical Count Verification Sheet', 'ورقة مطابقة وجرد الأدوات الجراحية والشاش')}</h3>
+        <button class="btn btn-sm btn-secondary" onclick="document.getElementById('surgCountModal').remove()">✖</button>
+      </div>
+      
+      <div class="form-group mb-12">
+        <label>🩺 ${tr('Surgery ID', 'رقم العملية')}</label>
+        <input type="text" class="form-input" value="${surgeryId}" readonly disabled>
+      </div>
+      
+      <div style="font-size:12px;margin-bottom:16px">
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;align-items:center;font-weight:bold;margin-bottom:8px">
+          <div>${tr('Item', 'الصنف / الأداة')}</div>
+          <div>${tr('Initial Count', 'العد الابتدائي')}</div>
+          <div>${tr('Final Count', 'العد النهائي')}</div>
+        </div>
+        
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;align-items:center;margin-bottom:8px">
+          <div>🧽 ${tr('Sponges (الشاش الجراحي)', 'الشاش والقطع القطنية')}</div>
+          <input type="number" id="countSpongeInit" class="form-input" value="10" min="0" onchange="checkCountMatch()">
+          <input type="number" id="countSpongeFinal" class="form-input" value="10" min="0" onchange="checkCountMatch()">
+        </div>
+        
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;align-items:center;margin-bottom:8px">
+          <div>💉 ${tr('Needles (الإبر الجراحية)', 'الإبر')}</div>
+          <input type="number" id="countNeedleInit" class="form-input" value="5" min="0" onchange="checkCountMatch()">
+          <input type="number" id="countNeedleFinal" class="form-input" value="5" min="0" onchange="checkCountMatch()">
+        </div>
+        
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;align-items:center;margin-bottom:12px">
+          <div>🔧 ${tr('Instruments (الأدوات الجراحية)', 'الأدوات والملاقط')}</div>
+          <input type="number" id="countInstInit" class="form-input" value="24" min="0" onchange="checkCountMatch()">
+          <input type="number" id="countInstFinal" class="form-input" value="24" min="0" onchange="checkCountMatch()">
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+          <div class="form-group">
+            <label>${tr('Scrub Nurse (M1)', 'ممرض التعقيم')}</label>
+            <input type="text" id="countWitness1" class="form-input" value="Nurse Fatima" placeholder="Witness 1">
+          </div>
+          <div class="form-group">
+            <label>${tr('Circulating Nurse (M2)', 'الممرض الدوار')}</label>
+            <input type="text" id="countWitness2" class="form-input" value="Nurse Ahmad" placeholder="Witness 2">
+          </div>
+        </div>
+      </div>
+      
+      <div id="countMatchPanel" style="background:var(--hover,#f8f9fa);padding:10px;border-radius:8px;font-size:13px;border-left:4px solid #10b981;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+        <span id="countMatchStatus"><strong>${tr('Verification Status', 'حالة المطابقة')}:</strong> <span id="countInterpretation" style="color:#10b981;font-weight:bold">${tr('Perfect Match ✅', 'متطابقة تماماً ✅')}</span></span>
+      </div>
+      
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('surgCountModal').remove()">${tr('Cancel', 'إلغاء')}</button>
+        <button class="btn btn-primary" style="flex:2" onclick="saveSurgicalCountSheet(${surgeryId})">${tr('Save & Verify counts', 'حفظ وتأكيد العد')}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  window.checkCountMatch();
+};
+
+window.checkCountMatch = () => {
+  const getVal = id => parseInt(document.getElementById(id)?.value || 0);
+  const spongeOk = getVal('countSpongeInit') === getVal('countSpongeFinal');
+  const needleOk = getVal('countNeedleInit') === getVal('countNeedleFinal');
+  const instOk = getVal('countInstInit') === getVal('countInstFinal');
+  
+  const panel = document.getElementById('countMatchPanel');
+  const interp = document.getElementById('countInterpretation');
+  if (!panel || !interp) return;
+  
+  if (spongeOk && needleOk && instOk) {
+    panel.style.borderLeftColor = '#10b981';
+    interp.innerText = tr('Perfect Match ✅', 'متطابقة تماماً ✅');
+    interp.style.color = '#10b981';
+  } else {
+    panel.style.borderLeftColor = 'red';
+    interp.innerText = tr('DISCREPANCY DETECTED ❌', 'يوجد اختلاف في العد! ❌');
+    interp.style.color = 'red';
+  }
+};
+
+window.saveSurgicalCountSheet = async (surgeryId) => {
+  const getVal = id => parseInt(document.getElementById(id)?.value || 0);
+  const spongeOk = getVal('countSpongeInit') === getVal('countSpongeFinal');
+  const needleOk = getVal('countNeedleInit') === getVal('countNeedleFinal');
+  const instOk = getVal('countInstInit') === getVal('countInstFinal');
+  
+  const sponge_init = getVal('countSpongeInit');
+  const sponge_final = getVal('countSpongeFinal');
+  const needle_init = getVal('countNeedleInit');
+  const needle_final = getVal('countNeedleFinal');
+  const instrument_init = getVal('countInstInit');
+  const instrument_final = getVal('countInstFinal');
+  const witness_1 = document.getElementById('countWitness1')?.value || '';
+  const witness_2 = document.getElementById('countWitness2')?.value || '';
+  
+  try {
+    await API.post('/api/surgery/count-sheet', {
+      surgery_id: surgeryId,
+      sponge_init, sponge_final,
+      needle_init, needle_final,
+      instrument_init, instrument_final,
+      witness_1, witness_2
+    });
+    
+    showToast(tr('Surgical count sheet saved!', 'تم حفظ ورقة جرد ومطابقة الأدوات الجراحية!'));
+    
+    // Automatically set Counts Verified option in UI if matched
+    const match = spongeOk && needleOk && instOk;
+    const select = document.getElementById('op_counts');
+    if (select) {
+      select.value = match ? '1' : '0';
+    }
+    
+    document.getElementById('surgCountModal').remove();
+  } catch (e) {
+    showToast(e.message || tr('Error saving count sheet', 'خطأ في حفظ ورقة الجرد'), 'error');
+  }
 };
 
