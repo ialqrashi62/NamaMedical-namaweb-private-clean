@@ -122,7 +122,9 @@
 * **معالج خطوات التسجيل ثلاثي المراحل (3-Step Stepper Wizard)**: تقسيم النموذج المزدحم لتسجيل المرضى لـ 3 خطوات منظمة تسهل على موظف الاستقبال إدخال البيانات دون تشتت.
 * **منع التكرار الفوري (EMPI Duplicate Check)**: إضافة تحقق فوري وتلقائي عند كتابة رقم الهوية أو الجوال، بحيث يظهر تحذير للمستخدم في حال وجود ملف طبق مسجل مسبقاً لمنع الازدواجية نهائياً.
 * **فحص الأهلية الفوري لنفيز (NPHIES Simulated Verification)**: دمج بوابة تحقق فورية داخل الخطوة الثالثة تحاكي طلبات الاستعلام والتغطية وحساب نسب التحمل.
-* **تفعيل تنظيف الكاش**: ترقية كاش باستر الـ JavaScript في `index.html` لضمان تحميل المتصفحات للملفات الجديدة تلقائياً.
+* **تعديل حجم وتخطيط سوار المعصم (Horizontal Thermal Wristband)**: تم تعديل تصميم سوار المعصم ليكون بشكل أفقي نحيف (عرض 750px وارتفاع 95px) ليتناسب تماماً مع بكرات أساور المستشفيات الحرارية، وتم ترتيب البيانات برمجياً (الشعار باليسار، بيانات المريض بالوسط، وباركود رقم الملف MRN باليمين مع تاريخ الطباعة).
+* **جعل رسوم فتح الملف مجانية (Free File Opening Fee)**: تم تعديل اسم العمود إلى "رسوم فتح الملف" وجعل قيمته الافتراضية "مجاني 🟢" لجميع فئات المرضى.
+* **حل مشكلة الكاش (Stylesheet Cache-Buster)**: تم دمج معلمة إصدار فريد لملف التنسيقات (`styles.css?v=20260702_7`) في صفحة `index.html` لإجبار المتصفح على تحميل التصاميم المحدثة والمنظمة فوراً دون الحاجة لتحديث الكاش يدوياً.
 
 ### 2. مخرجات الفحص والتحقق
 * **الاختبارات الآلية**: تشغيل اختبارات الوحدة والدمج بنجاح كامل (103 unit tests passed, 14 NPHIES integration tests passed).
@@ -132,9 +134,10 @@
 
 ### 📸 وسائط الفحص والمتابعة (Media & Proofs)
 
-![EMR Reception Redesigned Screen](/C:/Users/ice/.gemini/antigravity-ide/brain/acc620b5-1eb1-41c8-a581-bf3789344b30/reception_features_1783013567968.png)
+![EMR Reception Redesigned Screen](/C:/Users/ice/.gemini/antigravity-ide/brain/acc620b5-1eb1-41c8-a581-bf3789344b30/reception_page_final_1783013925640.png)
 
-![Verification Flow Video](/C:/Users/ice/.gemini/antigravity-ide/brain/acc620b5-1eb1-41c8-a581-bf3789344b30/reception_new_features_1783013500813.webp)
+![Verification Flow Video](/C:/Users/ice/.gemini/antigravity-ide/brain/acc620b5-1eb1-41c8-a581-bf3789344b30/reception_fixes_check_1783013860708.webp)
+
 
 
 
