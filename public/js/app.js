@@ -98,6 +98,7 @@ const NAV_ITEMS = [
   { icon: '💎', en: 'Cosmetic Surgery', ar: 'جراحة التجميل' },
   { icon: '🤰', en: 'OB/GYN', ar: 'النساء والتوليد' },
   { icon: '⚙️', en: 'Settings', ar: 'الإعدادات' },
+  { icon: '🦷', en: 'Dental', ar: 'الأسنان' },
 ];
 
 // ===== INIT =====
@@ -1901,7 +1902,7 @@ async function renderOBGYN(el) {
       let html = '<table class="data-table"><thead><tr><th>' + tr('Patient', 'المريضة') + '</th><th>GPAL</th><th>' + tr('EDD', 'تاريخ الولادة المتوقع') + '</th><th>' + tr('Risk', 'الخطورة') + '</th><th>' + tr('Doctor', 'الطبيب') + '</th><th>' + tr('Actions', 'إجراءات') + '</th></tr></thead><tbody>';
       preg.forEach(p => {
         const riskColor = p.risk_level === 'High' ? '#ef4444' : p.risk_level === 'Medium' ? '#f59e0b' : '#22c55e';
-        html += '<tr><td>' + escapeHTML(p.patient_name) + '</td><td>G' + p.gravida + 'P' + p.para + 'A' + p.abortions + 'L' + p.living_children + '</td><td>' + escapeHTML(p.edd || '-') + '</td><td><span style="color:' + riskColor + ';font-weight:700">' + escapeHTML(p.risk_level) + '</span></td><td>' + escapeHTML(p.attending_doctor || '-') + '</td><td><button class="btn btn-sm" onclick="showAntenatalForm(' + safeId(p.id) + ',' + safeId(p.patient_id) + ')">📋 ' + tr('Antenatal', 'متابعة') + '</button> <button class="btn btn-sm" onclick="showPartogramForm(' + safeId(p.id) + ')">📈 ' + tr('Partogram', 'مخطط المخاض') + '</button> <button class="btn btn-sm btn-primary" onclick="showDeliveryForm(' + safeId(p.id) + ')">👶 ' + tr('Delivery', 'الولادة') + '</button></td></tr>';
+        html += '<tr><td>' + escapeHTML(p.patient_name) + '</td><td>G' + p.gravida + 'P' + p.para + 'A' + p.abortions + 'L' + p.living_children + '</td><td>' + escapeHTML(p.edd || '-') + '</td><td><span style="color:' + riskColor + ';font-weight:700">' + escapeHTML(p.risk_level) + '</span></td><td>' + escapeHTML(p.attending_doctor || '-') + '</td><td><button class="btn btn-sm" onclick="showAntenatalForm(' + safeId(p.id) + ',' + safeId(p.patient_id) + ')">📋 ' + tr('Antenatal', 'متابعة') + '</button> <button class="btn btn-sm" onclick="showOBGYNUltrasoundForm(' + safeId(p.id) + ',' + safeId(p.patient_id) + ')">📡 ' + tr('Ultrasound', 'سونار') + '</button> <button class="btn btn-sm" onclick="showPartogramForm(' + safeId(p.id) + ')">📈 ' + tr('Partogram', 'مخطط المخاض') + '</button> <button class="btn btn-sm btn-primary" onclick="showDeliveryForm(' + safeId(p.id) + ')">👶 ' + tr('Delivery', 'الولادة') + '</button></td></tr>';
       });
       html += '</tbody></table>';
       list.innerHTML = html;
@@ -2132,12 +2133,245 @@ window.saveNeonatal = async (deliveryId) => {
   } catch (e) { showToast(tr('Error: ', 'خطأ: ') + (e.message || ''), 'error'); }
 };
 
+// ===== DENTAL CLINIC WORKSPACE =====
+let dentalTab = 'charting';
+let dentalSelectedPatientId = null;
+let dentalSelectedTooth = null;
+
+async function renderDental(el) {
+  const [patients, dentalRecords] = await Promise.all([
+    API.get('/api/patients').catch(() => []),
+    dentalSelectedPatientId ? API.get('/api/dental/records/' + dentalSelectedPatientId).catch(() => []) : Promise.resolve([])
+  ]);
+
+  if (!dentalSelectedPatientId && patients.length > 0) {
+    dentalSelectedPatientId = patients[0].id;
+  }
+
+  const selectedPatient = patients.find(p => parseInt(p.id, 10) === parseInt(dentalSelectedPatientId, 10));
+
+  let toothStatusMap = {};
+  if (dentalRecords && dentalRecords.length) {
+    const sorted = [...dentalRecords].sort((a, b) => new Date(a.visit_date) - new Date(b.visit_date));
+    sorted.forEach(rec => {
+      toothStatusMap[rec.tooth_number] = {
+        condition: rec.condition,
+        treatment: rec.treatment_done
+      };
+    });
+  }
+  window.dentalToothStatusMap = toothStatusMap;
+
+  el.innerHTML = `
+    <div class="page-title">🦷 ${tr('Dental / Dentistry Center', 'مركز طب الأسنان')}</div>
+    
+    <div class="card mb-16">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <label style="font-weight:bold">${tr('Select Patient File:', 'اختر ملف المريض:')}</label>
+        <select id="dentalPatientSelect" class="form-input" style="max-width:300px" onchange="window.selectDentalPatient(this.value)">
+          ${patients.map(p => `<option value="${safeId(p.id)}" ${parseInt(p.id, 10) === parseInt(dentalSelectedPatientId, 10) ? 'selected' : ''}>${escapeHTML(p.file_number)} - ${escapeHTML(isArabic ? p.name_ar : p.name_en)}</option>`).join('')}
+        </select>
+        ${selectedPatient ? `<div class="badge badge-info">${tr('MRN: ', 'رقم الملف: ')}${selectedPatient.file_number}</div>` : ''}
+      </div>
+    </div>
+
+    <div class="tab-bar">
+      <button class="tab-btn ${dentalTab === 'charting' ? 'active' : ''}" onclick="dentalTab='charting';navigateTo(43)">🦷 ${tr('Dental Charting', 'مخطط الأسنان التفاعلي')}</button>
+      <button class="tab-btn ${dentalTab === 'history' ? 'active' : ''}" onclick="dentalTab='history';navigateTo(43)">📋 ${tr('Treatment History', 'سجل العلاجات السابقة')}</button>
+    </div>
+
+    <div id="dentalTabContent"></div>
+  `;
+
+  const content = document.getElementById('dentalTabContent');
+
+  if (dentalTab === 'charting') {
+    content.innerHTML = `
+      <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:20px;align-items:start">
+        <div class="card">
+          <h3 style="margin-bottom:12px;text-align:center">🦷 ${tr('Odontogram (Adult / Deciduous)', 'مخطط الأسنان السريري')}</h3>
+          
+          <div style="margin-bottom:16px;text-align:center">
+            <label style="font-weight:bold;margin-right:8px">${tr('Dentition Mode:', 'نوع الأسنان:')}</label>
+            <select id="dentalMode" class="form-input" style="width:auto;display:inline-block" onchange="window.toggleDentalMode(this.value)">
+              <option value="adult" selected>${tr('Adult Dentition (32 Teeth)', 'أسنان البالغين (32 سن)')}</option>
+              <option value="child">${tr('Deciduous Dentition (20 Teeth)', 'الأسنان اللبنية للأطفال (20 سن)')}</option>
+            </select>
+          </div>
+
+          <div id="odontogramWrapper" style="padding:10px;background:rgba(255,255,255,0.7);border-radius:12px;border:1px solid var(--outline);min-height:220px;display:flex;flex-direction:column;gap:20px;align-items:center">
+            ${renderOdontogramSVG(toothStatusMap, 'adult')}
+          </div>
+          
+          <div class="legend" style="display:flex;justify-content:center;gap:16px;margin-top:12px;flex-wrap:wrap;font-size:12px">
+            <span style="display:flex;align-items:center;gap:6px"><span style="width:14px;height:14px;background:#ffffff;border:1px solid #999;border-radius:3px"></span> ${tr('Healthy', 'سليم')}</span>
+            <span style="display:flex;align-items:center;gap:6px"><span style="width:14px;height:14px;background:#fecaca;border-radius:3px"></span> ${tr('Caries (Decay)', 'تسوس')}</span>
+            <span style="display:flex;align-items:center;gap:6px"><span style="width:14px;height:14px;background:#bfdbfe;border-radius:3px"></span> ${tr('Restored (Filling)', 'حشو')}</span>
+            <span style="display:flex;align-items:center;gap:6px"><span style="width:14px;height:14px;background:#e9d5ff;border-radius:3px"></span> ${tr('Root Canal', 'علاج عصب')}</span>
+            <span style="display:flex;align-items:center;gap:6px"><span style="width:14px;height:14px;background:#e5e7eb;border-radius:3px"></span> ${tr('Extracted', 'مخلوع / مفقود')}</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>🩺 ${tr('Record Treatment / Diagnosis', 'تسجيل التشخيص والتدخل العلاجي')}</h3>
+          <div style="margin:12px 0;padding:8px 12px;background:rgba(14,165,233,0.1);border-radius:8px;font-weight:bold;color:var(--primary)">
+            ${tr('Selected Tooth:', 'السن المحدد:')} <span id="dentalSelectedToothLabel">${dentalSelectedTooth ? dentalSelectedTooth : tr('Click a tooth on diagram', 'انقر على سن في المخطط')}</span>
+          </div>
+          <div class="form-grid" style="grid-template-columns:1fr;gap:12px">
+            <div class="form-group">
+              <label>${tr('Condition / Diagnosis', 'الحالة التشخيصية للسن')}</label>
+              <select id="dentalCondition" class="form-input" onchange="window.autoSuggestDentalTreatment(this.value)">
+                <option value="Healthy">${tr('Healthy', 'سليم')}</option>
+                <option value="Caries">${tr('Caries / Decay', 'تسوس أسنان')}</option>
+                <option value="Missing">${tr('Missing / Extracted', 'مفقود / مخلوع')}</option>
+                <option value="Restored">${tr('Restored / Filled', 'معالج بحشوة')}</option>
+                <option value="Pulpal Pathology">${tr('Pulpal Pathology (Requires Root Canal)', 'التهاب عصب (يتطلب علاج عصب)')}</option>
+                <option value="Fracture">${tr('Tooth Fracture', 'كسر في السن')}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>${tr('Treatment Rendered', 'الإجراء العلاجي المتخذ')}</label>
+              <select id="dentalTreatment" class="form-input">
+                <option value="None">${tr('None / Observation', 'لا يوجد / مراقبة')}</option>
+                <option value="Composite Filling">${tr('Composite Restorative Filling', 'حشوة تجميلية كومبوزيت')}</option>
+                <option value="Root Canal Therapy">${tr('Root Canal Therapy (RCT)', 'سحب وعلاج عصب السن')}</option>
+                <option value="Extraction">${tr('Surgical / Simple Extraction', 'خلع سن بسيط / جراحي')}</option>
+                <option value="Scaling & Polishing">${tr('Dental Scaling & Polishing', 'تنظيف الجير وتلميع الأسنان')}</option>
+                <option value="Dental Crown">${tr('Porcelain/Zirconia Crown', 'تركيب تاج / تلبيسة سن')}</option>
+                <option value="Fluoride Application">${tr('Topical Fluoride Application', 'تطبيق الفلورايد الوقائي')} </option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="window.saveDentalRecord()" style="margin-top:16px;width:100%">💾 ${tr('Save Tooth Record', 'حفظ سجل السن')}</button>
+        </div>
+      </div>
+    `;
+  } else {
+    content.innerHTML = `
+      <div class="card">
+        <h3>📋 ${tr('Dental Records History', 'السجل التاريخي لعلاجات الأسنان')}</h3>
+        ${dentalRecords.length ? makeTable(
+          [tr('Date', 'التاريخ'), tr('Tooth#', 'رقم السن'), tr('Condition', 'التشخيص / الحالة'), tr('Treatment Done', 'الإجراء العلاجي')],
+          dentalRecords.map(r => ({
+            cells: [
+              new Date(r.visit_date).toLocaleDateString(isArabic ? 'ar-SA' : 'en-US') + ' ' + new Date(r.visit_date).toLocaleTimeString(isArabic ? 'ar-SA' : 'en-US', {hour:'2-digit', minute:'2-digit'}),
+              r.tooth_number,
+              r.condition,
+              r.treatment_done || '-'
+            ]
+          }))
+        ) : `<div class="empty-state"><p>${tr('No previous dental procedures recorded for this patient', 'لا توجد إجراءات أسنان سابقة مسجلة لهذا المريض')}</p></div>`}
+      </div>
+    `;
+  }
+}
+
+window.selectDentalPatient = function(val) {
+  dentalSelectedPatientId = val;
+  dentalSelectedTooth = null;
+  navigateTo(43);
+};
+
+window.toggleDentalMode = function(mode) {
+  const odontogramWrapper = document.getElementById('odontogramWrapper');
+  odontogramWrapper.innerHTML = renderOdontogramSVG(window.dentalToothStatusMap, mode);
+};
+
+window.selectTooth = function(num) {
+  dentalSelectedTooth = num;
+  const label = document.getElementById('dentalSelectedToothLabel');
+  if (label) label.textContent = num;
+  document.querySelectorAll('.tooth-btn').forEach(btn => {
+    const isSelected = parseInt(btn.dataset.tooth, 10) === num;
+    btn.style.border = isSelected ? '2px solid var(--primary)' : '2px solid var(--outline)';
+    btn.style.boxShadow = isSelected ? '0 0 8px rgba(14, 165, 233, 0.4)' : 'none';
+  });
+};
+
+window.autoSuggestDentalTreatment = function(condition) {
+  const txSelect = document.getElementById('dentalTreatment');
+  if (!txSelect) return;
+  if (condition === 'Caries') txSelect.value = 'Composite Filling';
+  else if (condition === 'Pulpal Pathology') txSelect.value = 'Root Canal Therapy';
+  else if (condition === 'Missing') txSelect.value = 'Extraction';
+  else if (condition === 'Healthy') txSelect.value = 'None';
+};
+
+window.saveDentalRecord = async function() {
+  if (!dentalSelectedPatientId) {
+    showToast(tr('Please select a patient first', 'يرجى اختيار مريض أولاً'), 'error');
+    return;
+  }
+  if (!dentalSelectedTooth) {
+    showToast(tr('Please click a tooth on the diagram to select it', 'يرجى اختيار سن من المخطط أولاً'), 'error');
+    return;
+  }
+  const condition = document.getElementById('dentalCondition').value;
+  const treatment = document.getElementById('dentalTreatment').value;
+  try {
+    await API.post('/api/dental/records', {
+      patient_id: dentalSelectedPatientId,
+      tooth_number: dentalSelectedTooth,
+      condition,
+      treatment_done: treatment
+    });
+    showToast(tr('Tooth record saved successfully', 'تم حفظ سجل السن بنجاح'));
+    navigateTo(43);
+  } catch (e) {
+    showToast(tr('Error saving record', 'خطأ في الحفظ'), 'error');
+  }
+};
+
+function renderOdontogramSVG(toothStatusMap, mode = 'adult') {
+  let upperTeeth, lowerTeeth;
+  if (mode === 'adult') {
+    upperTeeth = [18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28];
+    lowerTeeth = [48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38];
+  } else {
+    upperTeeth = [55,54,53,52,51, 61,62,63,64,65];
+    lowerTeeth = [85,84,83,82,81, 71,72,73,74,75];
+  }
+
+  const makeRow = (list) => `
+    <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap">
+      ${list.map(t => {
+        const state = toothStatusMap[t] || { condition: 'Healthy', treatment: '' };
+        let bgColor = '#ffffff';
+        if (state.condition === 'Caries') bgColor = '#fecaca';
+        else if (state.condition === 'Restored') bgColor = '#bfdbfe';
+        else if (state.condition === 'Pulpal Pathology') bgColor = '#e9d5ff';
+        else if (state.condition === 'Missing') bgColor = '#e5e7eb';
+        
+        return `
+          <button class="tooth-btn btn btn-outline" 
+            data-tooth="${t}" 
+            style="width:40px;height:55px;padding:2px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;background:${bgColor};border:2px solid ${dentalSelectedTooth === t ? 'var(--primary)' : 'var(--outline)'};border-radius:8px"
+            onclick="window.selectTooth(${t})">
+            <span style="font-size:10px;font-weight:bold">${t}</span>
+            <span style="font-size:16px">${state.condition === 'Missing' ? '❌' : '🦷'}</span>
+            <span style="font-size:8px;opacity:0.8">${state.condition.substring(0,3)}</span>
+          </button>
+        `;
+      }).join('')}
+    </div>
+  `;
+
+  return `
+    <div style="width:100%">
+      <div style="text-align:center;font-weight:bold;font-size:12px;margin-bottom:6px">${mode === 'adult' ? tr('Upper Jaw / الفك العلوي', 'الفك العلوي') : tr('Primary Upper Jaw / الفك العلوي المؤقت', 'الفك العلوي المؤقت')}</div>
+      ${makeRow(upperTeeth)}
+      <div style="text-align:center;font-weight:bold;font-size:12px;margin:12px 0 6px">${mode === 'adult' ? tr('Lower Jaw / الفك السفلي', 'الفك السفلي') : tr('Primary Lower Jaw / الفك السفلي المؤقت', 'الفك السفلي المؤقت')}</div>
+      ${makeRow(lowerTeeth)}
+    </div>
+  `;
+}
+
 
 // ===== PAGE LOADER =====
 async function loadPage(page) {
   const el = document.getElementById('pageContent');
   el.style.animation = 'none'; el.offsetHeight; el.style.animation = '';
-  const pages = [renderDashboard, renderReception, renderAppointments, renderDoctor, renderLab, renderRadiology, renderPharmacy, renderHR, renderFinance, renderInsurance, renderInventory, renderNursing, renderWaitingQueue, renderPatientAccounts, renderReports, renderMessaging, renderCatalog, renderDeptRequests, renderSurgery, renderBloodBank, renderConsentForms, renderEmergency, renderInpatient, renderICU, renderCSSD, renderDietary, renderInfectionControl, renderQuality, renderMaintenance, renderTransport, renderMedicalRecords, renderClinicalPharmacy, renderRehabilitation, renderPatientPortal, renderZATCA, renderTelemedicine, renderPathology, renderSocialWork, renderMortuary, renderCME, renderCosmeticSurgery, renderOBGYN, renderSettings];
+  const pages = [renderDashboard, renderReception, renderAppointments, renderDoctor, renderLab, renderRadiology, renderPharmacy, renderHR, renderFinance, renderInsurance, renderInventory, renderNursing, renderWaitingQueue, renderPatientAccounts, renderReports, renderMessaging, renderCatalog, renderDeptRequests, renderSurgery, renderBloodBank, renderConsentForms, renderEmergency, renderInpatient, renderICU, renderCSSD, renderDietary, renderInfectionControl, renderQuality, renderMaintenance, renderTransport, renderMedicalRecords, renderClinicalPharmacy, renderRehabilitation, renderPatientPortal, renderZATCA, renderTelemedicine, renderPathology, renderSocialWork, renderMortuary, renderCME, renderCosmeticSurgery, renderOBGYN, renderSettings, renderDental];
   if (pages[page]) await pages[page](el);
   else if (NAV_ITEMS[page]) renderDepartmentWorkspace(el, page);
   else el.innerHTML = `<div class="page-title">${NAV_ITEMS[page]?.icon} ${tr(NAV_ITEMS[page]?.en, NAV_ITEMS[page]?.ar)}</div><div class="card"><p>${tr('Coming soon...', 'قريباً...')}</p></div>`;
@@ -14664,10 +14898,11 @@ window.resolveCPReview = async function (id) {
 // ===== REHABILITATION / PT =====
 let rehabTab = 'patients';
 async function renderRehabilitation(el) {
-  const [rehabPatients, sessions, allPatients] = await Promise.all([
+  const [rehabPatients, sessions, allPatients, assessments] = await Promise.all([
     API.get('/api/rehab/patients').catch(() => []),
     API.get('/api/rehab/sessions').catch(() => []),
-    API.get('/api/patients').catch(() => [])
+    API.get('/api/patients').catch(() => []),
+    API.get('/api/rehab/assessments').catch(() => [])
   ]);
   const active = rehabPatients.filter(r => r.status === 'Active').length;
   el.innerHTML = `
@@ -14682,6 +14917,7 @@ async function renderRehabilitation(el) {
       <button class="tab-btn ${rehabTab === 'patients' ? 'active' : ''}" onclick="rehabTab='patients';navigateTo(32)">👥 ${tr('Patients', 'المرضى')}</button>
       <button class="tab-btn ${rehabTab === 'new' ? 'active' : ''}" onclick="rehabTab='new';navigateTo(32)">➕ ${tr('New Referral', 'تحويل جديد')}</button>
       <button class="tab-btn ${rehabTab === 'sessions' ? 'active' : ''}" onclick="rehabTab='sessions';navigateTo(32)">📅 ${tr('Sessions', 'الجلسات')}</button>
+      <button class="tab-btn ${rehabTab === 'assessments' ? 'active' : ''}" onclick="rehabTab='assessments';navigateTo(32)">📋 ${tr('Assessments', 'التقييمات')}</button>
     </div>
     <div class="card" id="rehabContent"></div>`;
   const mc = document.getElementById('rehabContent');
@@ -14706,6 +14942,33 @@ async function renderRehabilitation(el) {
       <div style="grid-column:1/-1"><label>${tr('Notes', 'ملاحظات')}</label><textarea id="rehabNotes" class="form-input" rows="3"></textarea></div>
     </div>
     <button class="btn btn-primary" onclick="submitRehab()" style="margin-top:8px">🏋️ ${tr('Add Patient', 'إضافة مريض')}</button>`;
+  } else if (rehabTab === 'assessments') {
+    mc.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3>📋 ${tr('Clinical Assessments', 'التقييمات التأهيلية السريرية')}</h3>
+        <button class="btn btn-primary btn-sm" onclick="showNewRehabAssessmentForm()">${tr('➕ New Assessment', '➕ تقييم جديد')}</button>
+      </div>
+      <div id="rehabAssessmentContainer">
+        ${assessments.length ? makeTable(
+          [tr('Date', 'التاريخ'), tr('Patient', 'المريض'), tr('Type', 'نوع التقييم'), tr('ROM Scores', 'المدى الحركي'), tr('Strength', 'القوة العضلية'), tr('Pain Level', 'مستوى الألم'), tr('Assessor', 'المقيّم')],
+          assessments.map(a => {
+            const pat = rehabPatients.find(rp => parseInt(rp.id, 10) === parseInt(a.rehab_patient_id, 10));
+            const name = pat ? pat.patient_name : (a.patient_name || tr('Unknown', 'غير معروف'));
+            return {
+              cells: [
+                new Date(a.created_at).toLocaleDateString(isArabic ? 'ar-SA' : 'en-US'),
+                name,
+                a.assessment_type,
+                a.rom_scores || '-',
+                a.strength_scores || '-',
+                rawHtml(`<span class="badge ${a.pain_level > 5 ? 'badge-danger' : 'badge-success'}">${a.pain_level}/10</span>`),
+                a.assessor
+              ]
+            };
+          })
+        ) : `<div class="empty-state"><p>${tr('No clinical assessments registered', 'لا توجد تقييمات سريرية مسجلة')}</p></div>`}
+      </div>
+    `;
   } else {
     mc.innerHTML = sessions.length ? makeTable(
       [tr('Session#', 'جلسة#'), tr('Date', 'التاريخ'), tr('Therapist', 'المعالج'), tr('Duration', 'المدة'), tr('Pain Before', 'ألم قبل'), tr('Pain After', 'ألم بعد'), tr('Notes', 'ملاحظات')],
@@ -14727,6 +14990,91 @@ window.submitRehab = async function () {
 };
 window.viewRehabSessions = async function (id) {
   rehabTab = 'sessions'; navigateTo(32);
+};
+window.showNewRehabAssessmentForm = async function() {
+  const [rehabPatients] = await Promise.all([
+    API.get('/api/rehab/patients').catch(() => [])
+  ]);
+  const mc = document.getElementById('rehabContent');
+  mc.innerHTML = `
+    <h3>➕ ${tr('New Clinical PT Assessment', 'إجراء تقييم تأهيلي جديد')}</h3>
+    <div class="form-grid">
+      <div>
+        <label>${tr('Referral Patient', 'المريض المحال للتأهيل')}</label>
+        <select id="assessRehabPatient" class="form-input">
+          ${rehabPatients.map(rp => `<option value="${safeId(rp.id)}" data-pid="${safeId(rp.patient_id)}">${escapeHTML(rp.patient_name)} (${escapeHTML(rp.therapy_type)})</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label>${tr('Assessment Type', 'نوع التقييم')}</label>
+        <select id="assessType" class="form-input">
+          <option>Initial Evaluation</option>
+          <option>Progress Re-Evaluation</option>
+          <option>Discharge Assessment</option>
+        </select>
+      </div>
+      <div>
+        <label>${tr('Pain Level (0-10)', 'مستوى الألم (0-10)')}</label>
+        <input type="number" id="assessPain" class="form-input" min="0" max="10" value="0">
+      </div>
+      <div>
+        <label>${tr('Range of Motion (ROM) Scores', 'نقاط المدى الحركي (ROM)')}</label>
+        <input type="text" id="assessROM" class="form-input" placeholder="e.g., Shoulder Flexion: 120°">
+      </div>
+      <div>
+        <label>${tr('Muscle Strength Scores (0-5)', 'درجات القوة العضلية (0-5)')}</label>
+        <input type="text" id="assessStrength" class="form-input" placeholder="e.g., Quadriceps: 4/5">
+      </div>
+      <div>
+        <label>${tr('Functional Score', 'التقييم الوظيفي')}</label>
+        <input type="text" id="assessFunctional" class="form-input" placeholder="e.g., Independent Ambulation">
+      </div>
+      <div>
+        <label>${tr('Balance & Gait Scores', 'درجات التوازن والمشي')}</label>
+        <input type="text" id="assessBalance" class="form-input" placeholder="e.g., Berg Balance: 48/56">
+      </div>
+      <div>
+        <label>${tr('Assessor', 'المقيّم')}</label>
+        <input type="text" id="assessAssessor" class="form-input" value="${currentUser.name}">
+      </div>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="submitRehabAssessment()">🏋️ ${tr('Save Assessment', 'حفظ التقييم')}</button>
+      <button class="btn btn-secondary" onclick="rehabTab='assessments';navigateTo(32)">${tr('Cancel', 'إلغاء')}</button>
+    </div>
+  `;
+};
+window.submitRehabAssessment = async function() {
+  const sel = document.getElementById('assessRehabPatient');
+  if (!sel || sel.selectedIndex === -1) {
+    showToast(tr('No patient selected', 'لم يتم اختيار مريض'), 'error');
+    return;
+  }
+  const rehab_patient_id = sel.value;
+  const patient_id = sel.options[sel.selectedIndex].dataset.pid;
+  const assessment_type = document.getElementById('assessType').value;
+  const pain_level = document.getElementById('assessPain').value;
+  const rom_scores = document.getElementById('assessROM').value;
+  const strength_scores = document.getElementById('assessStrength').value;
+  const functional_scores = document.getElementById('assessFunctional').value;
+  const balance_scores = document.getElementById('assessBalance').value;
+  const assessor = document.getElementById('assessAssessor').value;
+
+  await API.post('/api/rehab/assessments', {
+    rehab_patient_id,
+    patient_id,
+    assessment_type,
+    pain_level,
+    rom_scores,
+    strength_scores,
+    functional_scores,
+    balance_scores,
+    assessor
+  });
+
+  showToast(tr('Assessment saved successfully', 'تم حفظ التقييم بنجاح'));
+  rehabTab = 'assessments';
+  navigateTo(32);
 };
 
 // ===== PATIENT PORTAL =====
@@ -20404,40 +20752,93 @@ window.renderSpecialtyTemplate = (specialty) => {
     `;
   } else if (specLower.includes('pediatr') || specLower.includes('neonat')) {
     html += `
-      <div style="display:flex;gap:8px" class="mb-8">
-        <div class="form-group" style="flex:1">
-          <label>${tr('Birth Weight (kg)', 'وزن الولادة (كجم)')}</label>
-          <input type="number" step="0.01" class="form-input dr-spec-input" name="birth_weight" data-label="${tr('Birth Weight', 'وزن الولادة')}" placeholder="kg">
-        </div>
-        <div class="form-group" style="flex:1">
-          <label>${tr('APGAR Score (5m)', 'مقياس أبغار 5د')}</label>
-          <input type="number" class="form-input dr-spec-input" id="drApgarInput" name="apgar_score" data-label="${tr('APGAR Score', 'مقياس أبغار')}" placeholder="0-10">
-        </div>
-      </div>
-      <div style="padding:8px;background:var(--bg-secondary,#f8f9fa);border:1px solid var(--border-color,#e5e7eb);border-radius:8px;margin-bottom:8px;font-size:11px">
-        <div style="font-weight:600;margin-bottom:4px">👶 ${tr('APGAR Calculator', 'حاسبة مقياس أبغار')}</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
-          <div>
-            <label>${tr('Heart Rate', 'نبض القلب')}</label>
-            <select class="form-input" id="apgarHR" style="padding:2px;font-size:10px" onchange="window.calculateAPGAR()">
-              <option value="0">0 - Absent</option>
-              <option value="1">1 - <100 bpm</option>
-              <option value="2">2 - >100 bpm</option>
-            </select>
+      <div style="display:grid;grid-template-columns:1fr 1.2fr;gap:12px;align-items:start">
+        <div>
+          <div style="display:flex;gap:8px" class="mb-8">
+            <div class="form-group" style="flex:1">
+              <label>${tr('Weight (kg)', 'الوزن (كجم)')}</label>
+              <input type="number" step="0.1" class="form-input dr-spec-input" id="drPedWeight" name="weight_kg" data-label="${tr('Weight', 'الوزن')}" placeholder="kg" value="8.5" oninput="window.updatePediatricGrowthChart()">
+            </div>
+            <div class="form-group" style="flex:1">
+              <label>${tr('Height (cm)', 'الطول (سم)')}</label>
+              <input type="number" step="0.5" class="form-input dr-spec-input" id="drPedHeight" name="height_cm" data-label="${tr('Height', 'الطول')}" placeholder="cm" value="72" oninput="window.updatePediatricGrowthChart()">
+            </div>
           </div>
-          <div>
-            <label>${tr('Reflex Irritability', 'المنعكسات')}</label>
-            <select class="form-input" id="apgarReflex" style="padding:2px;font-size:10px" onchange="window.calculateAPGAR()">
-              <option value="0">0 - None</option>
-              <option value="1">1 - Grimace</option>
-              <option value="2">2 - Cry/Sneeze</option>
-            </select>
+          <div style="display:flex;gap:8px" class="mb-8">
+            <div class="form-group" style="flex:1">
+              <label>${tr('Age (Months)', 'العمر بالشهور')}</label>
+              <input type="number" class="form-input" id="drPedAge" value="8" min="0" max="36" oninput="window.updatePediatricGrowthChart()">
+            </div>
+            <div class="form-group" style="flex:1">
+              <label>${tr('APGAR Score (5m)', 'أبغار 5د')}</label>
+              <input type="number" class="form-input dr-spec-input" id="drApgarInput" name="apgar_score" data-label="${tr('APGAR Score', 'مقياس أبغار')}" value="9" placeholder="0-10">
+            </div>
+          </div>
+          <div style="padding:8px;background:rgba(255,255,255,0.6);border:1px solid var(--outline);border-radius:8px;margin-bottom:8px;font-size:11px">
+            <div style="font-weight:600;margin-bottom:4px">👶 ${tr('APGAR Calculator', 'حاسبة مقياس أبغار')}</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+              <div>
+                <label>${tr('Heart Rate', 'نبض القلب')}</label>
+                <select class="form-input" id="apgarHR" style="padding:2px;font-size:10px" onchange="window.calculateAPGAR()">
+                  <option value="0">0 - Absent</option>
+                  <option value="1">1 - <100 bpm</option>
+                  <option value="2" selected>2 - >100 bpm</option>
+                </select>
+              </div>
+              <div>
+                <label>${tr('Reflexes', 'المنعكسات')}</label>
+                <select class="form-input" id="apgarReflex" style="padding:2px;font-size:10px" onchange="window.calculateAPGAR()">
+                  <option value="0">0 - None</option>
+                  <option value="1">1 - Grimace</option>
+                  <option value="2" selected>2 - Cry/Sneeze</option>
+                </select>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-      <div class="form-group mb-8">
-        <label>${tr('Growth Percentile (%)', 'النمو المئوي %')}</label>
-        <input type="number" class="form-input dr-spec-input" name="growth_percentile" data-label="${tr('Growth Percentile', 'النمو المئوي')}" placeholder="e.g. 75">
+
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="padding:8px;background:#ffffff;border:1px solid var(--outline);border-radius:8px;text-align:center">
+            <div style="font-weight:bold;font-size:11px;margin-bottom:4px">📈 WHO Growth Percentile (Weight for Age)</div>
+            <svg id="pedGrowthChart" viewBox="0 0 300 150" style="width:100%;height:auto;background:#fafafa;border-radius:4px">
+              <line x1="30" y1="130" x2="290" y2="130" stroke="#ddd" stroke-width="1"/>
+              <line x1="30" y1="10" x2="30" y2="130" stroke="#ddd" stroke-width="1"/>
+              <path d="M 30,120 Q 100,105 180,95 T 280,85" fill="none" stroke="#fca5a5" stroke-dasharray="2,2" stroke-width="1.5"/>
+              <path d="M 30,110 Q 100,85 180,75 T 280,60" fill="none" stroke="#22c55e" stroke-width="1.5"/>
+              <path d="M 30,95 Q 100,65 180,50 T 280,30" fill="none" stroke="#fca5a5" stroke-dasharray="2,2" stroke-width="1.5"/>
+              <text x="160" y="145" font-size="8" text-anchor="middle">Age (Months)</text>
+              <text x="10" y="70" font-size="8" text-anchor="middle" transform="rotate(-90 10 70)">Weight (kg)</text>
+              <circle id="pedGrowthPoint" cx="100" cy="85" r="4.5" fill="#ef4444" stroke="#ffffff" stroke-width="1.5">
+                <animate attributeName="r" values="3.5;5.5;3.5" dur="1.5s" repeatCount="indefinite"/>
+              </circle>
+            </svg>
+          </div>
+
+          <div style="padding:8px;background:#ffffff;border:1px solid var(--outline);border-radius:8px">
+            <div style="font-weight:bold;font-size:11px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center">
+              <span>💉 ${tr('National Vaccine Schedule', 'سجل التطعيمات الوطني')}</span>
+              <span id="vaccineAlertBadge" class="badge badge-warning" style="font-size:9px">${tr('2 Pending', '2 معلق')}</span>
+            </div>
+            <div style="max-height:100px;overflow-y:auto;font-size:10px" id="pedVaccineList">
+              <div style="display:flex;justify-content:space-between;padding:4px;border-bottom:1px solid #eee">
+                <span>BCG (Tuberculosis) - Birth</span>
+                <span style="color:#22c55e;font-weight:bold">✅ ${tr('Given', 'تم إعطاؤه')}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:4px;border-bottom:1px solid #eee">
+                <span>HepB (Hepatitis B) - Birth</span>
+                <span style="color:#22c55e;font-weight:bold">✅ ${tr('Given', 'تم إعطاؤه')}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:4px;border-bottom:1px solid #eee" id="vaccine_dtap">
+                <span>Hexavalent (DTaP/IPV/Hib/HepB) - 2m</span>
+                <button class="btn btn-xs btn-primary" onclick="window.administerVaccine('dtap')">💉 ${tr('Give', 'إعطاء')}</button>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:4px;border-bottom:1px solid #eee" id="vaccine_pcv">
+                <span>PCV (Pneumococcal) - 2m</span>
+                <button class="btn btn-xs btn-primary" onclick="window.administerVaccine('pcv')">💉 ${tr('Give', 'إعطاء')}</button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     `;
   } else if (specLower.includes('obgyn') || specLower.includes('obstet') || specLower.includes('gynec')) {
@@ -20559,6 +20960,9 @@ window.renderSpecialtyTemplate = (specialty) => {
   
   html += `</div>`;
   container.innerHTML = html;
+  if (specLower.includes('pediatr') || specLower.includes('neonat')) {
+    setTimeout(() => { if (typeof window.updatePediatricGrowthChart === 'function') window.updatePediatricGrowthChart(); }, 50);
+  }
 };
 
 window.calculateGCS = () => {
@@ -20647,3 +21051,123 @@ document.addEventListener('click', (e) => {
     box.style.display = 'none';
   }
 });
+
+window.updatePediatricGrowthChart = () => {
+  const ageInput = document.getElementById('drPedAge');
+  const weightInput = document.getElementById('drPedWeight');
+  const point = document.getElementById('pedGrowthPoint');
+  if (!ageInput || !weightInput || !point) return;
+
+  const age = parseFloat(ageInput.value) || 0;
+  const weight = parseFloat(weightInput.value) || 0;
+
+  const x = 30 + Math.min(Math.max(age, 0), 36) / 36 * 250;
+  const y = 130 - Math.min(Math.max(weight, 0), 18) / 18 * 120;
+
+  point.setAttribute('cx', String(x));
+  point.setAttribute('cy', String(y));
+};
+
+window.administerVaccine = (vaccineId) => {
+  const row = document.getElementById('vaccine_' + vaccineId);
+  if (row) {
+    let name = vaccineId === 'dtap' ? 'Hexavalent' : 'PCV';
+    row.innerHTML = `<span>${name} - 2m</span><span style="color:#22c55e;font-weight:bold">✅ ${tr('Given', 'تم إعطاؤه')}</span>`;
+    showToast(tr('Vaccine administered successfully', 'تم تسجيل إعطاء اللقاح بنجاح'));
+    
+    const badge = document.getElementById('vaccineAlertBadge');
+    if (badge) {
+      const current = badge.textContent.includes('2') ? '1 Pending' : tr('Completed', 'مكتمل');
+      badge.textContent = current;
+      if (current === tr('Completed', 'مكتمل')) {
+        badge.className = 'badge badge-success';
+      }
+    }
+  }
+};
+
+window.showOBGYNUltrasoundForm = async (pregId, patientId) => {
+  let rows = '';
+  try {
+    const entries = await API.get('/api/obgyn/ultrasounds/' + pregId);
+    rows = entries.map(e => `
+      <tr>
+        <td>${escapeHTML(String(e.scan_date || '').replace('T', ' ').slice(0, 10))}</td>
+        <td>BPD: ${e.bpd}mm, HC: ${e.hc}mm, AC: ${e.ac}mm, FL: ${e.fl}mm</td>
+        <td>${e.efw}g (${escapeHTML(e.efw_percentile || '-')})</td>
+        <td>AFI: ${e.amniotic_fluid_index}cm</td>
+        <td>${escapeHTML(e.placenta_location)} (Gr: ${escapeHTML(e.placenta_grade)})</td>
+        <td>${e.fetal_heart_rate} bpm</td>
+      </tr>
+    `).join('');
+  } catch (e) { }
+
+  const html = `
+    ${rows ? `
+      <div style="max-height:200px;overflow-y:auto;margin-bottom:16px;border:1px solid var(--outline);border-radius:8px">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>${tr('Date', 'التاريخ')}</th>
+              <th>${tr('Biometry', 'القياسات')}</th>
+              <th>${tr('EFW', 'الوزن المقدر')}</th>
+              <th>AFI</th>
+              <th>${tr('Placenta', 'المشيمة')}</th>
+              <th>FHR</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    ` : `<p style="color:var(--text-muted);margin-bottom:16px">${tr('No previous ultrasound scans recorded', 'لا توجد أشعة سونار سابقة')}</p>`}
+    
+    <h4 style="margin-bottom:8px">${tr('New Obstetric Ultrasound Scan', 'فحص سونار جديد')}</h4>
+    <div class="form-grid" style="gap:8px">
+      <div class="form-group"><label>BPD (Biparietal Diameter - mm)</label><input type="number" id="usBpd" class="form-control" placeholder="e.g. 45"></div>
+      <div class="form-group"><label>HC (Head Circumference - mm)</label><input type="number" id="usHc" class="form-control" placeholder="e.g. 175"></div>
+      <div class="form-group"><label>AC (Abdominal Circumference - mm)</label><input type="number" id="usAc" class="form-control" placeholder="e.g. 160"></div>
+      <div class="form-group"><label>FL (Femur Length - mm)</label><input type="number" id="usFl" class="form-control" placeholder="e.g. 35"></div>
+      <div class="form-group"><label>EFW (Est. Fetal Weight - grams)</label><input type="number" id="usEfw" class="form-control" placeholder="e.g. 450"></div>
+      <div class="form-group"><label>AFI (Amniotic Fluid Index - cm)</label><input type="number" id="usAfi" class="form-control" placeholder="e.g. 12" step="0.1"></div>
+      <div class="form-group"><label>Placenta Location</label><select id="usPlacentaLoc" class="form-control"><option>Anterior</option><option>Posterior</option><option>Fundal</option><option>Previa</option></select></div>
+      <div class="form-group"><label>Placenta Grade</label><select id="usPlacentaGrade" class="form-control"><option>Grade 0</option><option>Grade I</option><option>Grade II</option><option>Grade III</option></select></div>
+      <div class="form-group"><label>Fetal Heart Rate (bpm)</label><input type="number" id="usFhr" class="form-control" placeholder="e.g. 140"></div>
+      <div class="form-group"><label>Number of Fetuses</label><input type="number" id="usFetuses" class="form-control" value="1"></div>
+      <div class="form-group"><label>Cervical Length (mm)</label><input type="number" id="usCervix" class="form-control" placeholder="e.g. 35"></div>
+      <div class="form-group"><label>Fetal Gender</label><select id="usGender" class="form-control"><option>Not determined</option><option>Male</option><option>Female</option></select></div>
+    </div>
+    <div class="form-group" style="margin-top:8px"><label>Findings</label><textarea id="usFindings" class="form-control" rows="2" placeholder="e.g. Normal fetal anatomy..."></textarea></div>
+    <div class="form-group"><label>Impression</label><textarea id="usImpression" class="form-control" rows="2" placeholder="e.g. Single active fetus matching GA..."></textarea></div>
+    <button class="btn btn-primary" onclick="window.saveOBGYNUltrasound(${pregId}, ${patientId})" style="margin-top:8px">💾 ${tr('Save Scan', 'حفظ فحص السونار')}</button>
+  `;
+  showModal(tr('Obstetric Ultrasound / Fetal Biometry', 'أشعة السونار والقياسات الحيوية للجنين'), html);
+};
+
+window.saveOBGYNUltrasound = async (pregId, patientId) => {
+  try {
+    await API.post('/api/obgyn/ultrasounds', {
+      pregnancy_id: pregId,
+      patient_id: patientId,
+      scan_type: 'Routine Obstetric',
+      bpd: parseFloat(document.getElementById('usBpd').value) || 0,
+      hc: parseFloat(document.getElementById('usHc').value) || 0,
+      ac: parseFloat(document.getElementById('usAc').value) || 0,
+      fl: parseFloat(document.getElementById('usFl').value) || 0,
+      efw: parseFloat(document.getElementById('usEfw').value) || 0,
+      amniotic_fluid_index: parseFloat(document.getElementById('usAfi').value) || 0,
+      placenta_location: document.getElementById('usPlacentaLoc').value,
+      placenta_grade: document.getElementById('usPlacentaGrade').value,
+      fetal_heart_rate: parseInt(document.getElementById('usFhr').value) || 0,
+      number_of_fetuses: parseInt(document.getElementById('usFetuses').value) || 1,
+      cervical_length: parseFloat(document.getElementById('usCervix').value) || 0,
+      fetal_gender: document.getElementById('usGender').value,
+      findings: document.getElementById('usFindings').value,
+      impression: document.getElementById('usImpression').value
+    });
+    showToast(tr('Ultrasound scan saved successfully!', 'تم حفظ فحص السونار بنجاح!'));
+    document.querySelector('.modal-overlay')?.remove();
+    navigateTo(currentPage);
+  } catch (e) {
+    showToast(tr('Error saving scan', 'خطأ في حفظ السونار'), 'error');
+  }
+};

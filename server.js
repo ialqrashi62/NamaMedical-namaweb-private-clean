@@ -11836,6 +11836,57 @@ app.put('/api/rehab/goals/:id', requireAuth, requireTenantScope, async (req, res
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
+// ===== DENTAL RECORDS =====
+app.get('/api/dental/records/:patient_id', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const { patient_id } = req.params;
+        const result = await pool.query(
+            'SELECT * FROM dental_records WHERE patient_id = $1 AND tenant_id = $2 ORDER BY visit_date DESC',
+            [patient_id, tenantId]
+        );
+        res.json(result.rows);
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+app.post('/api/dental/records', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const { patient_id, tooth_number, condition, treatment_done } = req.body;
+        const { tenantId, facilityId } = getRequestTenantContext(req);
+        if (!patient_id || !tooth_number) {
+            return res.status(400).json({ error: 'patient_id and tooth_number are required' });
+        }
+        const result = await pool.query(
+            'INSERT INTO dental_records (patient_id, tooth_number, condition, treatment_done, tenant_id, facility_id, visit_date) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP) RETURNING *',
+            [patient_id, tooth_number, condition || '', treatment_done || '', tenantId, facilityId]
+        );
+        res.json(result.rows[0]);
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// ===== REHABILITATION ASSESSMENTS =====
+app.get('/api/rehab/assessments', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const { patient_id } = req.query;
+        const { tenantId } = getRequestTenantContext(req);
+        if (patient_id) {
+            res.json((await pool.query('SELECT * FROM rehab_assessments WHERE patient_id=$1 AND tenant_id=$2 ORDER BY created_at DESC', [patient_id, tenantId])).rows);
+        } else {
+            res.json((await pool.query('SELECT * FROM rehab_assessments WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 100', [tenantId])).rows);
+        }
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+app.post('/api/rehab/assessments', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const { rehab_patient_id, patient_id, assessment_type, rom_scores, strength_scores, functional_scores, balance_scores, pain_level, assessor } = req.body;
+        const { tenantId } = getRequestTenantContext(req);
+        const result = await pool.query(
+            'INSERT INTO rehab_assessments (rehab_patient_id, patient_id, assessment_type, rom_scores, strength_scores, functional_scores, balance_scores, pain_level, assessor, tenant_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *',
+            [rehab_patient_id || null, patient_id || 0, assessment_type || '', rom_scores || '', strength_scores || '', functional_scores || '', balance_scores || '', pain_level || 0, assessor || req.session.user.name, tenantId]
+        );
+        res.json(result.rows[0]);
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
 // ===== MESSAGING =====
 app.get('/api/messages', requireAuth, requireTenantScope, async (req, res) => {
     try {
