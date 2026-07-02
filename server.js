@@ -36,6 +36,8 @@ const esiEngine = require('./esi_engine');
 const icuScoring = require('./icu_scoring');
 // Gate 1 (specialty modules): server-side, anti-spoof GCS / DAS28 / NIHSS score engine.
 const specialtyScores = require('./specialty_scores');
+// Gate 2: server-side early-warning + sepsis screening engine (MEWS/PEWS/qSOFA/SIRS + escalation).
+const ewsEngine = require('./ews_engine');
 const e11Engine = require('./e11_insurance_engine'); // E11 insurance/NPHIES pure engine (state machines + co-pay math)
 const pathologyEngine = require('./pathology_engine'); // E15: pure state-machine + accession + flag engine
 const e16 = require('./e16_inventory_engine'); // E16 inventory/CSSD pure engine (FEFO, no-negative, BI gate)
@@ -11894,10 +11896,60 @@ app.post('/api/nursing/assessments', requireAuth, requireRole('nursing', 'doctor
         // scores must be computed via POST /api/nursing/scores (server-side engine) — so they are
         // persisted here as 0 (not trusted) and the client score/band fields are ignored.
         const pain = nursingScores.computePainBand(pain_score);
+        // GCS total: absent stays NULL (never a reassuring default 15); garbage/out-of-range 422s.
+        const gcsP = specialtyScores.parseOptionalInt(gcs_score, 3, 15, 'gcs_score');
+        if (!gcsP.ok) return res.status(422).json({ error: gcsP.error });
         const result = await pool.query('INSERT INTO nursing_assessments (patient_id, patient_name, assessment_type, fall_risk_score, braden_score, pain_score, gcs_score, nurse, shift, notes, tenant_id, facility_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *',
-            [patient_id, patient_name || '', assessment_type || 'General', 0, 0, pain.score, gcs_score || 15, req.session.user.name, shift || 'Morning', notes || '', tenantId || null, facilityId || null]);
+            [patient_id, patient_name || '', assessment_type || 'General', 0, 0, pain.score, gcsP.value, req.session.user.name, shift || 'Morning', notes || '', tenantId || null, facilityId || null]);
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// ===== GATE 2: EARLY-WARNING & SEPSIS SCREEN (stateless compute — no score persistence
+// until the nursing_scores score_type CHECK is extended by the e48 candidate DDL) =====
+// Computes MEWS (adult) / PEWS (pediatric) / qSOFA / SIRS / sepsis screen SERVER-SIDE from
+// raw observations and returns the deterministic escalation recommendation. Client totals
+// are never accepted. Advisory only — never a diagnosis. The request is audited (module
+// EWS) so screening activity is traceable even before persistence lands.
+app.post('/api/ews/assess', requireAuth, requireRole('nursing', 'doctor'), requireTenantScope, async (req, res) => {
+    try {
+        const { patient_id, mews, pews, sepsis } = req.body || {};
+        const { tenantId } = getRequestTenantContext(req);
+        if (!patient_id) return res.status(400).json({ error: 'Patient ID is required' });
+        if (tenantId) {
+            const patientCheck = await pool.query('SELECT id FROM patients WHERE id=$1 AND tenant_id=$2', [patient_id, tenantId]);
+            if (patientCheck.rows.length === 0) return res.status(404).json({ error: 'Patient not found' });
+        }
+        if (!mews && !pews && !sepsis) {
+            return res.status(400).json({ error: 'Provide at least one of: mews, pews, sepsis observation sets' });
+        }
+        const out = {};
+        if (mews) {
+            out.mews = ewsEngine.computeMEWS(mews);
+            if (!out.mews.ok) return res.status(422).json({ error: `MEWS rejected: ${out.mews.error}` });
+        }
+        if (pews) {
+            out.pews = ewsEngine.computePEWS(pews);
+            if (!out.pews.ok) return res.status(422).json({ error: `PEWS rejected: ${out.pews.error}` });
+        }
+        if (sepsis) {
+            out.sepsis = ewsEngine.sepsisScreen(sepsis);
+            if (!out.sepsis.ok) return res.status(422).json({ error: `Sepsis screen rejected: ${out.sepsis.error}` });
+        }
+        out.escalation = ewsEngine.escalationFor({
+            mews: out.mews ? out.mews.score : null,
+            pews: out.pews ? out.pews.score : null,
+            component_alert: out.pews ? out.pews.component_alert : false,
+            sepsis_alert: out.sepsis ? out.sepsis.alert : null,
+        });
+        logAudit(req.session.user?.id, req.session.user?.display_name, 'EWS_ASSESS', 'EWS',
+            `EWS screen for patient #${patient_id}: ${out.escalation.level}` +
+            (out.sepsis ? ` (sepsis screen: ${out.sepsis.alert})` : ''), req.ip);
+        res.json({ success: true, ...out });
+    } catch (e) {
+        console.error('[EWS Assess Error]', e);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 // ===== FINANCIAL DAILY CLOSE =====
