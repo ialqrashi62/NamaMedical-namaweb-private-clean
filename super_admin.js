@@ -96,6 +96,50 @@ function makeSuperAdminRouter(deps = {}) {
 
     const posInt = (v) => { const n = Number(v); return Number.isInteger(n) && n >= 1 ? n : null; };
 
+    // STATS — Aggregated platform metrics (Phase 3)
+    router.get('/stats', async (req, res) => {
+        try {
+            // 1. Total revenue collected
+            const revQuery = await pool.query('SELECT COALESCE(SUM(total), 0) AS total FROM invoices WHERE paid = 1 OR paid = \'t\'');
+            const totalRevenue = parseFloat(revQuery.rows[0].total || 0);
+
+            // 2. Total tenants count
+            const tenQuery = await pool.query('SELECT COUNT(*) AS count FROM tenants');
+            const totalTenants = parseInt(tenQuery.rows[0].count || 0, 10);
+
+            // 3. Active subscriptions count
+            let activeSubscriptions = 0;
+            try {
+                const subQuery = await pool.query('SELECT COUNT(*) AS count FROM tenant_plan_assignments WHERE effective_to IS NULL');
+                activeSubscriptions = parseInt(subQuery.rows[0].count || 0, 10);
+            } catch (_) {}
+
+            // 4. Plans breakdown
+            let plansBreakdown = [];
+            try {
+                const breakdownQuery = await pool.query(`
+                    SELECT plan_key, COUNT(*) AS count 
+                    FROM tenant_plan_assignments 
+                    WHERE effective_to IS NULL 
+                    GROUP BY plan_key
+                `);
+                plansBreakdown = breakdownQuery.rows.map(r => ({
+                    plan_key: r.plan_key,
+                    count: parseInt(r.count || 0, 10)
+                }));
+            } catch (_) {}
+
+            res.json({
+                total_revenue: totalRevenue,
+                total_tenants: totalTenants,
+                active_subscriptions: activeSubscriptions,
+                plans_breakdown: plansBreakdown
+            });
+        } catch (e) {
+            res.status(500).json({ error: 'Server error' });
+        }
+    });
+
     // LIST — reads `tenants` directly (no RLS); filters applied in SQL.
     router.get('/tenants', async (req, res) => {
         try {

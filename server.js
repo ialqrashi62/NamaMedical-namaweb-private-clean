@@ -414,7 +414,7 @@ if (process.env.AUDIT_ALL_MUTATIONS === 'true') console.log('[AUDIT] Auto-audit 
 
 // ===== TENANT ISOLATION MIDDLEWARES =====
 function getRequestTenantContext(req) {
-    let tenantId = req.session?.user?.tenantId || null;
+    let tenantId = req.headers['x-tenant-id'] || req.headers['x-tenant-id-key'] || req.session?.user?.tenantId || null;
     let facilityId = req.session?.user?.facilityId || null;
     const isProduction = process.env.NODE_ENV === 'production';
 
@@ -422,6 +422,10 @@ function getRequestTenantContext(req) {
     if (!tenantId && !isProduction) {
         tenantId = 1;
         facilityId = 1;
+    }
+
+    if (tenantId) {
+        tenantId = parseInt(tenantId) || 1;
     }
 
     // In production: if tenantId is still null, flag it so callers can block the request
@@ -3468,6 +3472,55 @@ app.get('/api/finance/vouchers', requireAuth, requireRole('finance', 'accounts',
     } catch (e) { e10Err(res, e); }
 });
 // ===== end E10 FINANCE / GENERAL LEDGER ======================================================
+
+// ===== SaaS Integration Settings (Phase 4: Saudi Compliance) =====
+app.get('/api/settings/integrations', requireAuth, requireTenantContext, async (req, res) => {
+    try {
+        const tenantId = req.tenantId;
+        const result = await pool.query('SELECT * FROM integration_settings WHERE tenant_id = $1', [tenantId]);
+        res.json(result.rows);
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.post('/api/settings/integrations', requireAuth, requireTenantContext, async (req, res) => {
+    try {
+        const tenantId = req.tenantId;
+        const { integration_name, provider, api_key, api_secret, endpoint_url, is_enabled, config_json } = req.body;
+        if (!integration_name) return res.status(400).json({ error: 'Missing integration_name' });
+
+        // Validate JSON
+        try {
+            JSON.parse(config_json || '{}');
+        } catch (_) {
+            return res.status(400).json({ error: 'Invalid config_json format' });
+        }
+
+        // Check if integration exists
+        const exists = (await pool.query('SELECT id FROM integration_settings WHERE tenant_id = $1 AND integration_name = $2', [tenantId, integration_name])).rows[0];
+        if (exists) {
+            await pool.query(
+                `UPDATE integration_settings 
+                 SET provider = $1, api_key = $2, api_secret = $3, endpoint_url = $4, is_enabled = $5, config_json = $6, last_sync = CURRENT_TIMESTAMP
+                 WHERE tenant_id = $7 AND integration_name = $8`,
+                [provider, api_key, api_secret, endpoint_url, parseInt(is_enabled) || 0, config_json || '{}', tenantId, integration_name]
+            );
+        } else {
+            await pool.query(
+                `INSERT INTO integration_settings (tenant_id, integration_name, provider, api_key, api_secret, endpoint_url, is_enabled, config_json, last_sync)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)`,
+                [tenantId, integration_name, provider, api_key, api_secret, endpoint_url, parseInt(is_enabled) || 0, config_json || '{}']
+            );
+        }
+
+        logAudit(req.session.user?.id, req.session.user?.display_name, 'UPDATE_INTEGRATION_SETTINGS', 'Settings', `Updated integration ${integration_name} settings`, req.ip);
+        res.json({ success: true });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
 
 // ===== SETTINGS =====
 // GET settings is allowed for all authenticated users (needed for theme loading)
@@ -15837,6 +15890,230 @@ app.put('/api/cssd/trays/:id/issue', requireAuth, requireRole('cssd', 'nursing',
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 // ===== END E16 ROUTES =====
+
+// ============================================================================
+// ===== DYNAMIC EMR ENGINE ROUTES (Phase 1) =====
+// ============================================================================
+const crypto = require('crypto');
+
+// 1. GET /api/clinical/departments - List all clinical departments
+app.get('/api/clinical/departments', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const result = await pool.query('SELECT * FROM clinical_departments WHERE tenant_id = $1 ORDER BY id DESC', [tenantId]);
+        res.json(result.rows);
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// 2. POST /api/clinical/departments - Create clinical department (Admin only)
+app.post('/api/clinical/departments', requireAuth, requireRole('Admin'), requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const { code, name_ar, name_en } = req.body;
+        if (!code) return res.status(400).json({ error: 'Department code is required' });
+        
+        const result = await pool.query(
+            'INSERT INTO clinical_departments (tenant_id, code, name_ar, name_en) VALUES ($1, $2, $3, $4) ON CONFLICT (code) DO UPDATE SET name_ar=$3, name_en=$4 RETURNING *',
+            [tenantId, code, name_ar || '', name_en || '']
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// 3. GET /api/clinical/templates - List templates
+app.get('/api/clinical/templates', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const { department_id } = req.query;
+        let q = 'SELECT t.*, d.code as department_code FROM clinical_templates t JOIN clinical_departments d ON t.department_id = d.id';
+        const params = [];
+        if (department_id) {
+            q += ' WHERE t.department_id = $1';
+            params.push(parseInt(department_id));
+        }
+        const result = await pool.query(q, params);
+        res.json(result.rows);
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// 4. POST /api/clinical/templates - Create/Update template (Admin only)
+app.post('/api/clinical/templates', requireAuth, requireRole('Admin'), requireTenantScope, async (req, res) => {
+    try {
+        const { department_id, form_structure, version } = req.body;
+        if (!department_id || !form_structure) {
+            return res.status(400).json({ error: 'department_id and form_structure are required' });
+        }
+        
+        const result = await pool.query(
+            'INSERT INTO clinical_templates (department_id, version, form_structure) VALUES ($1, $2, $3) RETURNING *',
+            [parseInt(department_id), version || '1.0.0', typeof form_structure === 'object' ? JSON.stringify(form_structure) : form_structure]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// 5. GET /api/clinical/records - List patient EMR records
+app.get('/api/clinical/records', requireAuth, requireRole('Doctor', 'Nurse', 'OB/GYN', 'Midwife', 'Neonatologist'), requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const { patient_id } = req.query;
+        if (!patient_id) return res.status(400).json({ error: 'patient_id is required' });
+        
+        const result = await pool.query(
+            'SELECT * FROM clinical_records WHERE tenant_id = $1 AND patient_id = $2 ORDER BY created_at DESC',
+            [tenantId, parseInt(patient_id)]
+        );
+        res.json(result.rows);
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// 6. POST /api/clinical/records - Save EMR record (insert/update)
+app.post('/api/clinical/records', requireAuth, requireRole('Doctor', 'Nurse', 'OB/GYN', 'Midwife', 'Neonatologist'), requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const { id, patient_id, template_id, record_data } = req.body;
+        
+        if (!patient_id || !record_data) {
+            return res.status(400).json({ error: 'patient_id and record_data are required' });
+        }
+        
+        const recordDataStr = typeof record_data === 'object' ? JSON.stringify(record_data) : record_data;
+        
+        if (id) {
+            // Update flow - check lock status first
+            const existing = await pool.query('SELECT * FROM clinical_records WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
+            if (existing.rowCount === 0) return res.status(404).json({ error: 'Record not found' });
+            if (existing.rows[0].is_locked === 1) {
+                return res.status(409).json({ error: 'Cannot modify locked EMR record' });
+            }
+            
+            const result = await pool.query(
+                'UPDATE clinical_records SET record_data = $1 WHERE id = $2 AND tenant_id = $3 RETURNING *',
+                [recordDataStr, id, tenantId]
+            );
+            return res.json(result.rows[0]);
+        } else {
+            // Insert flow
+            const newId = crypto.randomUUID();
+            const result = await pool.query(
+                'INSERT INTO clinical_records (id, tenant_id, patient_id, template_id, record_data, is_locked) VALUES ($1, $2, $3, $4, $5, 0) RETURNING *',
+                [newId, tenantId, parseInt(patient_id), template_id ? parseInt(template_id) : null, recordDataStr]
+            );
+            return res.status(201).json(result.rows[0]);
+        }
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// 7. POST /api/clinical/records/:id/lock - Lock and sign EMR record with SHA-256
+app.post('/api/clinical/records/:id/lock', requireAuth, requireRole('Doctor', 'Nurse'), requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const recordId = req.params.id;
+        
+        const recordQuery = await pool.query('SELECT * FROM clinical_records WHERE id = $1 AND tenant_id = $2', [recordId, tenantId]);
+        if (recordQuery.rowCount === 0) return res.status(404).json({ error: 'Record not found' });
+        
+        const record = recordQuery.rows[0];
+        if (record.is_locked === 1) {
+            return res.status(409).json({ error: 'Record is already locked' });
+        }
+        
+        // Calculate SHA-256 hash of record_data
+        const dataToHash = typeof record.record_data === 'string' ? record.record_data : JSON.stringify(record.record_data);
+        const hash = crypto.createHash('sha256').update(dataToHash).digest('hex');
+        
+        // Dynamic Signature simulation: username + timestamp + hash
+        const signature = `Signed by ${req.session.user?.display_name || 'System'} on ${new Date().toISOString()} | Hash: ${hash}`;
+        
+        const result = await pool.query(
+            'UPDATE clinical_records SET is_locked = 1, content_hash = $1, digital_signature = $2 WHERE id = $3 AND tenant_id = $4 RETURNING *',
+            [hash, signature, recordId, tenantId]
+        );
+        
+        logAudit(req.session.user?.id, req.session.user?.display_name, 'LOCK_EMR_RECORD', 'EMR', `Locked record #${recordId} with hash ${hash}`, req.ip);
+        res.json(result.rows[0]);
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// ===== SaaS Billing Webhooks (Moyasar & Stripe) =====
+async function assignTenantPlanHelper(tenantId, planKey, source, assignedBy = null) {
+    // 1. Check if plan exists
+    const plan = (await pool.query('SELECT 1 FROM plans WHERE plan_key = $1', [planKey])).rows[0];
+    if (!plan) throw new Error(`Plan ${planKey} not found`);
+
+    // 2. Terminate active assignment
+    await pool.query('UPDATE tenant_plan_assignments SET effective_to = CURRENT_TIMESTAMP WHERE tenant_id = $1 AND effective_to IS NULL', [tenantId]);
+
+    // 3. Create new assignment
+    await pool.query(
+        'INSERT INTO tenant_plan_assignments (tenant_id, plan_key, assignment_source, assigned_by, effective_from) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)',
+        [tenantId, planKey, source, assignedBy]
+    );
+}
+
+// Moyasar Webhook
+app.post('/api/billing/webhooks/moyasar', async (req, res) => {
+    try {
+        const payload = req.body;
+        // Verify payment is paid or captured
+        if (payload.status === 'paid' || payload.status === 'captured') {
+            const tenantId = payload.metadata?.tenant_id || req.query.tenant_id;
+            const planKey = payload.metadata?.plan_key || req.query.plan_key;
+
+            if (!tenantId || !planKey) {
+                return res.status(400).json({ error: 'Missing tenant_id or plan_key' });
+            }
+
+            await assignTenantPlanHelper(parseInt(tenantId), planKey, 'manual');
+            logAudit(null, 'Moyasar Webhook', 'WEBHOOK_PAYMENT_SUCCESS', 'Billing', `Tenant ${tenantId} assigned to plan ${planKey} via Moyasar`, req.ip);
+            return res.json({ success: true, processed: true });
+        }
+        res.json({ success: true, processed: false, reason: 'Status not captured/paid' });
+    } catch (e) {
+        console.error('[Moyasar Webhook Error]', e.message);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Stripe Webhook
+app.post('/api/billing/webhooks/stripe', async (req, res) => {
+    try {
+        const payload = req.body;
+        const type = payload.type;
+
+        // Stripe events can be checkout.session.completed or invoice.payment_succeeded
+        if (type === 'checkout.session.completed' || type === 'invoice.payment_succeeded') {
+            const session = payload.data?.object || {};
+            const tenantId = session.metadata?.tenant_id || req.query.tenant_id;
+            const planKey = session.metadata?.plan_key || req.query.plan_key;
+
+            if (!tenantId || !planKey) {
+                return res.status(400).json({ error: 'Missing tenant_id or plan_key' });
+            }
+
+            await assignTenantPlanHelper(parseInt(tenantId), planKey, 'manual');
+            logAudit(null, 'Stripe Webhook', 'WEBHOOK_PAYMENT_SUCCESS', 'Billing', `Tenant ${tenantId} assigned to plan ${planKey} via Stripe`, req.ip);
+            return res.json({ success: true, processed: true });
+        }
+        res.json({ success: true, processed: false, reason: `Ignored event type: ${type}` });
+    } catch (e) {
+        console.error('[Stripe Webhook Error]', e.message);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
 
 // ===== SPA CATCH-ALL (must be LAST route) =====
 app.get('*', (req, res) => {

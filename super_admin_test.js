@@ -58,6 +58,11 @@ function fakePool(audit) {
       if (/FROM user_tenants/.test(s)) return Promise.resolve({ rows: [{ c: 7 }] });
       if (/FROM facilities/.test(s)) return Promise.resolve({ rows: [{ c: 2 }] });
       if (/FROM audit_trail/.test(s)) return Promise.resolve({ rows: [{ m: '2026-06-30' }] });
+      if (/SUM\(total\)/.test(s)) return Promise.resolve({ rows: [{ total: 12500 }] });
+      if (/FROM tenant_plan_assignments/.test(s)) {
+        if (/GROUP BY/.test(s)) return Promise.resolve({ rows: [{ plan_key: 'free_trial', count: 5 }, { plan_key: 'basic', count: 4 }] });
+        return Promise.resolve({ rows: [{ count: 9 }] });
+      }
       return Promise.resolve({ rows: [] });
     }
   };
@@ -99,6 +104,10 @@ function req(port, method, path) {
   const srv = app.listen(0);
   await new Promise(r => srv.once('listening', r));
   const port = srv.address().port;
+
+  // super admin can get stats
+  let rStats = await req(port, 'GET', '/api/super-admin/stats');
+  ok('super admin gets stats 200', rStats.status === 200 && rStats.json.total_revenue === 12500 && rStats.json.active_subscriptions === 9 && rStats.json.plans_breakdown.length === 2);
 
   // super admin can list
   let r1 = await req(port, 'GET', '/api/super-admin/tenants');

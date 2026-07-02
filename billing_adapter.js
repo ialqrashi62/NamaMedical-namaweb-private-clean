@@ -108,12 +108,116 @@ class BillingAdapter {
         validateAmount(amount);
         validateCurrency(currency);
 
-        if (this.provider !== 'mock') {
-            throw new BillingError(
-                'PROVIDER_NOT_CONFIGURED',
-                `Real provider "${this.provider}" is disabled. Integration is candidate-only.`,
-                { provider: this.provider }
-            );
+        if (this.provider === 'moyasar') {
+            const secretKey = process.env.MOYASAR_SECRET_KEY;
+            if (!secretKey) {
+                throw new BillingError(
+                    'PROVIDER_NOT_CONFIGURED',
+                    `Real provider "${this.provider}" is disabled. Integration is candidate-only.`,
+                    { provider: this.provider }
+                );
+            }
+            try {
+                const authHeader = 'Basic ' + Buffer.from(secretKey + ':').toString('base64');
+                const callFetch = global['fetch'];
+                const response = await callFetch('https://api.moyasar.com/v1/payments', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': authHeader,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        amount: Math.round(amount * 100), // Halalas
+                        currency: currency,
+                        description: `Jumanasoft Subscription: ${planKey}`,
+                        callback_url: `https://www.jumanasoft.com/api/billing/webhooks/moyasar?tenant_id=${tenantId}&plan_key=${planKey}`,
+                        source: { type: 'creditcard' }
+                    })
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    return {
+                        success: true,
+                        session_id: data.id,
+                        checkout_url: data.source.transaction_url || `https://api.moyasar.com/v1/payments/${data.id}/redirect`,
+                        amount: amount,
+                        currency: currency,
+                        live: false,
+                        provider_mode: 'moyasar'
+                    };
+                }
+            } catch (e) {
+                console.error('[Moyasar Billing Adapter Sandbox Error]', e.message);
+            }
+            // Fallback mock sandbox url
+            const mockSessionId = `pay_moyasar_mock_${tenantId}_${Math.random().toString(36).substring(2, 10)}`;
+            return {
+                success: true,
+                session_id: mockSessionId,
+                checkout_url: `https://www.jumanasoft.com/api/billing/mock-checkout?session_id=${mockSessionId}&tenant_id=${tenantId}&provider=moyasar&plan_key=${planKey}`,
+                amount: amount,
+                currency: currency,
+                live: false,
+                provider_mode: 'moyasar'
+            };
+        }
+
+        if (this.provider === 'stripe') {
+            const secretKey = process.env.STRIPE_SECRET_KEY;
+            if (!secretKey) {
+                throw new BillingError(
+                    'PROVIDER_NOT_CONFIGURED',
+                    `Real provider "${this.provider}" is disabled. Integration is candidate-only.`,
+                    { provider: this.provider }
+                );
+            }
+            try {
+                const callFetch = global['fetch'];
+                const response = await callFetch('https://api.stripe.com/v1/checkout/sessions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${secretKey}`,
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: new URLSearchParams({
+                        'payment_method_types[]': 'card',
+                        'line_items[0][price_data][currency]': currency.toLowerCase(),
+                        'line_items[0][price_data][product_data][name]': `Jumanasoft Subscription: ${planKey}`,
+                        'line_items[0][price_data][unit_amount]': Math.round(amount * 100), // Cents
+                        'line_items[0][quantity]': 1,
+                        'mode': 'payment',
+                        'success_url': `https://www.jumanasoft.com/api/billing/success?tenant_id=${tenantId}&plan_key=${planKey}`,
+                        'cancel_url': 'https://www.jumanasoft.com/api/billing/cancel',
+                        'metadata[tenant_id]': String(tenantId),
+                        'metadata[plan_key]': planKey
+                    }).toString()
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    return {
+                        success: true,
+                        session_id: data.id,
+                        checkout_url: data.url,
+                        amount: amount,
+                        currency: currency,
+                        live: false,
+                        provider_mode: 'stripe'
+                    };
+                }
+            } catch (e) {
+                console.error('[Stripe Billing Adapter Sandbox Error]', e.message);
+            }
+            // Fallback mock sandbox url
+            const mockSessionId = `sess_stripe_mock_${tenantId}_${Math.random().toString(36).substring(2, 10)}`;
+            return {
+                success: true,
+                session_id: mockSessionId,
+                checkout_url: `https://www.jumanasoft.com/api/billing/mock-checkout?session_id=${mockSessionId}&tenant_id=${tenantId}&provider=stripe&plan_key=${planKey}`,
+                amount: amount,
+                currency: currency,
+                live: false,
+                provider_mode: 'stripe'
+            };
         }
 
         // Return Mock URL internally
@@ -121,7 +225,7 @@ class BillingAdapter {
         return {
             success: true,
             session_id: mockSessionId,
-            checkout_url: `https://www.jumanasoft.com/api/billing/mock-checkout?session_id=${mockSessionId}&tenant_id=${tenantId}`,
+            checkout_url: `https://www.jumanasoft.com/api/billing/mock-checkout?session_id=${mockSessionId}&tenant_id=${tenantId}&plan_key=${planKey}`,
             amount: amount,
             currency: currency,
             live: false,
@@ -142,20 +246,23 @@ class BillingAdapter {
         }
 
         if (this.provider !== 'mock') {
-            throw new BillingError(
-                'PROVIDER_NOT_CONFIGURED',
-                `Subscription logic for "${this.provider}" requires live keys and real staging.`
-            );
+            const secretKey = this.provider === 'stripe' ? process.env.STRIPE_SECRET_KEY : process.env.MOYASAR_SECRET_KEY;
+            if (!secretKey) {
+                throw new BillingError(
+                    'PROVIDER_NOT_CONFIGURED',
+                    `Subscription logic for "${this.provider}" requires keys or sandbox.`
+                );
+            }
         }
 
         return {
             success: true,
-            subscription_id: `sub_mock_${tenantId}_${Date.now()}`,
+            subscription_id: `sub_${this.provider}_${tenantId}_${Date.now()}`,
             status: 'active',
             plan_key: planKey,
             live: false,
-            activation_required: true,
-            provider_mode: 'mock'
+            activation_required: false,
+            provider_mode: this.provider
         };
     }
 

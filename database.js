@@ -566,6 +566,36 @@ function createTables() {
   )`);
 
   // Other tables
+  d.exec(`CREATE TABLE IF NOT EXISTS clinical_departments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER DEFAULT 1,
+    code TEXT NOT NULL UNIQUE,
+    name_ar TEXT DEFAULT '',
+    name_en TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  d.exec(`CREATE TABLE IF NOT EXISTS clinical_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    department_id INTEGER,
+    version TEXT DEFAULT '1.0.0',
+    form_structure TEXT NOT NULL,
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  d.exec(`CREATE TABLE IF NOT EXISTS clinical_records (
+    id TEXT PRIMARY KEY,
+    tenant_id INTEGER DEFAULT 1,
+    patient_id INTEGER,
+    template_id INTEGER,
+    record_data TEXT NOT NULL,
+    is_locked INTEGER DEFAULT 0,
+    content_hash TEXT DEFAULT '',
+    digital_signature TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
   d.exec(`CREATE TABLE IF NOT EXISTS form_templates (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     template_name TEXT DEFAULT '',
@@ -706,6 +736,7 @@ function createTables() {
 
   d.exec(`CREATE TABLE IF NOT EXISTS integration_settings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER,
     integration_name TEXT DEFAULT '',
     provider TEXT DEFAULT '',
     api_key TEXT DEFAULT '',
@@ -764,6 +795,94 @@ function createTables() {
     notes TEXT DEFAULT '',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
+
+  // SaaS Plans & Entitlements tables
+  d.exec(`CREATE TABLE IF NOT EXISTS plans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_key TEXT NOT NULL UNIQUE,
+    name_ar TEXT NOT NULL,
+    name_en TEXT NOT NULL,
+    description_ar TEXT DEFAULT '',
+    description_en TEXT DEFAULT '',
+    currency TEXT NOT NULL,
+    monthly_price REAL DEFAULT 0,
+    yearly_price REAL DEFAULT 0,
+    trial_days INTEGER DEFAULT 0,
+    active INTEGER DEFAULT 1,
+    sort_order INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  d.exec(`CREATE TABLE IF NOT EXISTS plan_entitlements (
+    plan_id INTEGER PRIMARY KEY,
+    max_users INTEGER,
+    max_branches INTEGER,
+    max_invoices_per_month INTEGER,
+    modules_enabled TEXT DEFAULT '',
+    support_level TEXT DEFAULT 'standard',
+    api_access INTEGER DEFAULT 0,
+    custom_domain INTEGER DEFAULT 0,
+    FOREIGN KEY(plan_id) REFERENCES plans(id) ON DELETE CASCADE
+  )`);
+
+  d.exec(`CREATE TABLE IF NOT EXISTS tenant_plan_assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL,
+    plan_key TEXT NOT NULL,
+    assignment_source TEXT DEFAULT 'manual',
+    assigned_by INTEGER,
+    assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    effective_from DATETIME DEFAULT CURRENT_TIMESTAMP,
+    effective_to DATETIME,
+    FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    FOREIGN KEY(plan_key) REFERENCES plans(plan_key)
+  )`);
+
+  seedDefaultPlans(d);
+  seedDefaultIntegrations(d);
+}
+
+function seedDefaultPlans(d) {
+  const count = d.prepare("SELECT COUNT(*) as cnt FROM plans").get().cnt;
+  if (count > 0) return;
+
+  const insertPlan = d.prepare(`
+    INSERT INTO plans (plan_key, name_ar, name_en, description_ar, description_en, currency, monthly_price, yearly_price, trial_days, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const insertEnt = d.prepare(`
+    INSERT INTO plan_entitlements (plan_id, max_users, max_branches, max_invoices_per_month, modules_enabled, support_level, api_access, custom_domain)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const plans = [
+    { key: 'free_trial', name_ar: 'فترة تجريبية', name_en: 'Free Trial', desc_ar: 'تجربة مجانية لمدة 14 يوماً', desc_en: '14-day free trial', curr: 'SAR', m_price: 0, y_price: 0, trial: 14, sort: 1, max_u: 3, max_b: 1, max_i: 100, mods: 'dashboard,patients,appointments,settings', support: 'basic', api: 0, domain: 0 },
+    { key: 'basic', name_ar: 'الباقة الأساسية', name_en: 'Basic Plan', desc_ar: 'للمستشفيات والعيادات الصغيرة', desc_en: 'For small clinics and hospitals', curr: 'SAR', m_price: 150, y_price: 1500, trial: 0, sort: 2, max_u: 10, max_b: 2, max_i: 1000, mods: 'dashboard,patients,appointments,nursing,billing,settings', support: 'standard', api: 0, domain: 0 },
+    { key: 'premium', name_ar: 'الباقة المتميزة', name_en: 'Premium Plan', desc_ar: 'للمراكز الطبية المتوسطة والكبيرة', desc_en: 'For medium to large medical centers', curr: 'SAR', m_price: 500, y_price: 5000, trial: 0, sort: 3, max_u: 50, max_b: 5, max_i: 5000, mods: 'dashboard,patients,appointments,nursing,lab,radiology,pharmacy,inventory,billing,settings', support: 'priority', api: 1, domain: 1 },
+    { key: 'enterprise', name_ar: 'باقة المنشآت الكبرى', name_en: 'Enterprise Plan', desc_ar: 'حلول متكاملة للمستشفيات والمجموعات الكبرى', desc_en: 'Complete solutions for large hospitals and groups', curr: 'SAR', m_price: 2000, y_price: 20000, trial: 0, sort: 4, max_u: null, max_b: null, max_i: null, mods: 'dashboard,patients,appointments,doctor,nursing,lab,radiology,pharmacy,inventory,invoices,accounts,finance,insurance,reports,messaging,settings,surgery,icu,emergency,inpatient,bloodbank,obgyn,antenatal,cssd,quality,infection,him,medical-records,pathology,hr,maintenance,api', support: 'enterprise', api: 1, domain: 1 }
+  ];
+
+  for (const p of plans) {
+    const res = insertPlan.run(p.key, p.name_ar, p.name_en, p.desc_ar, p.desc_en, p.curr, p.m_price, p.y_price, p.trial, p.sort);
+    insertEnt.run(res.lastInsertRowid, p.max_u, p.max_b, p.max_i, p.mods, p.support, p.api, p.domain);
+  }
+}
+
+function seedDefaultIntegrations(d) {
+  const count = d.prepare("SELECT COUNT(*) as cnt FROM integration_settings WHERE tenant_id = 1").get().cnt;
+  if (count > 0) return;
+
+  const insertInt = d.prepare(`
+    INSERT INTO integration_settings (tenant_id, integration_name, provider, endpoint_url, is_enabled, config_json)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+
+  insertInt.run(1, 'ZATCA', 'ZATCA', 'https://gw-fatoora.zatca.gov.sa/sdk/api/v2', 1, '{}');
+  insertInt.run(1, 'NPHIES', 'NPHIES', 'https://nphies.sa/api/v1/fhir', 1, '{}');
+  insertInt.run(1, 'CBAHI', 'CBAHI', 'https://cbahi.gov.sa/api/v1', 0, '{}');
+  insertInt.run(1, 'PDPL', 'Jumanasoft-Sec', 'https://www.jumanasoft.com/api/pdpl', 1, '{}');
 }
 
 function getDbRaw() {

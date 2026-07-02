@@ -96,6 +96,44 @@
       .catch(function (e) { state(e.message || 'خطأ.', true); });
   }
 
+  function loadStats() {
+    fetch(API + '/stats', { credentials: 'same-origin' })
+      .then(function (r) { if (!r.ok) throw new Error('تعذّر تحميل الإحصائيات'); return r.json(); })
+      .then(function (data) {
+        $('stat-revenue').textContent = parseFloat(data.total_revenue || 0).toLocaleString('ar-SA') + ' SAR';
+        $('stat-tenants').textContent = parseInt(data.total_tenants || 0, 10).toLocaleString('ar-SA');
+        $('stat-active-subs').textContent = parseInt(data.active_subscriptions || 0, 10).toLocaleString('ar-SA');
+
+        var chartContainer = $('sa-chart-bars');
+        chartContainer.innerHTML = '';
+        if (!data.plans_breakdown || !data.plans_breakdown.length) {
+          chartContainer.innerHTML = '<div class="sa-muted">لا يوجد اشتراكات نشطة بعد.</div>';
+          return;
+        }
+
+        var total = data.plans_breakdown.reduce(function (sum, row) { return sum + row.count; }, 0) || 1;
+        var labels = {
+          free_trial: 'فترة تجريبية (Free Trial)',
+          basic: 'الباقة الأساسية (Basic)',
+          premium: 'الباقة المتميزة (Premium)',
+          enterprise: 'باقة المنشآت (Enterprise)'
+        };
+
+        data.plans_breakdown.forEach(function (pb) {
+          var label = labels[pb.plan_key] || pb.plan_key;
+          var pct = Math.round((pb.count / total) * 100);
+          var row = document.createElement('div');
+          row.className = 'sa-chart-bar-row';
+          row.innerHTML = 
+            '<div class="sa-chart-bar-lbl">' + esc(label) + '</div>' +
+            '<div class="sa-chart-bar-outer"><div class="sa-chart-bar-inner" style="width: ' + pct + '%"></div></div>' +
+            '<div class="sa-chart-bar-val">' + esc(pb.count) + ' (' + pct + '%)</div>';
+          chartContainer.appendChild(row);
+        });
+      })
+      .catch(function (e) { console.error(e); });
+  }
+
   document.addEventListener('click', function (ev) {
     var b = ev.target.closest('[data-action]'); if (!b) return;
     var id = b.getAttribute('data-id'); var action = b.getAttribute('data-action');
@@ -115,11 +153,14 @@
       Array.prototype.forEach.call(tabs.querySelectorAll('[data-tab]'), function (el) {
         el.classList.toggle('active', el === b);
       });
-      var pt = $('panel-tenants'), pp = $('panel-plans');
+      var pt = $('panel-tenants'), pp = $('panel-plans'), po = $('panel-overview');
       if (pt) pt.hidden = (tab !== 'tenants');
       if (pp) pp.hidden = (tab !== 'plans');
+      if (po) po.hidden = (tab !== 'overview');
+      if (tab === 'overview') loadStats();
+      if (tab === 'tenants') load();
       document.dispatchEvent(new CustomEvent('sa-tab', { detail: { tab: tab } }));
     });
   }
-  load();
+  loadStats();
 })();

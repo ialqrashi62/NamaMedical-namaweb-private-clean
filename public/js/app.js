@@ -9832,6 +9832,8 @@ async function renderSettings(el) {
         API.get('/api/admin/backups'),
         API.get('/api/admin/audit-trail?limit=15')
       ]);
+    } else if (settingsTab === 'compliance') {
+      window.integrationsList = await API.get('/api/settings/integrations').catch(() => []);
     }
   } catch (e) {
     content.innerHTML = `
@@ -9869,6 +9871,9 @@ async function renderSettings(el) {
       </button>
       <button class="px-4 py-2 font-bold rounded-lg transition-all ${settingsTab === 'cybersecurity' ? 'bg-primary text-white shadow-md' : 'text-on-surface-variant hover:bg-surface-container-high/50'}" onclick="settingsTab='cybersecurity';navigateTo(42)">
         🛡️ ${tr('Cybersecurity & Governance', 'الأمن السيبراني والحوكمة')}
+      </button>
+      <button class="px-4 py-2 font-bold rounded-lg transition-all ${settingsTab === 'compliance' ? 'bg-primary text-white shadow-md' : 'text-on-surface-variant hover:bg-surface-container-high/50'}" onclick="settingsTab='compliance';navigateTo(42)">
+        🇸🇦 ${tr('Saudi Compliance & Integrations', 'الامتثال والتكامل السعودي')}
       </button>
     </div>
 
@@ -10201,10 +10206,116 @@ async function renderSettings(el) {
             </div>
           </div>
         </div>
-      `}
+      ` : settingsTab === 'compliance' ? `
+        <div class="space-y-md">
+          <div class="glass-card glass-card-premium p-6 rounded-2xl">
+            <h4 class="font-title-lg text-title-lg text-primary mb-4">🇸🇦 ${tr('Saudi Compliance & Integration Modules', 'بوابات الامتثال والتكامل الوطني السعودي')}</h4>
+            <p class="text-sm text-on-surface-variant mb-6">${tr('Configure local regulatory integration adapters (ZATCA Phase 2, NPHIES unified billing, CBAHI quality indicators, and PDPL protection protocols).', 'تهيئة بوابات الامتثال التنظيمي (الربط الفعلي للمرحلة الثانية لزاتكا، الفوترة التأمينية نفيز، مؤشرات جودة سباهي، وضوابط حماية البيانات الشخصية).')}</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              ${(window.integrationsList || []).map(item => `
+                <div class="border border-outline-variant/40 rounded-xl p-5 bg-surface-container-low/40 relative">
+                  <div class="flex justify-between items-start mb-4">
+                    <div>
+                      <span class="font-bold text-lg text-primary">${escapeHTML(item.integration_name)}</span>
+                      <span class="text-xs px-2 py-0.5 bg-surface-container-high rounded-full block text-on-surface-variant mt-1">${escapeHTML(item.provider)}</span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer" style="margin-right: auto; margin-left: 0;">
+                      <input type="checkbox" value="" class="sr-only peer" ${item.is_enabled === 1 ? 'checked' : ''} onchange="toggleIntegration('${escapeHTML(item.integration_name)}', this.checked)">
+                      <div class="w-11 h-6 bg-outline-variant/50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:height-5 after:width-5 after:transition-all peer-checked:bg-primary font-bold"></div>
+                    </label>
+                  </div>
+                  
+                  <div class="space-y-3 font-body-sm text-sm">
+                    <div class="flex justify-between">
+                      <span class="text-on-surface-variant">${tr('Endpoint URL', 'رابط نهاية الخدمة')}:</span>
+                      <span class="font-mono text-xs truncate max-w-[200px]" title="${escapeHTML(item.endpoint_url)}">${escapeHTML(item.endpoint_url || '—')}</span>
+                    </div>
+                    <div class="flex justify-between">
+                      <span class="text-on-surface-variant">${tr('Last Sync', 'آخر تزامن')}:</span>
+                      <span>${item.last_sync ? new Date(item.last_sync).toLocaleDateString('ar-SA') : tr('Never', 'لم يتم')}</span>
+                    </div>
+                    <button class="btn btn-sm btn-secondary w-full mt-3" onclick="openIntegrationConfig('${escapeHTML(item.integration_name)}')">
+                      ⚙️ ${tr('Configure', 'ضبط الإعدادات')}
+                    </button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      ` : ''}
     </div>
   `;
 }
+
+window.toggleIntegration = async (name, enabled) => {
+  const item = (window.integrationsList || []).find(i => i.integration_name === name);
+  if (!item) return;
+  try {
+    const body = {
+      integration_name: name,
+      provider: item.provider,
+      endpoint_url: item.endpoint_url,
+      is_enabled: enabled ? 1 : 0,
+      config_json: item.config_json
+    };
+    body['api_key'] = item.api_key;
+    body['api_secret'] = item.api_secret;
+    await API.post('/api/settings/integrations', body);
+    showToast(tr('Settings updated', 'تم تحديث الإعدادات'));
+    navigateTo(currentPage);
+  } catch (e) {
+    showToast(tr('Error', 'خطأ'), 'error');
+  }
+};
+
+window.openIntegrationConfig = (name) => {
+  const item = (window.integrationsList || []).find(i => i.integration_name === name) || { integration_name: name, provider: '', api_key: '', api_secret: '', endpoint_url: '', is_enabled: 0, config_json: '{}' };
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = '<div style="background:var(--bg-card,#fff);border-radius:16px;padding:24px;width:500px;max-height:90vh;overflow-y:auto;direction:rtl">' +
+    '<h3 style="margin:0 0 16px;color:var(--primary)">' + tr(`Configure ${name} Integration`, `إعدادات ربط ${name}`) + '</h3>' +
+    '<div class="form-group mb-3"><label class="block text-xs font-bold text-on-surface-variant mb-1">' + tr('Provider Name', 'اسم المزود') + '</label>' +
+    '<input class="form-input w-full" id="intProvider" value="' + (item.provider || '') + '"></div>' +
+    '<div class="form-group mb-3"><label class="block text-xs font-bold text-on-surface-variant mb-1">' + tr('Endpoint URL', 'رابط الخدمة') + '</label>' +
+    '<input class="form-input w-full" id="intUrl" value="' + (item.endpoint_url || '') + '"></div>' +
+    '<div class="form-group mb-3"><label class="block text-xs font-bold text-on-surface-variant mb-1">' + tr('API Key / Client ID', 'مفتاح API') + '</label>' +
+    '<input class="form-input w-full" id="intKey" value="' + (item.api_key || '') + '" type="password"></div>' +
+    '<div class="form-group mb-3"><label class="block text-xs font-bold text-on-surface-variant mb-1">' + tr('API Secret / Client Secret', 'السر البرمجي') + '</label>' +
+    '<input class="form-input w-full" id="intSecret" value="' + (item.api_secret || '') + '" type="password"></div>' +
+    '<div class="form-group mb-3"><label class="block text-xs font-bold text-on-surface-variant mb-1">' + tr('Custom Configurations (JSON)', 'إعدادات إضافية (JSON)') + '</label>' +
+    '<textarea class="form-input w-full" id="intConfig" rows="3">' + (item.config_json || '{}') + '</textarea></div>' +
+    '<div style="display:flex;gap:12px;margin-top:16px">' +
+    '<button class="btn btn-primary" id="btnSaveInt" style="flex:1">💾 ' + tr('Save Settings', 'حفظ الإعدادات') + '</button>' +
+    '<button class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()" style="flex:1">' + tr('Cancel', 'إلغاء') + '</button>' +
+    '</div></div>';
+  document.body.appendChild(modal);
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  
+  document.getElementById('btnSaveInt').onclick = async () => {
+    try {
+      const body = {
+        integration_name: name,
+        provider: document.getElementById('intProvider').value,
+        endpoint_url: document.getElementById('intUrl').value,
+        is_enabled: item.is_enabled,
+        config_json: document.getElementById('intConfig').value
+      };
+      body['api_key'] = document.getElementById('intKey').value;
+      body['api_secret'] = document.getElementById('intSecret').value;
+      JSON.parse(body.config_json);
+      
+      await API.post('/api/settings/integrations', body);
+      showToast(tr('Integration settings saved successfully', 'تم حفظ إعدادات الربط والامتثال'));
+      modal.remove();
+      navigateTo(currentPage);
+    } catch (e) {
+      showToast(tr('Error saving (check JSON format)', 'خطأ في الحفظ (تحقق من صياغة JSON)'), 'error');
+    }
+  };
+};
 
 window.toggleSuRoleFields = (role) => {
   const isDoc = role === 'Doctor';

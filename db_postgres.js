@@ -35,10 +35,7 @@ const pool = new Pool({
 // Binds app.tenant_id per-request via AsyncLocalStorage. FORCE-RLS policies read
 // current_setting('app.tenant_id'); the app uses pool.query directly, so without this the
 // session tenant is never set and every protected-table query returns 0 / fails WITH CHECK.
-const { AsyncLocalStorage } = require('async_hooks');
-const tenantStore = new AsyncLocalStorage();
-function runWithTenant(context, fn) { return tenantStore.run(context || {}, fn); }
-function getCurrentTenantId() { const s = tenantStore.getStore(); return s && s.tenantId ? s.tenantId : null; }
+const { tenantStore, runWithTenant, getCurrentTenantId } = require('./tenant_context');
 const _poolQuery = pool.query.bind(pool);
 pool.query = function (text, params) {
     const tid = getCurrentTenantId();
@@ -443,10 +440,93 @@ CREATE TABLE IF NOT EXISTS inventory_stock_count (
     difference INTEGER DEFAULT 0, count_date TEXT DEFAULT '',
     counted_by TEXT DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS plans (
+    id             SERIAL PRIMARY KEY,
+    plan_key       VARCHAR(50)  NOT NULL UNIQUE,
+    name_ar        VARCHAR(120) NOT NULL,
+    name_en        VARCHAR(120) NOT NULL,
+    description_ar TEXT         NOT NULL DEFAULT '',
+    description_en TEXT         NOT NULL DEFAULT '',
+    currency       CHAR(3)      NOT NULL,
+    monthly_price  NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (monthly_price >= 0),
+    yearly_price   NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (yearly_price  >= 0),
+    trial_days     INTEGER      NOT NULL DEFAULT 0 CHECK (trial_days >= 0 AND trial_days <= 365),
+    active         BOOLEAN      NOT NULL DEFAULT true,
+    sort_order     INTEGER      NOT NULL DEFAULT 0,
+    created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT plans_plan_key_fmt CHECK (plan_key ~ '^[a-z0-9_]{2,40}$')
+);
+
+CREATE TABLE IF NOT EXISTS plan_entitlements (
+    plan_id                INTEGER PRIMARY KEY REFERENCES plans(id) ON DELETE CASCADE,
+    max_users              INTEGER CHECK (max_users IS NULL OR max_users >= 0),
+    max_branches           INTEGER CHECK (max_branches IS NULL OR max_branches >= 0),
+    max_invoices_per_month INTEGER CHECK (max_invoices_per_month IS NULL OR max_invoices_per_month >= 0),
+    modules_enabled        TEXT        NOT NULL DEFAULT '',
+    support_level          VARCHAR(20) NOT NULL DEFAULT 'standard',
+    api_access             BOOLEAN     NOT NULL DEFAULT false,
+    custom_domain          BOOLEAN     NOT NULL DEFAULT false
+);
+
+CREATE TABLE IF NOT EXISTS tenant_plan_assignments (
+    id                SERIAL PRIMARY KEY,
+    tenant_id         INTEGER     NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    plan_key          VARCHAR(50) NOT NULL REFERENCES plans(plan_key),
+    assignment_source VARCHAR(20) NOT NULL DEFAULT 'manual',
+    assigned_by       INTEGER,
+    assigned_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    effective_from    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    effective_to      TIMESTAMPTZ,
+    CONSTRAINT tpa_source_chk CHECK (assignment_source IN ('manual','trial','migration'))
+);
         `);
 
         // ===== OTHER TABLES =====
         await client.query(`
+CREATE TABLE IF NOT EXISTS clinical_departments (
+    id SERIAL PRIMARY KEY,
+    tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    code TEXT NOT NULL UNIQUE,
+    name_ar TEXT DEFAULT '',
+    name_en TEXT DEFAULT '',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE clinical_departments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clinical_departments FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS rls_clinical_departments ON clinical_departments;
+CREATE POLICY rls_clinical_departments ON clinical_departments
+    USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::integer)
+    WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::integer);
+
+CREATE TABLE IF NOT EXISTS clinical_templates (
+    id SERIAL PRIMARY KEY,
+    department_id INTEGER NOT NULL REFERENCES clinical_departments(id) ON DELETE CASCADE,
+    version TEXT DEFAULT '1.0.0',
+    form_structure JSONB NOT NULL,
+    is_active INTEGER DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS clinical_records (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    patient_id INTEGER NOT NULL,
+    template_id INTEGER REFERENCES clinical_templates(id) ON DELETE SET NULL,
+    record_data JSONB NOT NULL,
+    is_locked INTEGER DEFAULT 0,
+    content_hash TEXT DEFAULT '',
+    digital_signature TEXT DEFAULT '',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE clinical_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clinical_records FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS rls_clinical_records ON clinical_records;
+CREATE POLICY rls_clinical_records ON clinical_records
+    USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::integer)
+    WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::integer);
+
 CREATE TABLE IF NOT EXISTS medical_services (
     id SERIAL PRIMARY KEY,
     name_en TEXT DEFAULT '', name_ar TEXT DEFAULT '',
@@ -1858,6 +1938,34 @@ CREATE TABLE IF NOT EXISTS cosmetic_followups (
                 SELECT setval(pg_get_serial_sequence('branches', 'id'), COALESCE((SELECT MAX(id)+1 FROM branches), 1), false);
             `).catch(err => console.error('Sequence sync error:', err.message));
 
+            // Seed plans and plan_entitlements
+            const plansCount = (await client.query("SELECT COUNT(*) as cnt FROM plans")).rows[0].cnt;
+            if (parseInt(plansCount) === 0) {
+                const plans = [
+                    { key: 'free_trial', name_ar: 'فترة تجريبية', name_en: 'Free Trial', desc_ar: 'تجربة مجانية لمدة 14 يوماً', desc_en: '14-day free trial', curr: 'SAR', m_price: 0, y_price: 0, trial: 14, sort: 1, max_u: 3, max_b: 1, max_i: 100, mods: 'dashboard,patients,appointments,settings', support: 'basic', api: false, domain: false },
+                    { key: 'basic', name_ar: 'الباقة الأساسية', name_en: 'Basic Plan', desc_ar: 'للمستشفيات والعيادات الصغيرة', desc_en: 'For small clinics and hospitals', curr: 'SAR', m_price: 150, y_price: 1500, trial: 0, sort: 2, max_u: 10, max_b: 2, max_i: 1000, mods: 'dashboard,patients,appointments,nursing,billing,settings', support: 'standard', api: false, domain: false },
+                    { key: 'premium', name_ar: 'الباقة المتميزة', name_en: 'Premium Plan', desc_ar: 'للمراكز الطبية المتوسطة والكبيرة', desc_en: 'For medium to large medical centers', curr: 'SAR', m_price: 500, y_price: 5000, trial: 0, sort: 3, max_u: 50, max_b: 5, max_i: 5000, mods: 'dashboard,patients,appointments,nursing,lab,radiology,pharmacy,inventory,billing,settings', support: 'priority', api: true, domain: true },
+                    { key: 'enterprise', name_ar: 'باقة المنشآت الكبرى', name_en: 'Enterprise Plan', desc_ar: 'حلول متكاملة للمستشفيات والمجموعات الكبرى', desc_en: 'Complete solutions for large hospitals and groups', curr: 'SAR', m_price: 2000, y_price: 20000, trial: 0, sort: 4, max_u: null, max_b: null, max_i: null, mods: 'dashboard,patients,appointments,doctor,nursing,lab,radiology,pharmacy,inventory,invoices,accounts,finance,insurance,reports,messaging,settings,surgery,icu,emergency,inpatient,bloodbank,obgyn,antenatal,cssd,quality,infection,him,medical-records,pathology,hr,maintenance,api', support: 'enterprise', api: true, domain: true }
+                ];
+                for (const p of plans) {
+                    const row = (await client.query(`
+                        INSERT INTO plans (plan_key, name_ar, name_en, description_ar, description_en, currency, monthly_price, yearly_price, trial_days, sort_order)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id
+                    `, [p.key, p.name_ar, p.name_en, p.desc_ar, p.desc_en, p.curr, p.m_price, p.y_price, p.trial, p.sort])).rows[0];
+                    await client.query(`
+                        INSERT INTO plan_entitlements (plan_id, max_users, max_branches, max_invoices_per_month, modules_enabled, support_level, api_access, custom_domain)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    `, [row.id, p.max_u, p.max_b, p.max_i, p.mods, p.support, p.api, p.domain]);
+                }
+            }
+
+            // Default tenant plan assignment
+            await client.query(`
+                INSERT INTO tenant_plan_assignments (tenant_id, plan_key, assignment_source)
+                VALUES (1, 'premium', 'manual')
+                ON CONFLICT DO NOTHING
+            `);
+
             // Default admin
             await client.query(`INSERT INTO system_users (username, password_hash, display_name, role) VALUES ('admin', '$2b$12$G36aRwyn13/eICGIdRF4leQfi/g6xYROPVNvQ1cMrh95PDK9fbs0q', 'المدير العام', 'Admin') ON CONFLICT (username) DO NOTHING`);
 
@@ -1872,6 +1980,18 @@ CREATE TABLE IF NOT EXISTS cosmetic_followups (
                 VALUES ((SELECT id FROM system_users WHERE username='admin' LIMIT 1), 1, 1) 
                 ON CONFLICT (user_id, facility_id, branch_id) DO NOTHING
             `);
+
+            // Seed integration_settings for tenant 1
+            const intCount = (await client.query("SELECT COUNT(*) as cnt FROM integration_settings WHERE tenant_id = 1")).rows[0].cnt;
+            if (parseInt(intCount) === 0) {
+                await client.query(`
+                    INSERT INTO integration_settings (tenant_id, integration_name, provider, endpoint_url, is_enabled, config_json) VALUES
+                    (1, 'ZATCA', 'ZATCA', 'https://gw-fatoora.zatca.gov.sa/sdk/api/v2', 1, '{}'),
+                    (1, 'NPHIES', 'NPHIES', 'https://nphies.sa/api/v1/fhir', 1, '{}'),
+                    (1, 'CBAHI', 'CBAHI', 'https://cbahi.gov.sa/api/v1', 0, '{}'),
+                    (1, 'PDPL', 'Jumanasoft-Sec', 'https://www.jumanasoft.com/api/pdpl', 1, '{}')
+                `);
+            }
         }
 
         // ===== MIGRATIONS: Add missing columns to existing tables =====
