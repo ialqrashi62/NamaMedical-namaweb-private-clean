@@ -72,6 +72,14 @@
 
 ## Phase 6: ZATCA Phase 2 Cryptographic Integration
 
+### 8. Phase 6 & 7 (ZATCA, NPHIES, Surgical Workflow & Bugfixes)
+- **ZATCA & NPHIES Integration APIs**: Implemented NPHIES HL7 FHIR validation adapters (Patient, Coverage, Claim, Eligibility, Pre-Auth) and ZATCA Phase 2 XML/Invoicing compliance APIs.
+- **Surgical Workflow & Smart Notifications**: Expanded surgical flow management, scheduling, pre-op checks, and real-time medical alert triggers.
+- **Syntax Error Hotfix**: Resolved a nested template literal ternary parsing syntax error inside `app.js` which caused a white screen on loading.
+- **Cache Buster Implementation**: Added version cache-busting query parameter (`?v=20260702_4`) in `public/index.html` to force browsers to load fresh updates.
+- **Sidebar Restructuring**: Reordered the sidebar modules following world-class EMR standards (Dashboard -> Reception -> Appointments -> Waiting Queue -> Doctor Station -> Nursing -> Emergency, etc.) while safely preserving numeric page routing.
+- **PM2 Redeployment & Verification**: Pulled the updates on the production server `204.168.144.74`, restarted the server using PM2, verified the health endpoint returned `UP`, and validated successful rendering using the browser subagent.
+
 ### 1. الإجراءات المنجزة والتغييرات (Completed Actions & Changes)
 * **تفعيل وتوصيل موديول التشفير**: تم دمج موديول التشفير التلقائي [zatca_phase2.js](file:///c:/Users/ice/Desktop/NamaMedical/namaweb/zatca_phase2.js) لعمل الفحوصات والهاش والتوقيع التشفيري (ECDSA secp256k1) داخل نهاية الخدمة `POST /api/zatca/submit` في [server.js](file:///c:/Users/ice/Desktop/NamaMedical/namaweb/server.js).
 * **العزل التام للمستأجرين**: استدعاء وتحميل بيانات الربط التشفيري الفعالة ديناميكياً لكل مستأجر (CSID والمفتاح الخاص) من جدول `integration_settings`.
