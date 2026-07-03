@@ -100,7 +100,7 @@ function makeSuperAdminRouter(deps = {}) {
     router.get('/stats', async (req, res) => {
         try {
             // 1. Total revenue collected
-            const revQuery = await pool.query('SELECT COALESCE(SUM(total), 0) AS total FROM invoices WHERE paid = 1 OR paid = \'t\'');
+            const revQuery = await pool.query('SELECT COALESCE(SUM(total), 0) AS total FROM invoices WHERE paid = 1');
             const totalRevenue = parseFloat(revQuery.rows[0].total || 0);
 
             // 2. Total tenants count
