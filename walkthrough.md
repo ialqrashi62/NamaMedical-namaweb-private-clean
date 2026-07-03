@@ -164,6 +164,21 @@
 
 ---
 
+### 🛡️ Phase F5 — EMR Clinical Signatures, Action RBAC, & Department Owners
+* **المهام والحلول البرمجية**:
+  * **مسار قفل EMR الموحد**: دمج وحل مشكلة المسار المزدوج المكرر في `POST /api/clinical/records/:id/lock` وتطبيق حواجز الصلاحيات والخصوصية الطبية (CBAHI Compliance).
+  * **التوقيع السريري وخصوصية الأدوار**: قصر توقيع سجلات الأطباء على الأدوار الطبية فقط ومنع التمريض (403) مع السماح لهم بتوقيع تقييماتهم التمريضية كقوة أمنية وتوافقية.
+  * **حماية الإجراءات (Action-Level RBAC)**: فرض حراس الصلاحيات الحساسة باستخدام `requirePermission` على مسارات إلغاء العمليات الجراحية (`or:cancel`) وإلغاء الفواتير المالية (`invoices:cancel`) وحذف الرسائل الداخلية (`messages:delete`).
+  * **مصفوفة ملاك الأقسام**: ترحيل عمود `owner_role` لجدول `clinical_departments` وتحديث كافة الأقسام الطبية والتشغيلية (CMO, CNO, COO, CFO, CIO).
+* **الملفات المضافة والمعدلة**:
+  * `server.js` (تعديل وحراسة مسارات Express وهيكلة حارس requirePermission).
+  * `db_postgres.js` (إدراج العمود للبنية التأسيسية).
+  * `DEPLOY_RUN.sh` (إدراج الهجرات وتحديثها تلقائياً).
+  * `migrations/p1_03_department_owners_up.sql`, `down.sql`, `validate.sql` (ملفات الهجرة والفحص لقاعدة البيانات).
+  * `cross_tenant_clinical_signatures_test.js` (ملف الفحص والأمان التلقائي الجديد).
+
+---
+
 ## 🗄️ الجداول الجديدة في قاعدة البيانات (DDL)
 تمت إضافة وتفعيل **23 جدولاً جديداً** بنجاح مع العزل التام للمستأجرين (RLS isolation & compound indexing):
 1. `nphies_remittance_advice`
@@ -190,14 +205,17 @@
 22. `clinical_smart_templates`
 23. `icu_prevention_bundles`
 
+* **التعديل الهيكلي الأخير**: إضافة عمود `owner_role` لجدول `clinical_departments`.
+
 ---
 
 ## نتائج الاختبارات والنشر
 ```
-✅ run_all_tests: 170 passed, 0 failed (of 170)
+✅ run_all_tests: 173 passed, 0 failed (of 173)
+✅ cross_tenant_clinical_signatures_test: 12 passed, 0 failed (of 12)
 ✅ server.js — syntax check: OK
 ✅ db_postgres.js — syntax check: OK
 ✅ Git push reference updated: HEAD -> integration/all-epics
-✅ PM2 Production deployment: online
+✅ PM2 Production deployment: online (pid: 371048)
 ✅ Health Check online: https://jumanasoft.com/api/health -> {"status":"UP","db":"up"} (HTTP 200)
 ```
