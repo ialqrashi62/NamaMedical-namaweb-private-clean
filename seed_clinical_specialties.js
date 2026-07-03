@@ -143,6 +143,14 @@ async function seed() {
         }
         console.log(`✓ Seeded ${DEPARTMENTS.length} clinical departments.`);
 
+        // Check is_active type dynamically
+        const colTypeRes = await client.query(`
+            SELECT data_type FROM information_schema.columns 
+            WHERE table_name = 'clinical_templates' AND column_name = 'is_active'
+        `);
+        const isBool = colTypeRes.rows.length && colTypeRes.rows[0].data_type === 'boolean';
+        const isActiveVal = isBool ? true : 1;
+
         // Helper to insert templates safely and idempotently
         async function insertTemplate(deptCode, nameEn, nameAr, structure) {
             const deptRes = await client.query('SELECT id FROM clinical_departments WHERE code = $1', [deptCode]);
@@ -156,8 +164,8 @@ async function seed() {
             if (check.rowCount === 0) {
                 await client.query(
                     `INSERT INTO clinical_templates (department_id, template_name_en, template_name_ar, version, form_structure, is_active, tenant_id)
-                     VALUES ($1, $2, $3, '1.0.0', $4, true, 1)`,
-                    [deptId, nameEn, nameAr, JSON.stringify(structure)]
+                     VALUES ($1, $2, $3, '1.0.0', $4, $5, 1)`,
+                    [deptId, nameEn, nameAr, JSON.stringify(structure), isActiveVal]
                 );
             }
         }
