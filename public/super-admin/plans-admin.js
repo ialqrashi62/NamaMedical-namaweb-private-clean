@@ -2,6 +2,17 @@
 (function () {
   'use strict';
   var API = '/api/super-admin';
+  function safeFetch(url, options) {
+    options = options || {};
+    options.credentials = 'same-origin';
+    return fetch(url, options).then(function (r) {
+      if (r.status === 401) {
+        window.location.href = '/login.html';
+        throw new Error('يرجى تسجيل الدخول.');
+      }
+      return r;
+    });
+  }
   var $ = function (id) { return document.getElementById(id); };
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -47,7 +58,7 @@
   function load() {
     pstate('جارٍ التحميل…');
     $('pl-form').hidden = true;
-    fetch(API + '/plans', { credentials: 'same-origin' })
+    safeFetch(API + '/plans')
       .then(function (r) {
         if (r.status === 403) throw new Error('يتطلّب صلاحية Super Admin.');
         if (!r.ok) throw new Error('تعذّر التحميل (' + r.status + ').');
@@ -145,7 +156,7 @@
     var isEdit = !!key;
     var url = isEdit ? (API + '/plans/' + encodeURIComponent(key)) : (API + '/plans');
     showErrors(null); pstate('جارٍ الحفظ…');
-    fetch(url, { method: isEdit ? 'PUT' : 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    safeFetch(url, { method: isEdit ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       .then(function (r) { return r.json().then(function (j) { return { status: r.status, j: j }; }); })
       .then(function (res) {
         if (res.status === 400) { showErrors(res.j.details || [res.j.error || 'تحقق غير صالح']); pstate(''); return; }
@@ -159,7 +170,7 @@
   function setActive(key, enable) {
     if (!window.confirm((enable ? 'تفعيل' : 'تعطيل') + ' الخطة ' + key + '؟')) return;
     pstate('جارٍ المعالجة…');
-    fetch(API + '/plans/' + encodeURIComponent(key) + '/' + (enable ? 'enable' : 'disable'), { method: 'POST', credentials: 'same-origin' })
+    safeFetch(API + '/plans/' + encodeURIComponent(key) + '/' + (enable ? 'enable' : 'disable'), { method: 'POST' })
       .then(function (r) { if (!r.ok) throw new Error('فشل الإجراء (' + r.status + ').'); return r.json(); })
       .then(function () { load(); })
       .catch(function (e) { pstate(e.message || 'خطأ.', true); });
@@ -170,8 +181,8 @@
     if (!el) return;
     el.innerHTML = '<div class="sa-muted">جارٍ تحميل خطة المستأجر…</div>';
     Promise.all([
-      fetch(API + '/tenants/' + encodeURIComponent(tenantId) + '/plan', { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : { current: null }; }),
-      fetch(API + '/plans', { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : { plans: [] }; })
+      safeFetch(API + '/tenants/' + encodeURIComponent(tenantId) + '/plan').then(function (r) { return r.ok ? r.json() : { current: null }; }),
+      safeFetch(API + '/plans').then(function (r) { return r.ok ? r.json() : { plans: [] }; })
     ]).then(function (out) {
       var current = out[0].current;
       var active = (out[1].plans || []).filter(function (p) { return p.active; });
@@ -191,7 +202,7 @@
   // OBSERVE-only: show resolved entitlements when the resolver is enabled. Silently skipped otherwise (404/disabled).
   function mountEntitlements(tenantId, el) {
     if (!el) return;
-    fetch(API + '/tenants/' + encodeURIComponent(tenantId) + '/entitlements', { credentials: 'same-origin' })
+    safeFetch(API + '/tenants/' + encodeURIComponent(tenantId) + '/entitlements')
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (!d || !d.entitlements) return; // resolver disabled -> show nothing
@@ -216,8 +227,8 @@
     var sel = $('sa-assign-plan'); if (!sel) return;
     var key = sel.value;
     if (!window.confirm('تعيين الخطة ' + key + ' للمستأجر #' + tenantId + '؟')) return;
-    fetch(API + '/tenants/' + encodeURIComponent(tenantId) + '/plan', {
-      method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+    safeFetch(API + '/tenants/' + encodeURIComponent(tenantId) + '/plan', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ plan_key: key, assignment_source: 'manual' })
     })
       .then(function (r) { return r.json().then(function (j) { return { status: r.status, j: j }; }); })

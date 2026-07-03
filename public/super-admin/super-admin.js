@@ -2,6 +2,17 @@
 (function () {
   'use strict';
   var API = '/api/super-admin';
+  function safeFetch(url, options) {
+    options = options || {};
+    options.credentials = 'same-origin';
+    return fetch(url, options).then(function (r) {
+      if (r.status === 401) {
+        window.location.href = '/login.html';
+        throw new Error('يرجى تسجيل الدخول.');
+      }
+      return r;
+    });
+  }
   var $ = function (id) { return document.getElementById(id); };
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -49,7 +60,7 @@
     if ($('sa-status').value) qs.set('status', $('sa-status').value);
     if ($('sa-plan').value.trim()) qs.set('plan', $('sa-plan').value.trim());
     if ($('sa-search').value.trim()) qs.set('q', $('sa-search').value.trim());
-    fetch(API + '/tenants?' + qs.toString(), { credentials: 'same-origin' })
+    safeFetch(API + '/tenants?' + qs.toString())
       .then(function (r) {
         if (r.status === 403) throw new Error('يتطلّب صلاحية Super Admin.');
         if (!r.ok) throw new Error('تعذّر التحميل (' + r.status + ').');
@@ -66,7 +77,7 @@
 
   function details(id) {
     state('جارٍ تحميل التفاصيل…');
-    fetch(API + '/tenants/' + encodeURIComponent(id), { credentials: 'same-origin' })
+    safeFetch(API + '/tenants/' + encodeURIComponent(id))
       .then(function (r) { if (!r.ok) throw new Error('تعذّر تحميل التفاصيل (' + r.status + ').'); return r.json(); })
       .then(function (data) {
         state('');
@@ -93,7 +104,7 @@
     var verb = action === 'suspend' ? 'تعليق' : 'إعادة تفعيل';
     if (!window.confirm('تأكيد ' + verb + ' المستأجر #' + id + '؟')) return;
     state('جارٍ ' + verb + '…');
-    fetch(API + '/tenants/' + encodeURIComponent(id) + '/' + action, { method: 'POST', credentials: 'same-origin' })
+    safeFetch(API + '/tenants/' + encodeURIComponent(id) + '/' + action, { method: 'POST' })
       .then(function (r) {
         if (r.status === 409) return r.json().then(function (j) { throw new Error(j.error || 'انتقال حالة غير مسموح.'); });
         if (!r.ok) throw new Error('فشل الإجراء (' + r.status + ').');
@@ -104,7 +115,7 @@
   }
 
   function loadStats() {
-    fetch(API + '/stats', { credentials: 'same-origin' })
+    safeFetch(API + '/stats')
       .then(function (r) { if (!r.ok) throw new Error('تعذّر تحميل الإحصائيات'); return r.json(); })
       .then(function (data) {
         $('stat-revenue').textContent = parseFloat(data.total_revenue || 0).toLocaleString('ar-SA') + ' SAR';
