@@ -124,6 +124,8 @@ async function runSmokeTests() {
     let failed = false;
     let serverProcess = null;
     let originalHash = '';
+    let originalAttempts = 0;
+    let originalLockout = null;
 
     try {
         // [WRITE_ACTION] DB Password Reset
@@ -138,14 +140,16 @@ async function runSmokeTests() {
             const salt = bcrypt.genSaltSync(12);
             const hash = bcrypt.hashSync(E2E_TEST_PASSWORD, salt);
 
-            // Fetch original hash first
-            const origResult = await pool.query("SELECT password_hash FROM system_users WHERE username=$1", [E2E_TEST_USERNAME]);
+            // Fetch original hash, failed attempts, and lockout first
+            const origResult = await pool.query("SELECT password_hash, failed_login_attempts, lockout_until FROM system_users WHERE username=$1", [E2E_TEST_USERNAME]);
             if (origResult.rows.length > 0) {
                 originalHash = origResult.rows[0].password_hash;
+                originalAttempts = origResult.rows[0].failed_login_attempts;
+                originalLockout = origResult.rows[0].lockout_until;
             }
 
-            await pool.query("UPDATE system_users SET password_hash = $1 WHERE username = $2", [hash, E2E_TEST_USERNAME]);
-            console.log(`  ${GREEN}✅ تم تحديث كلمة مرور ${E2E_TEST_USERNAME} بنجاح.${RESET}`);
+            await pool.query("UPDATE system_users SET password_hash = $1, failed_login_attempts = 0, lockout_until = NULL WHERE username = $2", [hash, E2E_TEST_USERNAME]);
+            console.log(`  ${GREEN}✅ تم تحديث كلمة مرور ${E2E_TEST_USERNAME} وتصفير محاولات الدخول بنجاح.${RESET}`);
         }
 
         // 2. Spawn express server
@@ -282,10 +286,13 @@ async function runSmokeTests() {
             serverProcess.kill('SIGINT');
         }
 
-        // Restore original password hash
+        // Restore original password hash and lockout status
         if (!E2E_READ_ONLY_MODE && originalHash) {
             console.log(`[5] إعادة تعيين هاش كلمة مرور admin الأصلي في قاعدة البيانات...`);
-            await pool.query("UPDATE system_users SET password_hash = $1 WHERE username = $2", [originalHash, E2E_TEST_USERNAME]);
+            await pool.query(
+                "UPDATE system_users SET password_hash = $1, failed_login_attempts = $2, lockout_until = $3 WHERE username = $4", 
+                [originalHash, typeof originalAttempts !== 'undefined' ? originalAttempts : 0, originalLockout || null, E2E_TEST_USERNAME]
+            );
             console.log(`  ${GREEN}✅ تم تنظيف وإرجاع قاعدة البيانات لوضعها الأصلي.${RESET}`);
         }
 

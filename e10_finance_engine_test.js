@@ -105,6 +105,21 @@ assert(ubl1.includes('UNSIGNED-NO-CSID'), 'UBL stamp is a placeholder (no real C
 const ublInj = fe.buildUBLInvoice({ invoiceNumber: '<x>&"', issueDate: '2026-06-26', sellerName: 'S', sellerVat: '', buyerName: '', baseExcl: '0.00', vat: '0.00', total: '0.00' });
 assert(ublInj.includes('&lt;x&gt;&amp;&quot;') && !ublInj.includes('<x>&"'), 'UBL escapes XML special chars (no injection)');
 
+// ZATCA Gate 9 Signature Extension tests
+const dummyHash = '1234567890abcdef1234567890abcdef1234567890ab';
+const dummySig = 'MEQCID3k8tGv...';
+const dummyCert = 'MIIE3DCCA8SgAwIBAgIU...';
+const sigExtNull = fe.buildUBLSignatureExtension(null);
+assert(sigExtNull === '', 'buildUBLSignatureExtension(null) returns empty string');
+const sigExt = fe.buildUBLSignatureExtension({ invoiceHash: dummyHash, signature: dummySig, certificate: dummyCert });
+assert(sigExt.includes('<ext:UBLExtensions>') && sigExt.includes(dummyHash) && sigExt.includes(dummySig) && sigExt.includes(dummyCert), 'buildUBLSignatureExtension constructs valid XML extension');
+
+const signedUbl = fe.buildUBLInvoice({
+    invoiceNumber: 'INV-SIGNED', issueDate: '2026-06-26', sellerName: 'Nama', sellerVat: 'X', buyerName: 'B', baseExcl: '100.00', vat: '15.00', total: '115.00',
+    invoiceHash: dummyHash, signature: dummySig, certificate: dummyCert
+});
+assert(signedUbl.includes('<ext:UBLExtensions>') && signedUbl.includes(dummySig), 'buildUBLInvoice embeds signature block successfully');
+
 console.log(`\n${BOLD}${BLUE}=== E10 Engine Test Results ===${RESET}`);
 console.log(`  ${GREEN}PASS${RESET}: ${passed}   ${RED}FAIL${RESET}: ${failed}`);
 if (failed > 0) { failures.forEach(f => console.log(`  - ${f.name}: ${f.details}`)); process.exit(1); }

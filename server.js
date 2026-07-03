@@ -17586,25 +17586,72 @@ app.post('/api/nphies/remittance', requireAuth, requireRole('finance', 'accounts
     } catch (e) { console.error(e); res.status(500).json({ error: e.message }); }
 });
 
-// POST /api/nphies/remittance/:id/post-to-ar — post remittance to AR (Accounts Receivable)
+// POST /api/nphies/remittance/:id/post-to-ar — post remittance to AR (Accounts Receivable) and GL
 app.post('/api/nphies/remittance/:id/post-to-ar', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
+    const client = await pool.connect();
     try {
-        const tid = getRequestTenantContext(req);
+        const { tenantId: tid } = getRequestTenantContext(req);
         const id = parseInt(req.params.id);
-        const ra = (await pool.query('SELECT * FROM nphies_remittance_advice WHERE id=$1 AND tenant_id=$2', [id, tid])).rows[0];
-        if (!ra) return res.status(404).json({ error: 'Remittance not found' });
-        if (ra.posted_to_gl) return res.status(409).json({ error: 'Already posted to GL/AR' });
+        
+        await client.query('BEGIN');
+        
+        const ra = (await client.query('SELECT * FROM nphies_remittance_advice WHERE id=$1 AND tenant_id=$2 FOR UPDATE', [id, tid])).rows[0];
+        if (!ra) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Remittance not found' });
+        }
+        if (ra.posted_to_gl) {
+            await client.query('ROLLBACK');
+            return res.status(409).json({ error: 'Already posted to GL/AR' });
+        }
+        
         // Mark posted
-        await pool.query('UPDATE nphies_remittance_advice SET posted_to_gl=TRUE, posted_at=NOW(), posted_by=$1 WHERE id=$2 AND tenant_id=$3',
+        await client.query('UPDATE nphies_remittance_advice SET posted_to_gl=TRUE, posted_at=NOW(), posted_by=$1 WHERE id=$2 AND tenant_id=$3',
             [req.session.user.display_name, id, tid]);
+            
         // Update claim payment status
         if (ra.claim_id) {
-            await pool.query("UPDATE insurance_claims SET payment_status='Paid', paid_amount=$1, payment_date=$2 WHERE id=$3 AND tenant_id=$4",
+            await client.query("UPDATE insurance_claims SET payment_status='Paid', paid_amount=$1, payment_date=$2 WHERE id=$3 AND tenant_id=$4",
                 [ra.payment_amount, ra.payment_date||new Date().toISOString().slice(0,10), ra.claim_id, tid]);
         }
+        
+        // --- Gate 10: GL Posting Integration ---
+        // 1. Get or create GL accounts
+        const cashAccId = await ensureCOAAccount(tid, '1111-NPHIES', 'NPHIES Cash Clearing', 'حساب تسوية نقدية نافيس', 'ASSET', client);
+        const arAccId = await ensureCOAAccount(tid, '1201-NPHIES', 'NPHIES Insurance Receivables', 'ذمم شركات التأمين نافيس', 'ASSET', client);
+        const writeoffAccId = await ensureCOAAccount(tid, '5102-NPHIES', 'NPHIES Contractual Write-offs', 'تسويات مرفوضات التأمين نافيس', 'EXPENSE', client);
+        
+        const payVal = parseFloat(ra.payment_amount || 0);
+        const denialVal = parseFloat(ra.denial_amount || 0);
+        const totalARVal = payVal + denialVal;
+        
+        const lines = [];
+        if (payVal > 0) {
+            lines.push({ accountId: cashAccId, debit: payVal, credit: 0, notes: `NPHIES remittance approved payment RA#${id}` });
+        }
+        if (denialVal > 0) {
+            lines.push({ accountId: writeoffAccId, debit: denialVal, credit: 0, notes: `NPHIES remittance write-offs RA#${id}` });
+        }
+        if (totalARVal > 0) {
+            lines.push({ accountId: arAccId, debit: 0, credit: totalARVal, notes: `NPHIES remittance claim offset RA#${id}` });
+        }
+        
+        if (lines.length >= 2) {
+            const entryNumber = 'JV-' + new Date().getFullYear() + '-' + Date.now().toString().slice(-8);
+            await postTransactionToGL(tid, entryNumber, `NPHIES Remittance Advice settlement RA#${id}`, `NPHIES-RA-${id}`, 'SYSTEM', lines, client);
+        }
+        
+        await client.query('COMMIT');
+        
         logAudit(req.session.user.id, req.session.user.display_name, 'NPHIES_RA_POST_AR', 'NPHIES', `RA#${id} posted to AR, Claim#${ra.claim_id} paid SAR${ra.payment_amount}`, tid);
-        res.json({ success: true, message: 'Remittance posted to AR successfully' });
-    } catch (e) { console.error(e); res.status(500).json({ error: e.message }); }
+        res.json({ success: true, message: 'Remittance posted to AR and GL successfully' });
+    } catch (e) {
+        try { await client.query('ROLLBACK'); } catch (_) {}
+        console.error(e);
+        res.status(500).json({ error: e.message });
+    } finally {
+        client.release();
+    }
 });
 
 // POST /api/nphies/claim-status-inquiry — FHIR Task-based claim status inquiry (gated)
