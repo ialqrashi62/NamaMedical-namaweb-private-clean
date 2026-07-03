@@ -4102,10 +4102,13 @@ app.post('/api/clinical/ai/ask', requireAuth, requireRole('doctor', 'nursing'), 
     }
 });
 
-app.post('/api/clinical/records', requireAuth, requireRole('patients'), async (req, res) => {
+app.post('/api/clinical/records', requireAuth, requireRole('patients'), async (req, res, next) => {
     try {
         const { patient_id, encounter_id, template_id, recorded_values } = req.body;
-        if (!patient_id || !template_id || !recorded_values) {
+        if (!recorded_values) {
+            return next();
+        }
+        if (!patient_id || !template_id) {
             return res.status(400).json({ error: 'patient_id, template_id, and recorded_values are required' });
         }
         const { tenantId } = getRequestTenantContext(req);
@@ -17044,7 +17047,7 @@ app.post('/api/clinical/templates', requireAuth, requireRole('Admin'), requireTe
 });
 
 // 5. GET /api/clinical/records - List patient EMR records
-app.get('/api/clinical/records', requireAuth, requireRole('Doctor', 'Nurse', 'OB/GYN', 'Midwife', 'Neonatologist'), requireTenantScope, async (req, res) => {
+app.get('/api/clinical/records', requireAuth, requireRole('patients'), requireTenantScope, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { patient_id } = req.query;
@@ -17061,7 +17064,7 @@ app.get('/api/clinical/records', requireAuth, requireRole('Doctor', 'Nurse', 'OB
 });
 
 // 6. POST /api/clinical/records - Save EMR record (insert/update)
-app.post('/api/clinical/records', requireAuth, requireRole('Doctor', 'Nurse', 'OB/GYN', 'Midwife', 'Neonatologist'), requireTenantScope, async (req, res) => {
+app.post('/api/clinical/records', requireAuth, requireRole('patients'), requireTenantScope, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { id, patient_id, template_id, record_data } = req.body;
@@ -17070,7 +17073,82 @@ app.post('/api/clinical/records', requireAuth, requireRole('Doctor', 'Nurse', 'O
             return res.status(400).json({ error: 'patient_id and record_data are required' });
         }
         
-        const recordDataStr = typeof record_data === 'object' ? JSON.stringify(record_data) : record_data;
+        let data = typeof record_data === 'string' ? JSON.parse(record_data) : record_data;
+        
+        let template = null;
+        if (template_id) {
+            template = (await pool.query('SELECT t.template_name_en, d.code as department_code FROM clinical_templates t JOIN clinical_departments d ON t.department_id = d.id WHERE t.id = $1', [parseInt(template_id)])).rows[0];
+        }
+        
+        let clinicalWarning = null;
+        let highRiskFlag = false;
+        let apgarCritical = false;
+        
+        if (template) {
+            if (template.template_name_en === 'Surgical Count Sheet') {
+                const sponge_pre = Number(data.sponge_count_pre || 0);
+                const sponge_post = Number(data.sponge_count_post || 0);
+                const inst_pre = Number(data.instrument_count_pre || 0);
+                const inst_post = Number(data.instrument_count_post || 0);
+                const sharp_pre = Number(data.sharp_count_pre || 0);
+                const sharp_post = Number(data.sharp_count_post || 0);
+                const override = String(data.override_reason || '').trim();
+                
+                const isMismatch = (sponge_pre !== sponge_post) || (inst_pre !== inst_post) || (sharp_pre !== sharp_post);
+                if (isMismatch) {
+                    if (!override) {
+                        return res.status(422).json({
+                            error: 'Surgical count mismatch! Please provide an override reason.',
+                            message_ar: 'مخالفة في عدد الأدوات الجراحية! يرجى تقديم تبرير للتجاوز.',
+                            blocked: true
+                        });
+                    } else {
+                        logAudit(req.session.user?.id, req.session.user?.display_name || req.session.user?.name, 'SURGERY_COUNT_OVERRIDE', 'Clinical Safety', 
+                            `Surgical count mismatch overridden for patient #${patient_id}: ${override}`, tenantId);
+                        clinicalWarning = `Surgical count mismatch overridden: ${override}`;
+                    }
+                }
+            } else if (template.template_name_en === 'Braden Scale Assessment') {
+                const score = Number(data.sensory_perception || 0) + Number(data.moisture || 0) + Number(data.activity || 0) + Number(data.mobility || 0) + Number(data.nutrition || 0) + Number(data.friction_shear || 0);
+                data.total_score = score;
+                if (score <= 12) {
+                    highRiskFlag = true;
+                    clinicalWarning = `High Risk for Pressure Ulcers (Braden Score: ${score})`;
+                }
+            } else if (template.template_name_en === 'Morse Fall Risk Assessment') {
+                const score = Number(data.history_of_falls || 0) + Number(data.secondary_diagnosis || 0) + Number(data.ambulatory_aid || 0) + Number(data.iv_heparin_lock || 0) + Number(data.gait_transferring || 0) + Number(data.mental_status || 0);
+                data.total_score = score;
+                if (score >= 45) {
+                    highRiskFlag = true;
+                    clinicalWarning = `High Risk for Falls (Morse Score: ${score})`;
+                }
+            } else if (template.template_name_en === 'Neonatal Apgar Score') {
+                const fields = [
+                    'apgar_1m_appearance', 'apgar_1m_pulse', 'apgar_1m_grimace', 'apgar_1m_activity', 'apgar_1m_respiration',
+                    'apgar_5m_appearance', 'apgar_5m_pulse', 'apgar_5m_grimace', 'apgar_5m_activity', 'apgar_5m_respiration'
+                ];
+                for (const f of fields) {
+                    if (data[f] !== undefined && data[f] !== null) {
+                        const val = Number(data[f]);
+                        if (![0, 1, 2].includes(val)) {
+                            return res.status(400).json({ error: `Invalid APGAR value for field ${f}: must be 0, 1, or 2` });
+                        }
+                    }
+                }
+                const score1m = Number(data.apgar_1m_appearance || 0) + Number(data.apgar_1m_pulse || 0) + Number(data.apgar_1m_grimace || 0) + Number(data.apgar_1m_activity || 0) + Number(data.apgar_1m_respiration || 0);
+                const score5m = Number(data.apgar_5m_appearance || 0) + Number(data.apgar_5m_pulse || 0) + Number(data.apgar_5m_grimace || 0) + Number(data.apgar_5m_activity || 0) + Number(data.apgar_5m_respiration || 0);
+                data.apgar_1m_total = score1m;
+                data.apgar_5m_total = score5m;
+                if (score5m < 7) {
+                    apgarCritical = true;
+                    clinicalWarning = `Critical 5-min APGAR score: ${score5m}`;
+                    logAudit(req.session.user?.id, req.session.user?.display_name || req.session.user?.name, 'APGAR_CRITICAL', 'Clinical Safety', 
+                        `Neonatal APGAR score 5-min is critical (${score5m}) for patient #${patient_id}`, tenantId);
+                }
+            }
+        }
+        
+        const recordDataStr = JSON.stringify(data);
         
         if (id) {
             // Update flow - check lock status first
@@ -17084,7 +17162,7 @@ app.post('/api/clinical/records', requireAuth, requireRole('Doctor', 'Nurse', 'O
                 'UPDATE clinical_records SET record_data = $1 WHERE id = $2 AND tenant_id = $3 RETURNING *',
                 [recordDataStr, id, tenantId]
             );
-            return res.json(result.rows[0]);
+            return res.json({ ...result.rows[0], clinical_warning: clinicalWarning, high_risk_flag: highRiskFlag, apgar_critical: apgarCritical });
         } else {
             // Insert flow
             const newId = crypto.randomUUID();
@@ -17092,7 +17170,7 @@ app.post('/api/clinical/records', requireAuth, requireRole('Doctor', 'Nurse', 'O
                 'INSERT INTO clinical_records (id, tenant_id, patient_id, template_id, record_data, is_locked) VALUES ($1, $2, $3, $4, $5, 0) RETURNING *',
                 [newId, tenantId, parseInt(patient_id), template_id ? parseInt(template_id) : null, recordDataStr]
             );
-            return res.status(201).json(result.rows[0]);
+            return res.status(201).json({ ...result.rows[0], clinical_warning: clinicalWarning, high_risk_flag: highRiskFlag, apgar_critical: apgarCritical });
         }
     } catch (e) {
         res.status(500).json({ error: 'Server error' });
@@ -17100,7 +17178,7 @@ app.post('/api/clinical/records', requireAuth, requireRole('Doctor', 'Nurse', 'O
 });
 
 // 7. POST /api/clinical/records/:id/lock - Lock and sign EMR record with SHA-256
-app.post('/api/clinical/records/:id/lock', requireAuth, requireRole('Doctor', 'Nurse'), requireTenantScope, async (req, res) => {
+app.post('/api/clinical/records/:id/lock', requireAuth, requireRole('patients'), requireTenantScope, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const recordId = req.params.id;

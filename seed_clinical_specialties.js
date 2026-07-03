@@ -75,6 +75,55 @@ const PEDIATRICS_NICU_TEMPLATE = {
     ]
 };
 
+const SURGICAL_COUNT_TEMPLATE = {
+    fields: [
+        { name: 'sponge_count_pre', type: 'number', label_en: 'Pre-incision Sponge Count', label_ar: 'عدد الشاش قبل الفتح' },
+        { name: 'sponge_count_post', type: 'number', label_en: 'Post-closure Sponge Count', label_ar: 'عدد الشاش بعد الإغلاق' },
+        { name: 'instrument_count_pre', type: 'number', label_en: 'Pre-incision Instrument Count', label_ar: 'عدد الأدوات قبل الفتح' },
+        { name: 'instrument_count_post', type: 'number', label_en: 'Post-closure Instrument Count', label_ar: 'عدد الأدوات بعد الإغلاق' },
+        { name: 'sharp_count_pre', type: 'number', label_en: 'Pre-incision Sharps Count', label_ar: 'عدد الإبر والآلات الحادة قبل الفتح' },
+        { name: 'sharp_count_post', type: 'number', label_en: 'Post-closure Sharps Count', label_ar: 'عدد الإبر والآلات الحادة بعد الإغلاق' },
+        { name: 'override_reason', type: 'text', label_en: 'Override Reason (if mismatch)', label_ar: 'سبب التجاوز (في حال عدم التطابق)' }
+    ]
+};
+
+const BRADEN_TEMPLATE = {
+    fields: [
+        { name: 'sensory_perception', type: 'number', label_en: 'Sensory Perception (1-4)', label_ar: 'الإدراك الحسي (1-4)' },
+        { name: 'moisture', type: 'number', label_en: 'Moisture (1-4)', label_ar: 'الرطوبة (1-4)' },
+        { name: 'activity', type: 'number', label_en: 'Activity (1-4)', label_ar: 'النشاط (1-4)' },
+        { name: 'mobility', type: 'number', label_en: 'Mobility (1-4)', label_ar: 'الحركة (1-4)' },
+        { name: 'nutrition', type: 'number', label_en: 'Nutrition (1-4)', label_ar: 'التغذية (1-4)' },
+        { name: 'friction_shear', type: 'number', label_en: 'Friction & Shear (1-3)', label_ar: 'الاحتكاك والقص (1-3)' }
+    ]
+};
+
+const MORSE_TEMPLATE = {
+    fields: [
+        { name: 'history_of_falls', type: 'number', label_en: 'History of Falls (0 or 25)', label_ar: 'تاريخ السقوط (0 أو 25)' },
+        { name: 'secondary_diagnosis', type: 'number', label_en: 'Secondary Diagnosis (0 or 15)', label_ar: 'تشخيص ثانوي (0 أو 15)' },
+        { name: 'ambulatory_aid', type: 'number', label_en: 'Ambulatory Aid (0, 15, or 30)', label_ar: 'مساعد المشي (0 أو 15 أو 30)' },
+        { name: 'iv_heparin_lock', type: 'number', label_en: 'IV/Heparin Lock (0 or 20)', label_ar: 'العلاج بالوريد/حامل المحاليل (0 أو 20)' },
+        { name: 'gait_transferring', type: 'number', label_en: 'Gait/Transferring (0, 10, or 20)', label_ar: 'المشية والتحويل (0 أو 10 أو 20)' },
+        { name: 'mental_status', type: 'number', label_en: 'Mental Status (0 or 15)', label_ar: 'الحالة العقلية (0 أو 15)' }
+    ]
+};
+
+const APGAR_TEMPLATE = {
+    fields: [
+        { name: 'apgar_1m_appearance', type: 'number', label_en: '1-Min Appearance (0-2)', label_ar: 'المظهر عند دقيقة (0-2)' },
+        { name: 'apgar_1m_pulse', type: 'number', label_en: '1-Min Pulse (0-2)', label_ar: 'النبض عند دقيقة (0-2)' },
+        { name: 'apgar_1m_grimace', type: 'number', label_en: '1-Min Grimace (0-2)', label_ar: 'الاستجابة للمنعكسات عند دقيقة (0-2)' },
+        { name: 'apgar_1m_activity', type: 'number', label_en: '1-Min Activity (0-2)', label_ar: 'النشاط العضلي عند دقيقة (0-2)' },
+        { name: 'apgar_1m_respiration', type: 'number', label_en: '1-Min Respiration (0-2)', label_ar: 'التنفس عند دقيقة (0-2)' },
+        { name: 'apgar_5m_appearance', type: 'number', label_en: '5-Min Appearance (0-2)', label_ar: 'المظهر عند 5 دقائق (0-2)' },
+        { name: 'apgar_5m_pulse', type: 'number', label_en: '5-Min Pulse (0-2)', label_ar: 'النبض عند 5 دقائق (0-2)' },
+        { name: 'apgar_5m_grimace', type: 'number', label_en: '5-Min Grimace (0-2)', label_ar: 'الاستجابة للمنعكسات عند 5 دقائق (0-2)' },
+        { name: 'apgar_5m_activity', type: 'number', label_en: '5-Min Activity (0-2)', label_ar: 'النشاط العضلي عند 5 دقائق (0-2)' },
+        { name: 'apgar_5m_respiration', type: 'number', label_en: '5-Min Respiration (0-2)', label_ar: 'التنفس عند 5 دقائق (0-2)' }
+    ]
+};
+
 async function seed() {
     console.log('Starting specialties database seeding...');
     const client = await pool.connect();
@@ -94,24 +143,34 @@ async function seed() {
         }
         console.log(`✓ Seeded ${DEPARTMENTS.length} clinical departments.`);
 
-        // Get cardiology & NICU department IDs
-        const cardId = (await client.query("SELECT id FROM clinical_departments WHERE code = 'CARDIOLOGY'")).rows[0].id;
-        const nicuId = (await client.query("SELECT id FROM clinical_departments WHERE code = 'NEONATOLOGY_NICU'")).rows[0].id;
+        // Helper to insert templates safely and idempotently
+        async function insertTemplate(deptCode, nameEn, nameAr, structure) {
+            const deptRes = await client.query('SELECT id FROM clinical_departments WHERE code = $1', [deptCode]);
+            if (!deptRes.rows.length) return;
+            const deptId = deptRes.rows[0].id;
+            
+            const check = await client.query(
+                "SELECT id FROM clinical_templates WHERE department_id = $1 AND template_name_en = $2 AND tenant_id = 1",
+                [deptId, nameEn]
+            );
+            if (check.rowCount === 0) {
+                await client.query(
+                    `INSERT INTO clinical_templates (department_id, template_name_en, template_name_ar, version, form_structure, is_active, tenant_id)
+                     VALUES ($1, $2, $3, '1.0.0', $4, true, 1)`,
+                    [deptId, nameEn, nameAr, JSON.stringify(structure)]
+                );
+            }
+        }
 
         // 2. Insert Templates
-        await client.query(
-            `INSERT INTO clinical_templates (department_id, version, form_structure, is_active, tenant_id)
-             VALUES ($1, '1.0.0', $2, true, 1)
-             ON CONFLICT DO NOTHING`,
-            [cardId, JSON.stringify(CARDIOLOGY_TEMPLATE)]
-        );
-
-        await client.query(
-            `INSERT INTO clinical_templates (department_id, version, form_structure, is_active, tenant_id)
-             VALUES ($1, '1.0.0', $2, true, 1)
-             ON CONFLICT DO NOTHING`,
-            [nicuId, JSON.stringify(PEDIATRICS_NICU_TEMPLATE)]
-        );
+        await insertTemplate('CARDIOLOGY', 'Cardiology Evaluation', 'نموذج الفحص القلبي', CARDIOLOGY_TEMPLATE);
+        await insertTemplate('NEONATOLOGY_NICU', 'NICU Admission & Vitals', 'دخول ومؤشرات العناية المركزة لحديثي الولادة', PEDIATRICS_NICU_TEMPLATE);
+        
+        // Seed F1 Templates
+        await insertTemplate('GENERAL_SURGERY', 'Surgical Count Sheet', 'سجل جرد أدوات الجراحة', SURGICAL_COUNT_TEMPLATE);
+        await insertTemplate('PEDIATRICS', 'Braden Scale Assessment', 'مقياس برادن لقرح الفراش', BRADEN_TEMPLATE);
+        await insertTemplate('PEDIATRICS', 'Morse Fall Risk Assessment', 'مقياس مورس لمخاطر السقوط', MORSE_TEMPLATE);
+        await insertTemplate('NEONATOLOGY_NICU', 'Neonatal Apgar Score', 'مقياس أبغار لحديثي الولادة', APGAR_TEMPLATE);
 
         await client.query('COMMIT');
         console.log('✓ Seeding clinical templates complete.');
