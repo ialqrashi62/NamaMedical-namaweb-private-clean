@@ -17210,6 +17210,192 @@ app.post('/api/clinical/records/:id/lock', requireAuth, requireRole('patients'),
     }
 });
 
+// Phase F2: SOAP Clinical Notes Endpoints
+app.get('/api/clinical/notes', requireAuth, requireRole('patients'), requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const { patient_id } = req.query;
+        if (!patient_id) {
+            return res.status(400).json({ error: 'patient_id is required' });
+        }
+        const result = await pool.query(
+            'SELECT * FROM clinical_notes WHERE tenant_id = $1 AND patient_id = $2 ORDER BY created_at DESC',
+            [tenantId, parseInt(patient_id)]
+        );
+        res.json(result.rows);
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.post('/api/clinical/notes', requireAuth, requireRole('patients'), requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const { id, patient_id, encounter_ref, type, subjective, objective, assessment, plan } = req.body;
+        
+        if (!patient_id) {
+            return res.status(400).json({ error: 'patient_id is required' });
+        }
+        
+        const noteType = type || 'SOAP';
+        if (noteType !== 'SOAP') {
+            return res.status(400).json({ error: 'Invalid note type: only SOAP is supported' });
+        }
+        
+        if (id) {
+            // Update flow
+            const existing = await pool.query('SELECT * FROM clinical_notes WHERE id = $1 AND tenant_id = $2', [parseInt(id), tenantId]);
+            if (existing.rowCount === 0) return res.status(404).json({ error: 'Note not found' });
+            if (existing.rows[0].emr_status === 'locked') {
+                return res.status(409).json({ error: 'Cannot modify locked EMR record' });
+            }
+            
+            const result = await pool.query(
+                `UPDATE clinical_notes 
+                 SET encounter_ref = $1, subjective = $2, objective = $3, assessment = $4, plan = $5 
+                 WHERE id = $6 AND tenant_id = $7 RETURNING *`,
+                [encounter_ref ? parseInt(encounter_ref) : null, subjective || '', objective || '', assessment || '', plan || '', parseInt(id), tenantId]
+            );
+            
+            logAudit(req.session.user?.id, req.session.user?.display_name || req.session.user?.name, 'UPDATE_CLINICAL_NOTE', 'EMR', `Updated SOAP note #${id} for patient #${patient_id}`, tenantId);
+            return res.json(result.rows[0]);
+        } else {
+            // Insert flow
+            const result = await pool.query(
+                `INSERT INTO clinical_notes (tenant_id, patient_id, encounter_ref, type, subjective, objective, assessment, plan, author_id, emr_status) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft') RETURNING *`,
+                [tenantId, parseInt(patient_id), encounter_ref ? parseInt(encounter_ref) : null, noteType, subjective || '', objective || '', assessment || '', plan || '', req.session.user?.id || null]
+            );
+            
+            logAudit(req.session.user?.id, req.session.user?.display_name || req.session.user?.name, 'CREATE_CLINICAL_NOTE', 'EMR', `Created SOAP note #${result.rows[0].id} for patient #${patient_id}`, tenantId);
+            return res.status(201).json(result.rows[0]);
+        }
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.post('/api/clinical/notes/:id/lock', requireAuth, requireRole('patients'), requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const noteId = parseInt(req.params.id);
+        
+        const noteQuery = await pool.query('SELECT * FROM clinical_notes WHERE id = $1 AND tenant_id = $2', [noteId, tenantId]);
+        if (noteQuery.rowCount === 0) return res.status(404).json({ error: 'Note not found' });
+        
+        const note = noteQuery.rows[0];
+        if (note.emr_status === 'locked') {
+            return res.status(409).json({ error: 'Record is already locked' });
+        }
+        
+        // Calculate integrity hash of SOAP contents
+        const dataToHash = JSON.stringify({
+            subjective: note.subjective || '',
+            objective: note.objective || '',
+            assessment: note.assessment || '',
+            plan: note.plan || ''
+        });
+        const hash = crypto.createHash('sha256').update(dataToHash).digest('hex');
+        
+        // Dynamic Signature
+        const signature = `Signed by ${req.session.user?.display_name || 'System'} on ${new Date().toISOString()} | Hash: ${hash}`;
+        
+        const result = await pool.query(
+            `UPDATE clinical_notes 
+             SET emr_status = 'locked', locked_at = CURRENT_TIMESTAMP, signed_by_user_id = $1, signed_at = CURRENT_TIMESTAMP, integrity_hash = $2 
+             WHERE id = $3 AND tenant_id = $4 RETURNING *`,
+            [req.session.user?.id || null, signature, noteId, tenantId]
+        );
+        
+        logAudit(req.session.user?.id, req.session.user?.display_name || req.session.user?.name, 'LOCK_CLINICAL_NOTE', 'EMR', `Locked SOAP note #${noteId} with hash ${hash}`, tenantId);
+        res.json(result.rows[0]);
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Phase F2: Clinical Smart Templates (Dot Phrases) Endpoints
+app.get('/api/clinical/smart-templates', requireAuth, requireRole('patients'), requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const doctorId = req.session.user?.id;
+        
+        const result = await pool.query(
+            'SELECT * FROM clinical_smart_templates WHERE tenant_id = $1 AND doctor_id = $2 ORDER BY shortcut ASC',
+            [tenantId, doctorId]
+        );
+        res.json(result.rows);
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.post('/api/clinical/smart-templates', requireAuth, requireRole('patients'), requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const doctorId = req.session.user?.id;
+        const { id, shortcut, template_text } = req.body;
+        
+        if (!shortcut || !shortcut.startsWith('.') || shortcut.includes(' ')) {
+            return res.status(400).json({ error: 'Shortcut must start with a dot and contain no spaces (e.g. .htn)' });
+        }
+        if (!template_text) {
+            return res.status(400).json({ error: 'template_text is required' });
+        }
+        
+        if (id) {
+            // Update flow
+            const existing = await pool.query('SELECT * FROM clinical_smart_templates WHERE id = $1 AND doctor_id = $2 AND tenant_id = $3', [parseInt(id), doctorId, tenantId]);
+            if (existing.rowCount === 0) return res.status(404).json({ error: 'Template not found' });
+            
+            // Check unique shortcut for other templates
+            const dup = await pool.query('SELECT 1 FROM clinical_smart_templates WHERE tenant_id = $1 AND doctor_id = $2 AND shortcut = $3 AND id <> $4', [tenantId, doctorId, shortcut, parseInt(id)]);
+            if (dup.rowCount > 0) {
+                return res.status(409).json({ error: 'Shortcut already exists' });
+            }
+            
+            const result = await pool.query(
+                'UPDATE clinical_smart_templates SET shortcut = $1, template_text = $2 WHERE id = $3 AND tenant_id = $4 RETURNING *',
+                [shortcut, template_text, parseInt(id), tenantId]
+            );
+            return res.json(result.rows[0]);
+        } else {
+            // Insert flow
+            const dup = await pool.query('SELECT 1 FROM clinical_smart_templates WHERE tenant_id = $1 AND doctor_id = $2 AND shortcut = $3', [tenantId, doctorId, shortcut]);
+            if (dup.rowCount > 0) {
+                return res.status(409).json({ error: 'Shortcut already exists' });
+            }
+            
+            const result = await pool.query(
+                'INSERT INTO clinical_smart_templates (tenant_id, doctor_id, shortcut, template_text) VALUES ($1, $2, $3, $4) RETURNING *',
+                [tenantId, doctorId, shortcut, template_text]
+            );
+            return res.status(201).json(result.rows[0]);
+        }
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.delete('/api/clinical/smart-templates/:id', requireAuth, requireRole('patients'), requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const doctorId = req.session.user?.id;
+        const templateId = parseInt(req.params.id);
+        
+        const result = await pool.query(
+            'DELETE FROM clinical_smart_templates WHERE id = $1 AND doctor_id = $2 AND tenant_id = $3 RETURNING *',
+            [templateId, doctorId, tenantId]
+        );
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Template not found' });
+        }
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
 // ===== SaaS Billing Webhooks (Moyasar & Stripe) =====
 async function assignTenantPlanHelper(tenantId, planKey, source, assignedBy = null) {
     // 1. Check if plan exists
