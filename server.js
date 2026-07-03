@@ -339,12 +339,12 @@ function sendBillingError(res, e) {
 // RBAC middleware - role-based access control
 const ROLE_PERMISSIONS = {
     'Admin': '*',
-    'Doctor': ['dashboard', 'patients', 'appointments', 'doctor', 'lab', 'radiology', 'pharmacy', 'nursing', 'waiting', 'reports', 'messaging', 'surgery', 'consent', 'icu', 'him', 'medical-records', 'emergency', 'inpatient', 'bloodbank', 'obgyn', 'antenatal', 'cssd', 'quality', 'infection'],
-    'Nurse': ['dashboard', 'patients', 'nursing', 'waiting', 'vitals', 'icu', 'emergency', 'inpatient', 'transport', 'dietary', 'bloodbank', 'obgyn', 'antenatal', 'cssd', 'quality', 'infection'],
+    'Doctor': ['dashboard', 'patients', 'appointments', 'doctor', 'lab', 'radiology', 'pharmacy', 'nursing', 'waiting', 'reports', 'messaging', 'surgery', 'consent', 'icu', 'him', 'medical-records', 'emergency', 'inpatient', 'bloodbank', 'obgyn', 'antenatal', 'cssd', 'quality', 'infection', 'transport', 'telemedicine', 'cme'],
+    'Nurse': ['dashboard', 'patients', 'nursing', 'waiting', 'vitals', 'icu', 'emergency', 'inpatient', 'transport', 'dietary', 'bloodbank', 'obgyn', 'antenatal', 'cssd', 'quality', 'infection', 'telemedicine', 'cme'],
     'HIM': ['dashboard', 'patients', 'him', 'medical-records', 'reports', 'messaging'],
-    'OB/GYN': ['dashboard', 'patients', 'doctor', 'lab', 'radiology', 'surgery', 'nursing', 'inpatient', 'obgyn', 'antenatal', 'messaging', 'reports'],
-    'Midwife': ['dashboard', 'patients', 'nursing', 'obgyn', 'antenatal', 'messaging'],
-    'Neonatologist': ['dashboard', 'patients', 'icu', 'nursing', 'obgyn', 'antenatal', 'messaging'],
+    'OB/GYN': ['dashboard', 'patients', 'doctor', 'lab', 'radiology', 'surgery', 'nursing', 'inpatient', 'obgyn', 'antenatal', 'messaging', 'reports', 'transport', 'telemedicine', 'cme'],
+    'Midwife': ['dashboard', 'patients', 'nursing', 'obgyn', 'antenatal', 'messaging', 'cme'],
+    'Neonatologist': ['dashboard', 'patients', 'icu', 'nursing', 'obgyn', 'antenatal', 'messaging', 'transport', 'telemedicine', 'cme'],
     'Pharmacist': ['dashboard', 'pharmacy', 'inventory', 'messaging', 'infection'],
     'Lab Technician': ['dashboard', 'lab', 'messaging', 'bloodbank'],
     'Blood Bank': ['dashboard', 'bloodbank', 'messaging'],
@@ -352,10 +352,10 @@ const ROLE_PERMISSIONS = {
     'Inventory Manager': ['dashboard', 'inventory', 'messaging'],
     'Radiologist': ['dashboard', 'radiology', 'messaging'],
     'Pathologist': ['dashboard', 'pathology', 'lab', 'messaging'],
-    'Reception': ['dashboard', 'patients', 'appointments', 'waiting', 'messaging', 'accounts'],
+    'Reception': ['dashboard', 'patients', 'appointments', 'waiting', 'messaging', 'accounts', 'transport', 'telemedicine'],
     'Finance': ['dashboard', 'finance', 'insurance', 'reports', 'accounts', 'invoices'],
     'Insurance': ['dashboard', 'insurance', 'reports'],
-    'HR': ['dashboard', 'hr', 'messaging', 'reports'],
+    'HR': ['dashboard', 'hr', 'messaging', 'reports', 'cme'],
     'IT': ['dashboard', 'settings', 'messaging', 'maintenance'],
     'Quality Manager': ['dashboard', 'quality', 'infection', 'reports', 'messaging'],
     'Infection Control': ['dashboard', 'infection', 'quality', 'nursing', 'reports', 'messaging'],
@@ -10849,20 +10849,25 @@ app.get('/api/maintenance/stats', requireAuth, async (req, res) => {
 });
 
 // ===== PATIENT TRANSPORT =====
-app.get('/api/transport/requests', requireAuth, async (req, res) => {
-    try { res.json((await pool.query('SELECT * FROM transport_requests ORDER BY request_time DESC')).rows); }
+app.get('/api/transport/requests', requireAuth, requireRole('transport'), requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        res.json((await pool.query('SELECT * FROM transport_requests WHERE tenant_id=$1 ORDER BY request_time DESC', [tenantId])).rows);
+    }
     catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/transport/requests', requireAuth, async (req, res) => {
+app.post('/api/transport/requests', requireAuth, requireRole('transport'), requireTenantScope, async (req, res) => {
     try {
+        const { tenantId, facilityId } = getRequestTenantContext(req);
         const { patient_id, patient_name, from_location, to_location, transport_type, priority, requested_by, special_needs } = req.body;
-        const r = await pool.query('INSERT INTO transport_requests (patient_id,patient_name,from_location,to_location,transport_type,priority,requested_by,special_needs) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
-            [patient_id, patient_name, from_location, to_location, transport_type || 'Wheelchair', priority || 'Routine', requested_by, special_needs]);
+        const r = await pool.query('INSERT INTO transport_requests (patient_id,patient_name,from_location,to_location,transport_type,priority,requested_by,special_needs,tenant_id,facility_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *',
+            [patient_id, patient_name, from_location, to_location, transport_type || 'Wheelchair', priority || 'Routine', requested_by, special_needs, tenantId, facilityId]);
         res.json(r.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/transport/requests/:id', requireAuth, async (req, res) => {
+app.put('/api/transport/requests/:id', requireAuth, requireRole('transport'), requireTenantScope, async (req, res) => {
     try {
+        const { tenantId } = getRequestTenantContext(req);
         const { status, assigned_porter, pickup_time, dropoff_time } = req.body;
         const sets = []; const vals = []; let i = 1;
         if (status) { sets.push(`status=$${i++}`); vals.push(status); }
@@ -10870,7 +10875,8 @@ app.put('/api/transport/requests/:id', requireAuth, async (req, res) => {
         if (pickup_time) { sets.push(`pickup_time=$${i++}`); vals.push(pickup_time); }
         if (dropoff_time) { sets.push(`dropoff_time=$${i++}`); vals.push(dropoff_time); }
         vals.push(req.params.id);
-        await pool.query(`UPDATE transport_requests SET ${sets.join(',')} WHERE id=$${i}`, vals);
+        vals.push(tenantId);
+        await pool.query(`UPDATE transport_requests SET ${sets.join(',')} WHERE id=$${i} AND tenant_id=$${i+1}`, vals);
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
@@ -11571,23 +11577,28 @@ app.post('/api/zatca/submit', requireAuth, requireRole('finance', 'accounts'), r
 });
 
 // ===== TELEMEDICINE =====
-app.get('/api/telemedicine/sessions', requireAuth, async (req, res) => {
-    try { res.json((await pool.query('SELECT * FROM telemedicine_sessions ORDER BY scheduled_date DESC, scheduled_time DESC')).rows); }
+app.get('/api/telemedicine/sessions', requireAuth, requireRole('telemedicine'), requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        res.json((await pool.query('SELECT * FROM telemedicine_sessions WHERE tenant_id=$1 ORDER BY scheduled_date DESC, scheduled_time DESC', [tenantId])).rows);
+    }
     catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/telemedicine/sessions', requireAuth, async (req, res) => {
+app.post('/api/telemedicine/sessions', requireAuth, requireRole('telemedicine'), requireTenantScope, async (req, res) => {
     try {
+        const { tenantId, facilityId } = getRequestTenantContext(req);
         const { patient_id, patient_name, speciality, session_type, scheduled_date, scheduled_time, duration_minutes, notes } = req.body;
         const link = 'https://meet.nama.sa/' + require('crypto').randomBytes(16).toString('hex');
-        const result = await pool.query('INSERT INTO telemedicine_sessions (patient_id, patient_name, doctor, speciality, session_type, scheduled_date, scheduled_time, duration_minutes, meeting_link, notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *',
-            [patient_id, patient_name || '', req.session.user.name, speciality || '', session_type || 'Video', scheduled_date || '', scheduled_time || '', duration_minutes || 15, link, notes || '']);
+        const result = await pool.query('INSERT INTO telemedicine_sessions (patient_id, patient_name, doctor, speciality, session_type, scheduled_date, scheduled_time, duration_minutes, meeting_link, notes, tenant_id, facility_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *',
+            [patient_id, patient_name || '', req.session.user.name, speciality || '', session_type || 'Video', scheduled_date || '', scheduled_time || '', duration_minutes || 15, link, notes || '', tenantId, facilityId]);
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/telemedicine/sessions/:id', requireAuth, async (req, res) => {
+app.put('/api/telemedicine/sessions/:id', requireAuth, requireRole('telemedicine'), requireTenantScope, async (req, res) => {
     try {
+        const { tenantId } = getRequestTenantContext(req);
         const { status, diagnosis, prescription } = req.body;
-        await pool.query('UPDATE telemedicine_sessions SET status=$1, diagnosis=$2, prescription=$3 WHERE id=$4', [status || 'Completed', diagnosis || '', prescription || '', req.params.id]);
+        await pool.query('UPDATE telemedicine_sessions SET status=$1, diagnosis=$2, prescription=$3 WHERE id=$4 AND tenant_id=$5', [status || 'Completed', diagnosis || '', prescription || '', req.params.id, tenantId]);
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
@@ -11637,75 +11648,91 @@ app.put('/api/pathology/cases/:id', requireAuth, requireRole('pathology'), requi
 
 // ===== SOCIAL WORK =====
 app.get('/api/social-work/cases', requireAuth, requireRole('him', 'nursing'), requireTenantScope, async (req, res) => {
-    try { res.json((await pool.query('SELECT * FROM social_work_cases ORDER BY created_at DESC')).rows); }
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        res.json((await pool.query('SELECT * FROM social_work_cases WHERE tenant_id=$1 ORDER BY created_at DESC', [tenantId])).rows);
+    }
     catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 app.post('/api/social-work/cases', requireAuth, requireRole('him', 'nursing'), requireTenantScope, async (req, res) => {
     try {
+        const { tenantId, facilityId } = getRequestTenantContext(req);
         const { patient_id, patient_name, case_type, assessment, plan, priority } = req.body;
-        const result = await pool.query('INSERT INTO social_work_cases (patient_id, patient_name, case_type, social_worker, assessment, plan, priority) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
-            [patient_id, patient_name || '', case_type || 'General', req.session.user.name, assessment || '', plan || '', priority || 'Medium']);
+        const result = await pool.query('INSERT INTO social_work_cases (patient_id, patient_name, case_type, social_worker, assessment, plan, priority, tenant_id, facility_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',
+            [patient_id, patient_name || '', case_type || 'General', req.session.user.name, assessment || '', plan || '', priority || 'Medium', tenantId, facilityId]);
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 app.put('/api/social-work/cases/:id', requireAuth, requireRole('him', 'nursing'), requireTenantScope, async (req, res) => {
     try {
+        const { tenantId } = getRequestTenantContext(req);
         const { status, interventions, referrals, follow_up_date } = req.body;
-        await pool.query('UPDATE social_work_cases SET status=$1, interventions=$2, referrals=$3, follow_up_date=$4 WHERE id=$5',
-            [status || 'Open', interventions || '', referrals || '', follow_up_date || '', req.params.id]);
+        await pool.query('UPDATE social_work_cases SET status=$1, interventions=$2, referrals=$3, follow_up_date=$4 WHERE id=$5 AND tenant_id=$6',
+            [status || 'Open', interventions || '', referrals || '', follow_up_date || '', req.params.id, tenantId]);
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
 // ===== MORTUARY =====
 app.get('/api/mortuary/cases', requireAuth, requireRole('him', 'nursing'), requireTenantScope, async (req, res) => {
-    try { res.json((await pool.query('SELECT * FROM mortuary_cases ORDER BY created_at DESC')).rows); }
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        res.json((await pool.query('SELECT * FROM mortuary_cases WHERE tenant_id=$1 ORDER BY created_at DESC', [tenantId])).rows);
+    }
     catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 app.post('/api/mortuary/cases', requireAuth, requireRole('him', 'nursing'), requireTenantScope, async (req, res) => {
     try {
+        const { tenantId, facilityId } = getRequestTenantContext(req);
         const { patient_id, deceased_name, date_of_death, time_of_death, cause_of_death, attending_physician, next_of_kin, next_of_kin_phone, notes } = req.body;
-        const result = await pool.query('INSERT INTO mortuary_cases (patient_id, deceased_name, date_of_death, time_of_death, cause_of_death, attending_physician, next_of_kin, next_of_kin_phone, notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',
-            [patient_id || 0, deceased_name || '', date_of_death || new Date().toISOString().split('T')[0], time_of_death || '', cause_of_death || '', attending_physician || '', next_of_kin || '', next_of_kin_phone || '', notes || '']);
+        const result = await pool.query('INSERT INTO mortuary_cases (patient_id, deceased_name, date_of_death, time_of_death, cause_of_death, attending_physician, next_of_kin, next_of_kin_phone, notes, tenant_id, facility_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *',
+            [patient_id || 0, deceased_name || '', date_of_death || new Date().toISOString().split('T')[0], time_of_death || '', cause_of_death || '', attending_physician || '', next_of_kin || '', next_of_kin_phone || '', notes || '', tenantId, facilityId]);
         logAudit(req.session.user.id, req.session.user.name, 'DEATH_RECORD', 'Mortuary', `Death record for ${deceased_name}`, req.ip);
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 app.put('/api/mortuary/cases/:id', requireAuth, requireRole('him', 'nursing'), requireTenantScope, async (req, res) => {
     try {
+        const { tenantId } = getRequestTenantContext(req);
         const { release_status, released_to, death_certificate_number } = req.body;
-        await pool.query('UPDATE mortuary_cases SET release_status=$1, released_to=$2, released_date=$3, death_certificate_number=$4 WHERE id=$5',
-            [release_status || 'Released', released_to || '', new Date().toISOString().split('T')[0], death_certificate_number || '', req.params.id]);
+        await pool.query('UPDATE mortuary_cases SET release_status=$1, released_to=$2, released_date=$3, death_certificate_number=$4 WHERE id=$5 AND tenant_id=$6',
+            [release_status || 'Released', released_to || '', new Date().toISOString().split('T')[0], death_certificate_number || '', req.params.id, tenantId]);
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
 // ===== CME =====
-app.get('/api/cme/activities', requireAuth, async (req, res) => {
-    try { res.json((await pool.query('SELECT * FROM cme_activities ORDER BY activity_date DESC')).rows); }
+app.get('/api/cme/activities', requireAuth, requireRole('cme'), requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        res.json((await pool.query('SELECT * FROM cme_activities WHERE tenant_id=$1 ORDER BY activity_date DESC', [tenantId])).rows);
+    }
     catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/cme/activities', requireAuth, async (req, res) => {
+app.post('/api/cme/activities', requireAuth, requireRole('cme'), requireTenantScope, async (req, res) => {
     try {
+        const { tenantId, facilityId } = getRequestTenantContext(req);
         const { title, category, provider, credit_hours, activity_date, location, max_participants, description } = req.body;
-        const result = await pool.query('INSERT INTO cme_activities (title, category, provider, credit_hours, activity_date, location, max_participants, description) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
-            [title || '', category || 'Conference', provider || '', credit_hours || 0, activity_date || '', location || '', max_participants || 50, description || '']);
+        const result = await pool.query('INSERT INTO cme_activities (title, category, provider, credit_hours, activity_date, location, max_participants, description, tenant_id, facility_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *',
+            [title || '', category || 'Conference', provider || '', credit_hours || 0, activity_date || '', location || '', max_participants || 50, description || '', tenantId, facilityId]);
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.get('/api/cme/registrations', requireAuth, async (req, res) => {
+app.get('/api/cme/registrations', requireAuth, requireRole('cme'), requireTenantScope, async (req, res) => {
     try {
+        const { tenantId } = getRequestTenantContext(req);
         const { activity_id } = req.query;
-        if (activity_id) res.json((await pool.query('SELECT * FROM cme_registrations WHERE activity_id=$1', [activity_id])).rows);
-        else res.json((await pool.query('SELECT * FROM cme_registrations ORDER BY id DESC')).rows);
+        if (activity_id) res.json((await pool.query('SELECT * FROM cme_registrations WHERE activity_id=$1 AND tenant_id=$2', [activity_id, tenantId])).rows);
+        else res.json((await pool.query('SELECT * FROM cme_registrations WHERE tenant_id=$1 ORDER BY id DESC', [tenantId])).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/cme/registrations', requireAuth, async (req, res) => {
+app.post('/api/cme/registrations', requireAuth, requireRole('cme'), requireTenantScope, async (req, res) => {
     try {
+        const { tenantId, facilityId } = getRequestTenantContext(req);
         const { activity_id, employee_name } = req.body;
-        const result = await pool.query('INSERT INTO cme_registrations (activity_id, employee_name, registration_date) VALUES ($1,$2,$3) RETURNING *',
-            [activity_id, employee_name || req.session.user.name, new Date().toISOString().split('T')[0]]);
-        await pool.query('UPDATE cme_activities SET registered=registered+1 WHERE id=$1', [activity_id]);
+        const result = await pool.query('INSERT INTO cme_registrations (activity_id, employee_name, registration_date, tenant_id, facility_id) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+            [activity_id, employee_name || req.session.user.name, new Date().toISOString().split('T')[0], tenantId, facilityId]);
+        await pool.query('UPDATE cme_activities SET registered=registered+1 WHERE id=$1 AND tenant_id=$2', [activity_id, tenantId]);
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
@@ -16212,16 +16239,17 @@ app.put('/api/cssd/batches/:id', requireAuth, requireRole('cssd', 'nursing', 'su
 });
 
 // ===== CME EVENTS =====
-app.get('/api/cme/events', requireAuth, async (req, res) => {
+app.get('/api/cme/events', requireAuth, requireRole('cme'), requireTenantScope, async (req, res) => {
     try {
-        // cme_events schema provisioned out-of-band (route_level_ddl_batch_b); no DDL in handler
-        res.json((await pool.query('SELECT * FROM cme_events ORDER BY event_date DESC')).rows);
+        const { tenantId } = getRequestTenantContext(req);
+        res.json((await pool.query('SELECT * FROM cme_events WHERE tenant_id=$1 ORDER BY event_date DESC', [tenantId])).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/cme/events', requireAuth, async (req, res) => {
+app.post('/api/cme/events', requireAuth, requireRole('cme'), requireTenantScope, async (req, res) => {
     try {
+        const { tenantId, facilityId } = getRequestTenantContext(req);
         const { title, speaker, event_date, cme_hours, category, department, status } = req.body;
-        const r = await pool.query('INSERT INTO cme_events (title,speaker,event_date,cme_hours,category,department,status) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *', [title, speaker, event_date, cme_hours || 0, category, department, status || 'upcoming']);
+        const r = await pool.query('INSERT INTO cme_events (title,speaker,event_date,cme_hours,category,department,status,tenant_id,facility_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *', [title, speaker, event_date, cme_hours || 0, category, department, status || 'upcoming', tenantId, facilityId]);
         res.json(r.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });

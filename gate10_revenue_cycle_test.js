@@ -18,7 +18,7 @@ const { pool, initDatabase } = require('./db_postgres');
 
 const TEST_PORT = 3015;
 const TEST_USERNAME = 'gate10_finance_user';
-const TEST_PASSWORD = 'FINANCE_PASSWORD_10';
+const TEST_PASSWORD = 'FINANCE_PASSWORD_CHANGE_ME';
 
 let server;
 
