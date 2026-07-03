@@ -132,10 +132,20 @@ END $$;
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nama_medical_app') THEN
-        EXECUTE 'GRANT ALL PRIVILEGES ON TABLE patient_clinical_records, clinical_templates TO nama_medical_app';
+        IF to_regclass('public.patient_clinical_records') IS NOT NULL THEN
+            EXECUTE 'GRANT ALL PRIVILEGES ON TABLE patient_clinical_records TO nama_medical_app';
+        END IF;
+        IF to_regclass('public.clinical_templates') IS NOT NULL THEN
+            EXECUTE 'GRANT ALL PRIVILEGES ON TABLE clinical_templates TO nama_medical_app';
+        END IF;
     END IF;
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'jumanasoft_staging_user') THEN
-        EXECUTE 'GRANT ALL PRIVILEGES ON TABLE patient_clinical_records, clinical_templates TO jumanasoft_staging_user';
+        IF to_regclass('public.patient_clinical_records') IS NOT NULL THEN
+            EXECUTE 'GRANT ALL PRIVILEGES ON TABLE patient_clinical_records TO jumanasoft_staging_user';
+        END IF;
+        IF to_regclass('public.clinical_templates') IS NOT NULL THEN
+            EXECUTE 'GRANT ALL PRIVILEGES ON TABLE clinical_templates TO jumanasoft_staging_user';
+        END IF;
     END IF;
 END $$;
 
