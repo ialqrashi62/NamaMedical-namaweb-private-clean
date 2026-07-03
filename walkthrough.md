@@ -102,6 +102,30 @@
 
 ---
 
+## المرحلة F3: حزم رعاية العناية المركزة والوقاية من العدوى (ICU Prevention Bundles)
+
+تم بنجاح تطبيق ميزات الوقاية من العدوى للمرحلة F3 تماشياً مع معايير سباهي (CBAHI) والأنظمة الطبية العالمية:
+
+1. **حزم الوقاية الثلاث المعتمدة**:
+   - حزمة وقاية التهاب الرئة المصاحب لأجهزة التنفس الاصطناعي (VAP Prevention Bundle).
+   - حزمة وقاية تسمم الدم المصاحب للقساطر الوريدية المركزية (CLABSI Prevention Bundle).
+   - حزمة وقاية التهاب المجاري البولية المصاحب للقساطر البولية (CAUTI Prevention Bundle).
+2. **شرط التبرير وقياس الالتزام ديناميكياً**:
+   - يتم احتساب نسبة الالتزام بالحزمة تلقائياً بناءً على البنود المطابقة المنجزة.
+   - إذا قلت نسبة الالتزام عن 100%، يمنع النظام الحفظ (Hard-block) برمز الحالة 422 إلا إذا أدخل التمريض تبريراً مكتوباً لعدم المطابقة (`non_compliance_reason`) والذي يُسجل لغايات مكافحة العدوى والتدقيق.
+3. **عزل المستأجرين والوصول**:
+   - فرض سياسات RLS لعزل سجلات التدقيق لكل منشأة ومستأجر على جدول `icu_prevention_bundles`.
+   - قصر الوصول وإدخال البيانات على الطاقم الطبي المعتمد بقسم العناية المركزة (`icu`, `doctor`, `nursing`).
+
+### نتائج التحقق الآلي الكامل للمرحلة F3:
+اجتازت حزمة اختبارات التكامل الآلية المكتوبة في [icu_bundles_f3_test.js](file:///c:/Users/ice/Desktop/NamaMedical/namaweb/icu_bundles_f3_test.js) كامل الفحوصات بنجاح 100%:
+- نجاح حفظ تدقيق حزمة VAP الملتزمة بالكامل (100% compliance).
+- حظر حفظ حزمة CLABSI غير الملتزمة بالكامل دون تبرير (HTTP 422).
+- قبول حفظ الحزمة غير الملتزمة مع سحب وتوثيق تبرير عدم المطابقة المعتمد.
+- استرجاع سجلات التدقيق اليومية بنجاح 100%.
+
+---
+
 #### C2 — Medication Reconciliation (مطابقة الأدوية)
 * **APIs**:
   * `GET /api/clinical/medication-reconciliation/:patientId` — قراءة سجل مطابقة الأدوية للمريض.
@@ -141,7 +165,7 @@
 ---
 
 ## 🗄️ الجداول الجديدة في قاعدة البيانات (DDL)
-تمت إضافة وتفعيل **22 جدولاً جديداً** بنجاح مع العزل التام للمستأجرين (RLS isolation & compound indexing):
+تمت إضافة وتفعيل **23 جدولاً جديداً** بنجاح مع العزل التام للمستأجرين (RLS isolation & compound indexing):
 1. `nphies_remittance_advice`
 2. `nphies_claim_status_inquiry`
 3. `zatca_credit_notes`
@@ -164,12 +188,13 @@
 20. `ai_cds_log`
 21. `ai_voice_sessions`
 22. `clinical_smart_templates`
+23. `icu_prevention_bundles`
 
 ---
 
 ## نتائج الاختبارات والنشر
 ```
-✅ run_all_tests: 169 passed, 0 failed (of 169)
+✅ run_all_tests: 170 passed, 0 failed (of 170)
 ✅ server.js — syntax check: OK
 ✅ db_postgres.js — syntax check: OK
 ✅ Git push reference updated: HEAD -> integration/all-epics
