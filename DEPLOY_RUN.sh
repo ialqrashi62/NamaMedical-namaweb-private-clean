@@ -203,6 +203,9 @@ run migrations/e0_04_integration_settings_rls_up.sql; val migrations/e0_04_integ
 echo "=== P1 Phase F5 Department Owners ==="
 run migrations/p1_03_department_owners_up.sql; val migrations/p1_03_department_owners_validate.sql
 
+echo "=== P1 Phase F6 Pricing Overrides ==="
+run migrations/p1_04_pricing_overrides_up.sql; val migrations/p1_04_pricing_overrides_validate.sql
+
 echo ""
 echo "=== ALL MIGRATIONS APPLIED + VALIDATED ==="
 echo "Next (operator): deploy the integration code + restart, then smoke:"
