@@ -78,6 +78,30 @@
 - السماح بالحفظ وسحب التبرير وسجل التدقيق عند تزويد `override_reason`.
 - الاحتساب التلقائي وحظر القيم الخاطئة لمقاييس Braden، Morse، و APGAR.
 
+---
+
+## المرحلة F2: التوثيق السريري وقوالب الملاحظات الذكية (Clinical Notes & Smart Templates)
+
+تم بنجاح تطبيق ميزات التوثيق الطبي الذكي للمرحلة F2 تماشياً مع معايير EMR العالمية، وتوثيقها ببيئة الإنتاج الفعلي:
+
+1. **ملاحظات SOAP الطبية**:
+   - تفعيل مسارات استرجاع وإدخال وتعديل وقفل الملاحظات الطبية بصيغة SOAP (`GET/POST /api/clinical/notes` و `POST /api/clinical/notes/:id/lock`).
+2. **قفل وحفظ المحتوى رقمياً**:
+   - حظر تعديل أي ملاحظة طبية بعد قفلها برمز `409` مع توليد هاش سلامة المحتوى (SHA-256) وتوثيق التوقيع الرقمي للطبيب الحقيقي.
+3. **قوالب النصوص السريعة (Smart Templates / Dot Phrases)**:
+   - إنشاء وإدارة الاختصارات للأطباء لتوسيع النصوص الطبية مسبقة الإعداد (`GET/POST/DELETE /api/clinical/smart-templates`).
+   - فرض شروط صحة الاختصار (يجب أن يبدأ بنقطة `.` ولا يحتوي على مسافات، مثل `.htn`).
+4. **حماية عزل المستأجرين (RLS)**:
+   - تفعيل سياسات Row Level Security وعزل البيانات بالكامل لكل طبيب ومستأجر على جدول `clinical_smart_templates` وتأمين المسارات ضد ثغرات IDOR.
+
+### نتائج التحقق الآلي الكامل للمرحلة F2:
+اجتازت حزمة اختبارات التكامل الآلية المكتوبة في [clinical_notes_f2_test.js](file:///c:/Users/ice/Desktop/NamaMedical/namaweb/clinical_notes_f2_test.js) كامل الفحوصات بنجاح 100%:
+- إنشاء وحفظ وتحديث مسودة SOAP السريرية للـ Patient بنجاح.
+- قفل السجل وتوليد التوقيع الرقمي وهاش SHA-256 وحظر أي تعديلات لاحقة.
+- إنشاء، فحص، جلب، ومنع تكرار الاختصارات الذكية (Dot Phrases) وحذفها بنجاح.
+
+---
+
 #### C2 — Medication Reconciliation (مطابقة الأدوية)
 * **APIs**:
   * `GET /api/clinical/medication-reconciliation/:patientId` — قراءة سجل مطابقة الأدوية للمريض.
@@ -117,7 +141,7 @@
 ---
 
 ## 🗄️ الجداول الجديدة في قاعدة البيانات (DDL)
-تمت إضافة وتفعيل **21 جدولاً جديداً** بنجاح مع العزل التام للمستأجرين (RLS isolation & compound indexing):
+تمت إضافة وتفعيل **22 جدولاً جديداً** بنجاح مع العزل التام للمستأجرين (RLS isolation & compound indexing):
 1. `nphies_remittance_advice`
 2. `nphies_claim_status_inquiry`
 3. `zatca_credit_notes`
@@ -139,16 +163,16 @@
 19. `hl7_messages`
 20. `ai_cds_log`
 21. `ai_voice_sessions`
+22. `clinical_smart_templates`
 
 ---
 
 ## نتائج الاختبارات والنشر
 ```
-✅ run_safe_tests: 103 passed, 0 failed (of 103)
+✅ run_all_tests: 169 passed, 0 failed (of 169)
 ✅ server.js — syntax check: OK
 ✅ db_postgres.js — syntax check: OK
-✅ app.js — size: 1,467,046 bytes (OK)
-✅ Git push reference updated: HEAD -> ops/jumanasoft-enterprise-facility-platform-staging-prep
-✅ PM2 Production deployment: online (157 restarts, 0 unstable restarts)
+✅ Git push reference updated: HEAD -> integration/all-epics
+✅ PM2 Production deployment: online
 ✅ Health Check online: https://jumanasoft.com/api/health -> {"status":"UP","db":"up"} (HTTP 200)
 ```
