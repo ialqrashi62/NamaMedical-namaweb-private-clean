@@ -37,15 +37,15 @@ BEGIN
             ALTER TABLE patient_clinical_records
                 ADD CONSTRAINT fk_pcr_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
         END IF;
+
+        ALTER TABLE patient_clinical_records ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE patient_clinical_records FORCE ROW LEVEL SECURITY;
+        EXECUTE 'DROP POLICY IF EXISTS rls_patient_clinical_records ON patient_clinical_records';
+        EXECUTE 'CREATE POLICY rls_patient_clinical_records ON patient_clinical_records
+            USING (tenant_id = NULLIF(current_setting(''app.tenant_id'', true), '''')::integer)
+            WITH CHECK (tenant_id = NULLIF(current_setting(''app.tenant_id'', true), '''')::integer)';
     END IF;
 END $$;
-
-ALTER TABLE patient_clinical_records ENABLE ROW LEVEL SECURITY;
-ALTER TABLE patient_clinical_records FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS rls_patient_clinical_records ON patient_clinical_records;
-CREATE POLICY rls_patient_clinical_records ON patient_clinical_records
-    USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::integer)
-    WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::integer);
 
 -- ---------- 2. clinical_templates: add tenant_id (backfill from dept) + FORCE RLS ----------
 ALTER TABLE clinical_templates ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
