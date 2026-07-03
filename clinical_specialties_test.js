@@ -87,8 +87,12 @@ async function runTests() {
         env: { ...process.env, PORT: TEST_PORT, SKIP_DB_INIT: '1' }
     });
 
+    server.stdout.on('data', (data) => {
+        console.log('SERVER OUT:', data.toString().trim());
+    });
+
     server.stderr.on('data', (data) => {
-        console.error('SERVER ERR:', data.toString());
+        console.error('SERVER ERR:', data.toString().trim());
     });
 
     // Wait for server to boot

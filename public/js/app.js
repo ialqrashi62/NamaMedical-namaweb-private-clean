@@ -33,16 +33,16 @@ let facilityType = 'general_hospital';
 
 const FACILITY_ALLOWED = {
   medical_city: null, // all allowed
-  general_hospital: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 30, 33, 34, 42],
+  general_hospital: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 30, 33, 34, 42, 43],
   specialized_hospital: [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 13, 14, 15, 17, 18, 20, 34, 42],
-  tertiary_hospital: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 30, 33, 34, 42],
-  polyclinic: [0, 1, 2, 3, 4, 6, 8, 9, 13, 14, 15, 20, 34, 42],
+  tertiary_hospital: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 30, 33, 34, 42, 43],
+  polyclinic: [0, 1, 2, 3, 4, 6, 8, 9, 13, 14, 15, 20, 34, 42, 43],
   phc: [0, 1, 2, 3, 4, 6, 14, 15, 33, 34],
-  specialty_center: [0, 1, 2, 3, 4, 6, 8, 14, 15, 20, 34],
+  specialty_center: [0, 1, 2, 3, 4, 6, 8, 14, 15, 20, 34, 43],
   diagnostic_center: [3, 4, 14, 15],
   rehabilitation_center: [0, 1, 2, 14, 15, 24],
   dialysis_center: [0, 1, 2, 14, 15, 20],
-  dental_center: [0, 1, 2, 14, 15, 21],
+  dental_center: [0, 1, 2, 14, 15, 43],
   mental_health_center: [0, 1, 2, 14, 15, 22],
   home_healthcare_unit: [0, 1, 2, 14, 15, 33],
   mobile_clinic: [0, 1, 2, 14, 15, 33],
@@ -267,6 +267,7 @@ function buildNav() {
     15,  // Messaging (الرسائل)
     39,  // CME (التعليم الطبي)
     38,  // Mortuary (خدمة الوفيات)
+    43,  // Dental (الأسنان)
     42   // Settings (الإعدادات)
   ];
   const allIndices = [...CLINICAL_ORDER];
@@ -15902,11 +15903,28 @@ async function renderTelemedicine(el) {
   if (tt) {
     createTable(tt, 'teleTbl',
       [tr('Patient', 'المريض'), tr('Doctor', 'الطبيب'), tr('Date', 'التاريخ'), tr('Platform', 'المنصة'), tr('Link', 'الرابط'), tr('Status', 'الحالة')],
-      sessions.map(s => ({ cells: [s.patient_name || '', s.doctor || '', s.session_date ? new Date(s.session_date).toLocaleString('ar-SA') : '', s.platform || '', s.meeting_link ? rawHtml('<a href="' + escapeHTML(s.meeting_link) + '" target="_blank" style="color:#1a73e8">🔗 ' + tr('Join', 'انضمام') + '</a>') : '', statusBadge(s.status)], id: s.id }))
+      sessions.map(s => {
+        const sessionDateTime = s.session_date || [s.scheduled_date, s.scheduled_time].filter(Boolean).join(' ');
+        return { cells: [s.patient_name || '', s.doctor || '', sessionDateTime ? new Date(sessionDateTime).toLocaleString('ar-SA') : '', s.platform || s.session_type || '', s.meeting_link ? rawHtml('<a href="' + escapeHTML(s.meeting_link) + '" target="_blank" style="color:#1a73e8">🔗 ' + tr('Join', 'انضمام') + '</a>') : '', statusBadge(s.status)], id: s.id };
+      })
     );
   }
   window.saveTeleSession = async () => {
-    try { await API.post('/api/telemedicine/sessions', { patient_name: document.getElementById('telePatient').value, doctor: document.getElementById('teleDoctor').value, session_date: document.getElementById('teleDate').value, platform: document.getElementById('telePlatform').value, meeting_link: document.getElementById('teleLink').value, notes: document.getElementById('teleNotes').value }); showToast(tr('Session scheduled!', 'تم جدولة الجلسة!')); navigateTo(currentPage); } catch (e) { showToast(tr('Error', 'خطأ'), 'error'); }
+    try {
+      const rawDateTime = document.getElementById('teleDate').value || '';
+      const [scheduledDate, scheduledTime = ''] = rawDateTime.split('T');
+      await API.post('/api/telemedicine/sessions', {
+        patient_name: document.getElementById('telePatient').value,
+        speciality: '',
+        session_type: document.getElementById('telePlatform').value || 'Video',
+        scheduled_date: scheduledDate || '',
+        scheduled_time: scheduledTime || '',
+        duration_minutes: 15,
+        notes: document.getElementById('teleNotes').value
+      });
+      showToast(tr('Session scheduled!', 'تم جدولة الجلسة!'));
+      navigateTo(currentPage);
+    } catch (e) { showToast(tr('Error', 'خطأ'), 'error'); }
   };
 
 }

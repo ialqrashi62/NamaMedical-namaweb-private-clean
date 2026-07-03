@@ -87,7 +87,7 @@ async function seed() {
             await client.query(
                 `INSERT INTO clinical_departments (tenant_id, code, name_en, name_ar)
                  VALUES (1, $1, $2, $3)
-                 ON CONFLICT (code) DO UPDATE 
+                 ON CONFLICT (tenant_id, code) DO UPDATE 
                  SET name_en = EXCLUDED.name_en, name_ar = EXCLUDED.name_ar`,
                 [dept.code, dept.name_en, dept.name_ar]
             );
@@ -100,15 +100,15 @@ async function seed() {
 
         // 2. Insert Templates
         await client.query(
-            `INSERT INTO clinical_templates (department_id, version, form_structure, is_active)
-             VALUES ($1, '1.0.0', $2, 1)
+            `INSERT INTO clinical_templates (department_id, version, form_structure, is_active, tenant_id)
+             VALUES ($1, '1.0.0', $2, true, 1)
              ON CONFLICT DO NOTHING`,
             [cardId, JSON.stringify(CARDIOLOGY_TEMPLATE)]
         );
 
         await client.query(
-            `INSERT INTO clinical_templates (department_id, version, form_structure, is_active)
-             VALUES ($1, '1.0.0', $2, 1)
+            `INSERT INTO clinical_templates (department_id, version, form_structure, is_active, tenant_id)
+             VALUES ($1, '1.0.0', $2, true, 1)
              ON CONFLICT DO NOTHING`,
             [nicuId, JSON.stringify(PEDIATRICS_NICU_TEMPLATE)]
         );

@@ -111,14 +111,14 @@ END $$;
 -- Replace the global UNIQUE(code) with UNIQUE(tenant_id, code). The old constraint name is
 -- Postgres-generated (clinical_departments_code_key); drop defensively by discovery.
 DO $$
-DECLARE conname TEXT;
+DECLARE v_conname TEXT;
 BEGIN
-    SELECT c.conname INTO conname
+    SELECT c.conname INTO v_conname
       FROM pg_constraint c
      WHERE c.conrelid = 'clinical_departments'::regclass AND c.contype = 'u'
        AND pg_get_constraintdef(c.oid) = 'UNIQUE (code)';
-    IF conname IS NOT NULL THEN
-        EXECUTE format('ALTER TABLE clinical_departments DROP CONSTRAINT %I', conname);
+    IF v_conname IS NOT NULL THEN
+        EXECUTE format('ALTER TABLE clinical_departments DROP CONSTRAINT %I', v_conname);
     END IF;
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint

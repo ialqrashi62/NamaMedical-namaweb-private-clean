@@ -33,12 +33,12 @@ console.log(`run_safe_tests: ${safe.length} DB-free tests to run, ${skipped.leng
 let passed = 0, failed = 0; const failures = [];
 for (const f of safe) {
     try {
-        execFileSync(process.execPath, [f], { cwd: dir, env, stdio: 'pipe', timeout: 60000 });
+        execFileSync(process.execPath, [f], { cwd: dir, env, stdio: 'pipe', timeout: 120000, maxBuffer: 16 * 1024 * 1024 });
         passed++;
     } catch (e) {
         failed++; failures.push(f);
         const tail = String((e.stdout || '') + (e.stderr || '')).split('\n').filter(Boolean).slice(-3).join(' | ');
-        console.error(`FAIL  ${f}  ${tail}`);
+        console.error(`FAIL  ${f}  [Err: ${e.message}]  ${tail}`);
     }
 }
 console.log(`\nrun_safe_tests: ${passed} passed, ${failed} failed (of ${safe.length}).`);

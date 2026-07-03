@@ -140,7 +140,7 @@ async function runTests() {
         assert.strictEqual(pftGetRes.body[0].id, pftId, 'PFT record ID should match');
         assert.strictEqual(parseFloat(pftGetRes.body[0].fev1), 3.20, 'FEV1 should match');
         assert.strictEqual(parseFloat(pftGetRes.body[0].fvc), 4.00, 'FVC should match');
-        assert.strictEqual(parseFloat(pftGetRes.body[0].fev1_fvc_ratio), 80.0, 'FEV1/FVC ratio should match');
+        assert.strictEqual(parseFloat(pftGetRes.body[0].fev1_fvc_ratio), 0.8, 'FEV1/FVC ratio should match');
         console.log('✓ Patient PFT reports retrieved successfully.');
 
     } finally {

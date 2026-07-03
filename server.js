@@ -4030,9 +4030,76 @@ app.get('/api/clinical/templates/:dept_id', requireAuth, requireTenantScope, asy
         const rows = (await pool.query(
             `SELECT t.* FROM clinical_templates t
              JOIN clinical_departments d ON d.id = t.department_id
-             WHERE t.department_id=$1 AND t.is_active=1`, [deptId])).rows;
+             WHERE t.department_id=$1 AND t.is_active=true`, [deptId])).rows;
         res.json(rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+app.get('/api/clinical/knowledge/search', requireAuth, requireRole('doctor', 'nursing'), requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const { query_embedding, department_id, limit } = req.query;
+        if (!query_embedding) return res.status(400).json({ error: 'query_embedding is required' });
+        const embedding = JSON.parse(query_embedding);
+        if (!Array.isArray(embedding)) return res.status(400).json({ error: 'query_embedding must be a JSON array' });
+        
+        const RAG = require('./clinical_knowledge_rag');
+        const results = await RAG.searchKnowledge(
+            tenantId,
+            embedding,
+            department_id ? parseInt(department_id, 10) : null,
+            limit ? parseInt(limit, 10) : 3
+        );
+        res.json(results);
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.post('/api/clinical/knowledge', requireAuth, requireRole('Admin'), requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const { department_id, content_chunk, embedding, metadata } = req.body;
+        if (!content_chunk || !embedding) {
+            return res.status(400).json({ error: 'content_chunk and embedding are required' });
+        }
+        if (!Array.isArray(embedding)) return res.status(400).json({ error: 'embedding must be an array' });
+        
+        const RAG = require('./clinical_knowledge_rag');
+        const chunkId = await RAG.indexGuidelineChunk(
+            pool,
+            tenantId,
+            department_id ? parseInt(department_id, 10) : null,
+            content_chunk,
+            embedding,
+            metadata || {}
+        );
+        res.status(201).json({ success: true, id: chunkId });
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.post('/api/clinical/ai/ask', requireAuth, requireRole('doctor', 'nursing'), requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const { question, query_embedding, department_id } = req.body;
+        if (!question || !query_embedding) {
+            return res.status(400).json({ error: 'question and query_embedding are required' });
+        }
+        if (!Array.isArray(query_embedding)) return res.status(400).json({ error: 'query_embedding must be an array' });
+        
+        const RAG = require('./clinical_knowledge_rag');
+        const response = await RAG.askClinicalCopilot(
+            tenantId,
+            question,
+            query_embedding,
+            department_id ? parseInt(department_id, 10) : null
+        );
+        res.json(response);
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 app.post('/api/clinical/records', requireAuth, requireRole('patients'), async (req, res) => {
@@ -16932,7 +16999,7 @@ app.post('/api/clinical/departments', requireAuth, requireRole('Admin'), require
         if (!code) return res.status(400).json({ error: 'Department code is required' });
         
         const result = await pool.query(
-            'INSERT INTO clinical_departments (tenant_id, code, name_ar, name_en) VALUES ($1, $2, $3, $4) ON CONFLICT (code) DO UPDATE SET name_ar=$3, name_en=$4 RETURNING *',
+            'INSERT INTO clinical_departments (tenant_id, code, name_ar, name_en) VALUES ($1, $2, $3, $4) ON CONFLICT (tenant_id, code) DO UPDATE SET name_ar=$3, name_en=$4 RETURNING *',
             [tenantId, code, name_ar || '', name_en || '']
         );
         res.status(201).json(result.rows[0]);
