@@ -190,13 +190,10 @@ function validateProvisionInput(body) {
  * @param {object} deps { pool, requireAuth, requireRole, logAudit }
  */
 function mountOnboardingRoutes(app, deps) {
-    const { pool, requireAuth, requireRole, logAudit } = deps;
+    const { pool, requireAuth, requireRole, logAudit, requireSuperAdmin, allowlist } = deps;
 
-    app.post('/api/admin/facilities/provision', requireAuth, requireRole('settings'), async (req, res) => {
-        // ===== SUPER-ADMIN GUARD (inline, mirrors deployed user-create Gate-4 pattern) =====
-        // 'settings' perm is held by non-admin roles (e.g. IT); creating a tenant/facility + Admin
-        // user is strictly Admin-only. Identity comes from session, never req.body.
-        if (req.session.user.role !== 'Admin') {
+    async function provisionHandler(req, res, bypassLocalAdminCheck) {
+        if (!bypassLocalAdminCheck && req.session.user.role !== 'Admin') {
             logAudit(req.session.user?.id, req.session.user?.display_name,
                 'BLOCKED_FACILITY_PROVISION', 'Onboarding',
                 `Non-admin attempted facility provisioning (archetype=${String(req.body?.archetype || '').slice(0, 40)})`,
@@ -316,10 +313,6 @@ function mountOnboardingRoutes(app, deps) {
             }
 
             // 8) facility_type -> company_settings (tenant-scoped, RLS-bound via app.tenant_id set above).
-            //    GET /api/settings reads company_settings(setting_key='facility_type') and app.js maps it to
-            //    `facilityType`, driving FACILITY_ALLOWED. The archetype string IS the facility_type key
-            //    (medical_city/large_hospital/general_hospital/polyclinic/health_center) — exact match in app.js.
-            //    Server route remains the real module authority; this only makes the UI load the right set.
             await client.query(
                 `INSERT INTO company_settings (tenant_id, setting_key, setting_value) VALUES ($1,'facility_type',$2)
                  ON CONFLICT (setting_key) DO UPDATE SET setting_value=EXCLUDED.setting_value`,
@@ -330,7 +323,7 @@ function mountOnboardingRoutes(app, deps) {
 
             // Audit — NO password, NO secrets in details.
             logAudit(req.session.user.id, req.session.user.display_name,
-                'FACILITY_PROVISIONED', 'Onboarding',
+                bypassLocalAdminCheck ? 'SUPER_ADMIN_FACILITY_PROVISION' : 'FACILITY_PROVISIONED', 'Onboarding',
                 `tenant_id=${tenantId} archetype=${v.archetype} subdomain=${v.subdomain} facility_id=${facilityId} modules=${enabledModules.length} admin_user_id=${adminUserId}`,
                 req.ip);
 
@@ -356,7 +349,15 @@ function mountOnboardingRoutes(app, deps) {
             try { await client.query("SELECT set_config('app.tenant_id', '', false)"); } catch (_) { /* reset */ }
             client.release();
         }
-    });
+    }
+
+    // 1. Local Tenant Onboarding Route
+    app.post('/api/admin/facilities/provision', requireAuth, requireRole('settings'), (req, res) => provisionHandler(req, res, false));
+
+    // 2. Global Platform Onboarding Route (Super Admin Guarded)
+    if (requireSuperAdmin) {
+        app.post('/api/super-admin/tenants/provision', requireAuth, requireSuperAdmin(allowlist), (req, res) => provisionHandler(req, res, true));
+    }
 }
 
 module.exports = {

@@ -13,6 +13,13 @@
     if (!msg) { el.hidden = true; el.textContent = ''; el.className = 'sa-state'; return; }
     el.hidden = false; el.textContent = msg; el.className = 'sa-state' + (isError ? ' sa-error' : '');
   }
+  
+  // Onboarding Wizard global dependencies mapping
+  window.tr = function(en, ar) { return ar; };
+  window.escapeHTML = function(s) { return esc(s); };
+  window.safeId = function(v) { const n = Number(v); return (v !== null && v !== undefined && String(v).trim() !== '' && Number.isFinite(n)) ? n : ''; };
+  window.showToast = function(msg, type) { state(msg, type === 'error'); };
+  window.isArabic = true;
   function fmtDate(d) { if (!d) return '—'; try { return new Date(d).toLocaleDateString('ar'); } catch (e) { return esc(d); } }
   function badge(status) {
     var label = { active: 'نشط', trial: 'تجريبي', suspended: 'معلّق', cancelled: 'ملغى' }[status] || esc(status);
@@ -143,6 +150,14 @@
   $('sa-refresh').addEventListener('click', load);
   $('sa-search').addEventListener('keydown', function (e) { if (e.key === 'Enter') load(); });
   $('sa-status').addEventListener('change', load);
+  
+  // Onboarding Wizard open handler
+  var onboardBtn = $('sa-onboard-btn');
+  if (onboardBtn) {
+    onboardBtn.addEventListener('click', function() {
+      if (window.NamaOnboardingWizard) window.NamaOnboardingWizard.open();
+    });
+  }
 
   // Tab switching (CSP-friendly delegation). Emits a 'sa-tab' CustomEvent so plans-admin can lazy-load.
   var tabs = document.getElementById('sa-tabs');

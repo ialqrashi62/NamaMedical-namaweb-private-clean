@@ -381,7 +381,10 @@
       brand_color: state.brand_color || undefined
     };
     if (!window.API || typeof window.API.post !== 'function') { toast(T('API unavailable', 'الواجهة غير متاحة'), 'error'); return; }
-    window.API.post('/api/admin/facilities/provision', payload).then(function (res) {
+    var endpoint = window.location.pathname.includes('/super-admin')
+      ? '/api/super-admin/tenants/provision'
+      : '/api/admin/facilities/provision';
+    window.API.post(endpoint, payload).then(function (res) {
       showResult(res);
     }).catch(function (e) {
       toast((e && e.message) ? e.message : T('Provisioning failed', 'فشل الإنشاء'), 'error');

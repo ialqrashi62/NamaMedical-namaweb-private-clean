@@ -56,6 +56,7 @@
         </select>
         <input id="sa-plan" class="sa-input" type="text" placeholder="الخطة (مثل standard)" aria-label="تصفية بالخطة" />
         <button id="sa-refresh" class="sa-btn">تحديث</button>
+        <button id="sa-onboard-btn" class="sa-btn" type="button" style="background:var(--green)">+ تهيئة منشأة جديدة</button>
       </section>
 
       <section id="sa-state" class="sa-state" hidden></section>
@@ -98,6 +99,8 @@
     </section>
   </main>
 
+  <script src="/js/api.js"></script>
+  <script src="/js/onboarding-wizard.js"></script>
   <script src="/super-admin/super-admin.js" defer></script>
   <script src="/super-admin/plans-admin.js" defer></script>
 </body>

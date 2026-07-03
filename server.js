@@ -3927,7 +3927,7 @@ app.delete('/api/settings/users/:id', requireAuth, requireTenantAdmin({ action: 
 //   requireAuth + requireRole('settings') + inline (role !== 'Admin') -> 403 + audit BLOCKED_.
 // It runs a single DB transaction, generates a strong random Admin password if none supplied
 // (no default password), records integrations gated (no secrets), and writes FACILITY_PROVISIONED audit.
-mountOnboardingRoutes(app, { pool, requireAuth, requireRole, logAudit });
+mountOnboardingRoutes(app, { pool, requireAuth, requireRole, logAudit, requireSuperAdmin, allowlist: process.env.SUPER_ADMIN_USERS });
 
 // ===== MESSAGING =====
 app.get('/api/messages', requireAuth, async (req, res) => {

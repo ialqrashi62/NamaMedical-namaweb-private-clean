@@ -10982,7 +10982,6 @@ async function renderSettings(el) {
         <h2 class="font-headline-lg text-headline-lg text-primary">${tr('System Settings & Governance', 'إعدادات النظام والحوكمة')}</h2>
         <p class="text-on-surface-variant text-sm mt-1">${tr('Configure hospital records, manage users, and monitor cybersecurity compliance', 'تهيئة سجلات المنشأة، إدارة الصلاحيات ومراقبة الامتثال للأمن السيبراني')}</p>
       </div>
-      ${currentUser?.role === 'Admin' ? `<button onclick="window.NamaOnboardingWizard && window.NamaOnboardingWizard.open()" class="px-4 py-2 font-bold rounded-lg bg-primary text-white shadow-md hover:opacity-90 transition-all">🏗️ ${tr('Onboard New Facility', 'تهيئة منشأة جديدة')}</button>` : ''}
     </div>
     <div class="flex gap-4 mb-6 border-b border-outline-variant/30 pb-2">
       <button class="px-4 py-2 font-bold rounded-lg transition-all ${settingsTab === 'hospital' ? 'bg-primary text-white shadow-md' : 'text-on-surface-variant hover:bg-surface-container-high/50'}">
@@ -11050,7 +11049,6 @@ async function renderSettings(el) {
         <h2 class="font-headline-lg text-headline-lg text-primary">${tr('System Settings & Governance', 'إعدادات النظام والحوكمة')}</h2>
         <p class="text-on-surface-variant text-sm mt-1">${tr('Configure hospital records, manage users, and monitor cybersecurity compliance', 'تهيئة سجلات المنشأة، إدارة الصلاحيات ومراقبة الامتثال للأمن السيبراني')}</p>
       </div>
-      ${currentUser?.role === 'Admin' ? `<button onclick="window.NamaOnboardingWizard && window.NamaOnboardingWizard.open()" class="px-4 py-2 font-bold rounded-lg bg-primary text-white shadow-md hover:opacity-90 transition-all">🏗️ ${tr('Onboard New Facility', 'تهيئة منشأة جديدة')}</button>` : ''}
     </div>
 
     <!-- Tabs Navigation -->

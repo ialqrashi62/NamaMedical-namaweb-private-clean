@@ -11,6 +11,9 @@
   if (typeof window === 'undefined') return;
 
   window.addEventListener('DOMContentLoaded', () => {
+    if (window.location.hostname === 'jumanasoft.com' || window.location.hostname === 'www.jumanasoft.com') {
+      return;
+    }
     // Create the toggle button
     const toggleBtn = document.createElement('button');
     toggleBtn.id = 'mockApiPreviewToggle';

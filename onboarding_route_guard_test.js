@@ -21,15 +21,18 @@ const ok = (c, m) => { if (c) { pass++; console.log('  PASS', m); } else { fail+
 
 console.log('\n== server.js wiring ==');
 ok(/require\(['"]\.\/onboarding['"]\)/.test(server), 'server.js requires ./onboarding');
-ok(/mountOnboardingRoutes\(\s*app\s*,\s*\{[^}]*pool[^}]*requireAuth[^}]*requireRole[^}]*logAudit/.test(server.replace(/\s+/g, ' ')),
-  'server.js mounts onboarding with {pool, requireAuth, requireRole, logAudit}');
+ok(/mountOnboardingRoutes\(\s*app\s*,\s*\{[^}]*pool[^}]*requireAuth[^}]*requireRole[^}]*logAudit[^}]*requireSuperAdmin[^}]*allowlist/.test(server.replace(/\s+/g, ' ')),
+  'server.js mounts onboarding with {pool, requireAuth, requireRole, logAudit, requireSuperAdmin, allowlist}');
 
 console.log('\n== Route definition & guard order (onboarding.js) ==');
 ok(/app\.post\(\s*['"]\/api\/admin\/facilities\/provision['"]\s*,\s*requireAuth\s*,\s*requireRole\(['"]settings['"]\)/.test(ob),
   "route mounted: POST /api/admin/facilities/provision with requireAuth + requireRole('settings')");
+ok(/app\.post\(\s*['"]\/api\/super-admin\/tenants\/provision['"]\s*,\s*requireAuth\s*,\s*requireSuperAdmin\(allowlist\)/.test(ob.replace(/\s+/g, ' ')),
+  "route mounted: POST /api/super-admin/tenants/provision with requireAuth + requireSuperAdmin");
 ok(/req\.session\.user\.role\s*!==\s*'Admin'/.test(ob), "inline super-admin guard: role !== 'Admin'");
 ok(/BLOCKED_FACILITY_PROVISION/.test(ob), 'audit BLOCKED_FACILITY_PROVISION on non-admin');
 ok(/return res\.status\(403\)/.test(ob), 'returns 403 for non-admin');
+ok(/provisionHandler\(req,\s*res,\s*true\)/.test(ob.replace(/\s+/g, '')), 'provisionHandler bypasses local Admin check for super admin route');
 
 // guard must precede any INSERT
 const guardIdx = ob.indexOf("!== 'Admin'");
