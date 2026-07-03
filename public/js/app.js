@@ -13279,6 +13279,7 @@ async function renderICU(el) {
       <button class="tab-btn ${icuTab === 'infusions' ? 'active' : ''}" onclick="icuTab='infusions';navigateTo(23)">💉 ${tr('Infusions', 'التسريبات')}</button>
       <button class="tab-btn ${icuTab === 'scores' ? 'active' : ''}" onclick="icuTab='scores';navigateTo(23)">📋 ${tr('Scores', 'المقاييس')}</button>
       <button class="tab-btn ${icuTab === 'fluid' ? 'active' : ''}" onclick="icuTab='fluid';navigateTo(23)">💧 ${tr('Fluid Balance', 'توازن السوائل')}</button>
+      <button class="tab-btn ${icuTab === 'bundles' ? 'active' : ''}" onclick="icuTab='bundles';navigateTo(23)">🛡️ ${tr('Prevention Bundles', 'حزم الوقاية/منع العدوى')}</button>
       <button class="tab-btn ${icuTab === 'discharged' ? 'active' : ''}" onclick="icuTab='discharged';navigateTo(23)">🚪 ${tr('Discharged', 'الخارجين')}</button></div>
     <div class="card" id="icuContent"></div>`;
   const c = document.getElementById('icuContent');
@@ -13398,8 +13399,226 @@ async function renderICU(el) {
         <td>${a.discharge_date ? new Date(a.discharge_date).toLocaleDateString('ar-SA') : '-'}</td>
         <td><strong>${los}</strong> ${tr('days', 'يوم')}</td></tr>`;
     }).join('')}</tbody></table>` : `<div class="empty-state-card"><div class="empty-state-icon">🚪</div><div>${tr('No discharged emergency patients', 'لا يوجد مرضى خارجين من الطوارئ')}</div></div>`}`;
+  } else if (icuTab === 'bundles') {
+    c.innerHTML = `<h3>🛡️ ${tr('ICU Prevention Bundles & Infection Control', 'حزم الوقاية ومكافحة العدوى بالعناية المركزة')}</h3>
+      <p style="color:#7f8c8d;font-size:13px">${tr('Daily prevention checklists for VAP, CLABSI, and CAUTI. A non-compliance reason is required if compliance is under 100%.', 'قوائم التدقيق اليومية لمنع العدوى (VAP, CLABSI, CAUTI). يلزم ذكر سبب عدم الالتزام إذا كانت النسبة أقل من 100%.')}</p>
+      
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <!-- Form Column -->
+        <div style="flex:1;min-width:320px">
+          <div class="form-group">
+            <label>${tr('Patient', 'المريض')}</label>
+            <select id="icuBundlePatient" class="form-control" onchange="window.e1LoadBundleLogs()">
+              <option value="">${tr('Select', 'اختر')}</option>
+              ${(icuPatients || []).map(p => `<option value="${safeId(p.id)}">${escapeHTML(p.patient_name)}</option>`).join('')}
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label>${tr('Bundle Type', 'نوع حزمة الوقاية')}</label>
+            <select id="icuBundleType" class="form-control" onchange="window.e1RenderBundleChecklist()">
+              <option value="VAP">VAP (Ventilator-Associated Pneumonia)</option>
+              <option value="CLABSI">CLABSI (Central Line-Associated Bloodstream Infection)</option>
+              <option value="CAUTI">CAUTI (Catheter-Associated Urinary Tract Infection)</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label>${tr('Audit Date', 'تاريخ التدقيق')}</label>
+            <input type="date" id="icuBundleDate" class="form-control" value="${new Date().toISOString().split('T')[0]}">
+          </div>
+
+          <!-- Checklist Items Wrapper -->
+          <div id="icuBundleChecklistWrapper" class="card" style="padding:16px;margin:12px 0;background:#ffffff">
+          </div>
+
+          <!-- Compliance Indicator -->
+          <div style="margin:12px 0;padding:12px;border-radius:8px;background:var(--hover,#f8f9fa);display:flex;justify-content:space-between;align-items:center">
+            <strong>${tr('Compliance Rate', 'نسبة الالتزام')}:</strong>
+            <span id="icuBundleComplianceRate" style="font-size:16px;font-weight:bold;color:#22c55e">100.00%</span>
+          </div>
+
+          <!-- Reason for Non-compliance -->
+          <div id="icuNonComplianceReasonGroup" class="form-group" style="display:none">
+            <label style="color:#ef4444;font-weight:bold">${tr('Reason for Non-compliance', 'سبب عدم الالتزام (مطلوب)')} *</label>
+            <textarea id="icuBundleReason" class="form-control" rows="2" placeholder="${tr('e.g. Clinical contraindication, patient emergency, etc.', 'مثال: وجود موانع طبية، حالة طارئة للمريض...')}"></textarea>
+          </div>
+          
+          <button class="btn btn-primary w-full" onclick="window.saveIcuBundle()">${tr('Save Daily Audit', 'حفظ التدقيق اليومي')}</button>
+        </div>
+
+        <!-- History Column -->
+        <div style="flex:1;min-width:320px">
+          <h4>📋 ${tr('Recent Audits History', 'سجل عمليات التدقيق الأخيرة')}</h4>
+          <div id="icuBundleHistoryList">${tr('Please select a patient to view history', 'يرجى اختيار مريض لعرض السجل')}</div>
+        </div>
+      </div>
+    `;
+    
+    window.e1RenderBundleChecklist();
   }
 }
+
+window.e1RenderBundleChecklist = () => {
+  const type = document.getElementById('icuBundleType')?.value || 'VAP';
+  const wrapper = document.getElementById('icuBundleChecklistWrapper');
+  if (!wrapper) return;
+
+  const checklists = {
+    VAP: [
+      { id: 'head_of_bed_elevation', label: tr('Head of bed elevation (30-45°)', 'رفع رأس السرير بزاوية 30-45 درجة') },
+      { id: 'sedation_interruption', label: tr('Daily sedation interruption & assessment of readiness to extubate', 'إيقاف التهدئة اليومي وتقييم الجاهزية لفصل جهاز التنفس') },
+      { id: 'pud_prophylaxis', label: tr('Peptic ulcer disease (PUD) prophylaxis', 'الوقاية من قرحة المعدة') },
+      { id: 'dvt_prophylaxis', label: tr('Deep vein thrombosis (DVT) prophylaxis', 'الوقاية من جلطات الأوردة العميقة') },
+      { id: 'oral_care', label: tr('Daily oral care with Chlorhexidine', 'العناية اليومية بالفم باستخدام الكلورهيكسيدين') }
+    ],
+    CLABSI: [
+      { id: 'hand_hygiene', label: tr('Hand hygiene performed', 'غسيل وتطهير الأيدي') },
+      { id: 'sterile_barrier', label: tr('Maximal sterile barriers used during insertion', 'استخدام الحواجز المعقمة القصوى أثناء التركيب') },
+      { id: 'skin_antisepsis', label: tr('Skin antisepsis with Chlorhexidine', 'تطهير الجلد بالكلورهيكسيدين') },
+      { id: 'site_selection', label: tr('Optimal site selection (avoid femoral vein)', 'اختيار الموقع الأمثل للقسطرة (تجنب الوريد الفخذي)') },
+      { id: 'daily_review', label: tr('Daily review of line necessity', 'المراجعة اليومية لمدى ضرورة استمرار القسطرة') }
+    ],
+    CAUTI: [
+      { id: 'hand_hygiene', label: tr('Hand hygiene performed', 'غسيل وتطهير الأيدي') },
+      { id: 'proper_indication', label: tr('Proper indication for insertion', 'دواعي التركيب الملائمة للقسطرة') },
+      { id: 'closed_drainage', label: tr('Closed drainage system maintained', 'الحفاظ على نظام تصريف مغلق') },
+      { id: 'unobstructed_flow', label: tr('Unobstructed urine flow maintained', 'الحفاظ على تدفق البول دون عوائق') },
+      { id: 'daily_review', label: tr('Daily review of catheter necessity', 'المراجعة اليومية لمدى ضرورة استمرار القسطرة') }
+    ]
+  };
+
+  const items = checklists[type];
+  wrapper.innerHTML = `
+    <h5 style="margin-top:0;color:var(--primary)">🛡️ ${type} Checklist</h5>
+    ${items.map(item => `
+      <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px">
+        <input type="checkbox" id="chk_${item.id}" checked style="margin-top:3px" onchange="window.e1CalculateBundleCompliance()">
+        <label for="chk_${item.id}" style="font-size:13px;line-height:1.4;cursor:pointer">${item.label}</label>
+      </div>
+    `).join('')}
+  `;
+  window.e1CalculateBundleCompliance();
+};
+
+window.e1CalculateBundleCompliance = () => {
+  const wrapper = document.getElementById('icuBundleChecklistWrapper');
+  if (!wrapper) return;
+  const checkboxes = wrapper.querySelectorAll('input[type="checkbox"]');
+  let checked = 0;
+  checkboxes.forEach(c => { if (c.checked) checked++; });
+
+  const total = checkboxes.length || 1;
+  const rate = parseFloat(((checked / total) * 100).toFixed(2));
+
+  const rateEl = document.getElementById('icuBundleComplianceRate');
+  if (rateEl) {
+    rateEl.textContent = `${rate.toFixed(2)}%`;
+    if (rate === 100.0) {
+      rateEl.style.color = '#22c55e';
+    } else {
+      rateEl.style.color = '#ef4444';
+    }
+  }
+
+  const reasonGroup = document.getElementById('icuNonComplianceReasonGroup');
+  if (reasonGroup) {
+    if (rate < 100.0) {
+      reasonGroup.style.display = 'block';
+    } else {
+      reasonGroup.style.display = 'none';
+      const reasonInput = document.getElementById('icuBundleReason');
+      if (reasonInput) reasonInput.value = '';
+    }
+  }
+};
+
+window.saveIcuBundle = async () => {
+  const patientSelect = document.getElementById('icuBundlePatient');
+  if (!patientSelect || !patientSelect.value) {
+    return showToast(tr('Please select a patient', 'يرجى اختيار مريض أولاً'), 'error');
+  }
+  const type = document.getElementById('icuBundleType').value;
+  const date = document.getElementById('icuBundleDate').value;
+  const reason = document.getElementById('icuBundleReason')?.value || '';
+
+  const wrapper = document.getElementById('icuBundleChecklistWrapper');
+  const checkboxes = wrapper.querySelectorAll('input[type="checkbox"]');
+  const checkedItems = {};
+  let checkedCount = 0;
+  checkboxes.forEach(c => {
+    const key = c.id.replace('chk_', '');
+    checkedItems[key] = c.checked;
+    if (c.checked) checkedCount++;
+  });
+
+  const total = checkboxes.length || 1;
+  const compliance = parseFloat(((checkedCount / total) * 100).toFixed(2));
+
+  if (compliance < 100.0 && (!reason || !reason.trim())) {
+    return showToast(tr('Reason for non-compliance is required!', 'يجب تقديم سبب لعدم الالتزام!'), 'error');
+  }
+
+  try {
+    await API.post('/api/icu/prevention-bundles', {
+      admission_id: patientSelect.value,
+      bundle_type: type,
+      audit_date: date,
+      checked_items: checkedItems,
+      non_compliance_reason: reason
+    });
+    showToast(tr('Daily prevention audit saved successfully!', 'تم حفظ تدقيق الوقاية اليومي بنجاح!'));
+    window.e1LoadBundleLogs();
+  } catch (err) {
+    showToast(tr('Error saving prevention audit', 'خطأ في حفظ تدقيق الوقاية'), 'error');
+  }
+};
+
+window.e1LoadBundleLogs = async () => {
+  const patientSelect = document.getElementById('icuBundlePatient');
+  const historyList = document.getElementById('icuBundleHistoryList');
+  if (!historyList) return;
+
+  if (!patientSelect || !patientSelect.value) {
+    historyList.innerHTML = `<div style="color:var(--text-dim);font-size:13px">${tr('Please select a patient to view history', 'يرجى اختيار مريض لعرض السجل')}</div>`;
+    return;
+  }
+
+  try {
+    const logs = await API.get('/api/icu/prevention-bundles?admission_id=' + patientSelect.value);
+    if (!logs || !logs.length) {
+      historyList.innerHTML = `<div style="color:var(--text-dim);font-size:13px">${tr('No infection control logs found for this patient', 'لا توجد سجلات تدقيق لمنع العدوى مسجلة لهذا المريض')}</div>`;
+    } else {
+      historyList.innerHTML = logs.map(l => {
+        const rate = parseFloat(l.compliance_rate);
+        const rateColor = rate === 100.0 ? '#22c55e' : '#ef4444';
+        return `
+          <div style="padding:10px;margin:6px 0;border-radius:8px;background:var(--hover,#f8f9fa);border-right:4px solid ${rateColor};font-size:12px">
+            <div style="display:flex;justify-content:space-between;font-weight:700">
+              <span style="color:var(--primary)">🛡️ ${l.bundle_type} Audit</span>
+              <span>📅 ${new Date(l.audit_date).toLocaleDateString('ar-SA')}</span>
+            </div>
+            <div style="margin-top:6px">
+              <strong>${tr('Compliance Rate', 'نسبة الالتزام')}:</strong> 
+              <span style="color:${rateColor};font-weight:bold">${rate.toFixed(2)}%</span>
+            </div>
+            ${l.non_compliance_reason ? `
+              <div style="margin-top:4px;color:#ef4444;font-size:11px">
+                <strong>⚠️ ${tr('Reason', 'السبب')}:</strong> ${escapeHTML(l.non_compliance_reason)}
+              </div>
+            ` : ''}
+            <div style="font-size:10px;color:var(--text-dim);margin-top:4px">
+              👨‍⚕️ ${tr('By', 'بواسطة')}: ${escapeHTML(l.recorded_by_name || l.recorded_by || '')}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  } catch (err) {
+    historyList.innerHTML = `<div style="color:red;font-size:13px">${tr('Error loading audit history', 'خطأ في تحميل سجلات التدقيق')}</div>`;
+  }
+};
+
 window.saveICUMonitor = async function () {
   // Flowsheet entry — posts to the hardened canonical route /api/icu/flowsheet (patient_id is
   // derived server-side from the admission; admission_id is authoritative).
@@ -20704,9 +20923,32 @@ window.e1RenderPediatrics = async (pid) => {
         <button class="btn btn-primary btn-sm w-full mb-12" onclick="e1AddPedRecord(${safeId(pid)})">💾 ${tr('Save Pediatric Record', 'حفظ سجل الطفل')}</button>
       </div>
 
-      <!-- Right Column: History Logs -->
-      <div style="flex:1;min-width:280px;border-right:1px solid var(--border-color,#e5e7eb);padding-right:16px">
-        <h4 style="margin:0 0 12px;color:var(--primary)">📋 ${tr('Pediatric History', 'سجل الفحوصات والقياسات السابقة')}</h4>
+      <!-- Right Column: History Logs & Growth Chart -->
+      <div style="flex:1.5;min-width:320px;padding-left:16px">
+        <h4 style="margin:0 0 12px;color:var(--primary)">📈 ${tr('WHO Growth Percentile Chart', 'منحنيات النمو الخاصة بمنظمة الصحة العالمية')}</h4>
+        
+        <div style="padding:8px;background:#ffffff;border:1px solid var(--outline);border-radius:8px;text-align:center;margin-bottom:12px">
+          <div style="font-weight:bold;font-size:11px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center">
+            <span>📊 ${tr('Growth Curve Visualization', 'منحنى تمثيل نمو الطفل')}</span>
+            <select class="form-input" id="e1PedChartType" style="padding:1px 4px;font-size:9px;width:auto;margin:0" onchange="window.e1UpdateGrowthChart(${safeId(pid)})">
+              <option value="weight">${tr('Weight for Age', 'الوزن مقابل العمر')}</option>
+              <option value="height">${tr('Height for Age', 'الطول مقابل العمر')}</option>
+              <option value="head">${tr('Head Circumference', 'محيط الرأس مقابل العمر')}</option>
+            </select>
+          </div>
+          <svg id="e1PedGrowthChart" viewBox="0 0 300 150" style="width:100%;height:auto;background:#fafafa;border-radius:4px">
+            <line x1="30" y1="130" x2="290" y2="130" stroke="#ddd" stroke-width="1"/>
+            <line x1="30" y1="10" x2="30" y2="130" stroke="#ddd" stroke-width="1"/>
+            <path id="e1PedPercentile3" d="M 30,120 Q 100,105 180,95 T 280,85" fill="none" stroke="#fca5a5" stroke-dasharray="2,2" stroke-width="1.5"/>
+            <path id="e1PedPercentile50" d="M 30,110 Q 100,85 180,75 T 280,60" fill="none" stroke="#22c55e" stroke-width="1.5"/>
+            <path id="e1PedPercentile97" d="M 30,95 Q 100,65 180,50 T 280,30" fill="none" stroke="#fca5a5" stroke-dasharray="2,2" stroke-width="1.5"/>
+            <text x="160" y="145" font-size="8" text-anchor="middle">${tr('Age (Months)', 'العمر (بالشهور)')}</text>
+            <text id="e1PedYLabel" x="10" y="70" font-size="8" text-anchor="middle" transform="rotate(-90 10 70)">${tr('Weight (kg)', 'الوزن (كجم)')}</text>
+            <g id="e1PedGrowthPoints"></g>
+          </svg>
+        </div>
+
+        <h4 style="margin:12px 0 12px;color:var(--primary)">📋 ${tr('Pediatric History', 'سجل الفحوصات والقياسات السابقة')}</h4>
         <div id="e1PedHistoryList">${tr('Loading...', 'جاري التحميل...')}</div>
       </div>
     </div>
@@ -20749,6 +20991,8 @@ window.e1LoadPedHistory = async (pid) => {
   
   try {
     const records = await API.get('/api/pediatrics/growth/patient/' + pid);
+    window.e1PedHistoryCache = records || [];
+    
     if (!records.length) {
       container.innerHTML = `<div style="color:var(--text-dim);font-size:13px">${tr('No pediatric growth records found', 'لا توجد سجلات نمو مسجلة للطفل')}</div>`;
     } else {
@@ -20769,8 +21013,100 @@ window.e1LoadPedHistory = async (pid) => {
         </div>
       `).join('');
     }
+    
+    // Update the growth curves
+    if (typeof window.e1UpdateGrowthChart === 'function') {
+      window.e1UpdateGrowthChart(pid);
+    }
   } catch (err) {
     container.innerHTML = `<div style="color:red">${tr('Error loading history', 'خطأ في تحميل السجل')}</div>`;
+  }
+window.e1UpdateGrowthChart = (pid) => {
+  const chartTypeSelect = document.getElementById('e1PedChartType');
+  const chart = document.getElementById('e1PedGrowthChart');
+  if (!chart) return;
+
+  const chartType = chartTypeSelect ? chartTypeSelect.value : 'weight';
+  const records = window.e1PedHistoryCache || [];
+
+  // 1. Update paths and Y-axis label
+  const p3 = document.getElementById('e1PedPercentile3');
+  const p50 = document.getElementById('e1PedPercentile50');
+  const p97 = document.getElementById('e1PedPercentile97');
+  const yLabel = document.getElementById('e1PedYLabel');
+
+  if (chartType === 'weight') {
+    if (yLabel) yLabel.textContent = tr('Weight (kg)', 'الوزن (كجم)');
+    if (p3) p3.setAttribute('d', 'M 30,120 Q 100,105 180,95 T 280,85');
+    if (p50) p50.setAttribute('d', 'M 30,110 Q 100,85 180,75 T 280,60');
+    if (p97) p97.setAttribute('d', 'M 30,95 Q 100,65 180,50 T 280,30');
+  } else if (chartType === 'height') {
+    if (yLabel) yLabel.textContent = tr('Height (cm)', 'الطول (سم)');
+    if (p3) p3.setAttribute('d', 'M 30,125 Q 100,105 180,80 T 280,60');
+    if (p50) p50.setAttribute('d', 'M 30,115 Q 100,90 180,65 T 280,40');
+    if (p97) p97.setAttribute('d', 'M 30,105 Q 100,75 180,50 T 280,20');
+  } else if (chartType === 'head') {
+    if (yLabel) yLabel.textContent = tr('Head Circ (cm)', 'محيط الرأس (سم)');
+    if (p3) p3.setAttribute('d', 'M 30,120 Q 100,95 180,85 T 280,75');
+    if (p50) p50.setAttribute('d', 'M 30,110 Q 100,80 180,65 T 280,50');
+    if (p97) p97.setAttribute('d', 'M 30,95 Q 100,60 180,45 T 280,30');
+  }
+
+  // 2. Fetch patient birth_date to compute age in months
+  const patient = window.currentPatientsList ? window.currentPatientsList.find(x => x.id === pid) : null;
+  const dobStr = patient ? (patient.birth_date || patient.date_of_birth) : null;
+  const birth = dobStr ? new Date(dobStr) : new Date();
+
+  // 3. Map historical records to coordinates
+  let pointsStr = '';
+  let circlesHtml = '';
+  
+  const sorted = [...records]
+    .filter(r => r.record_date)
+    .sort((a, b) => new Date(a.record_date) - new Date(b.record_date));
+
+  sorted.forEach(r => {
+    const recordDate = new Date(r.record_date);
+    const diffMs = recordDate.getTime() - birth.getTime();
+    // age in months
+    const ageMonths = Math.max(0, parseFloat((diffMs / (1000 * 60 * 60 * 24 * 30.4375)).toFixed(1)));
+    
+    // x coordinate: age range 0 to 36 months maps to SVG width x = 30 to 280 (delta = 250)
+    const x = 30 + Math.min(Math.max(ageMonths, 0), 36) / 36 * 250;
+    
+    let val = 0;
+    let minVal = 0;
+    let maxVal = 18;
+    
+    if (chartType === 'weight') {
+      val = parseFloat(r.weight_kg) || 0;
+      minVal = 0;
+      maxVal = 18;
+      if (!r.weight_kg) return;
+    } else if (chartType === 'height') {
+      val = parseFloat(r.height_cm) || 40;
+      minVal = 40;
+      maxVal = 105;
+      if (!r.height_cm) return;
+    } else if (chartType === 'head') {
+      val = parseFloat(r.head_circ_cm) || 30;
+      minVal = 30;
+      maxVal = 55;
+      if (!r.head_circ_cm) return;
+    }
+    
+    const range = maxVal - minVal;
+    // y coordinate: value range minVal to maxVal maps to SVG height y = 130 to 10 (delta = 120)
+    const y = 130 - Math.min(Math.max(val - minVal, 0), range) / range * 120;
+    
+    pointsStr += `${x},${y} `;
+    circlesHtml += `<circle cx="${x}" cy="${y}" r="3.5" fill="#ef4444" stroke="#ffffff" stroke-width="1"><title>Age: ${ageMonths}m, Value: ${val}</title></circle>`;
+  });
+
+  const lineHtml = pointsStr ? `<polyline points="${pointsStr.trim()}" fill="none" stroke="#ef4444" stroke-width="2" />` : '';
+  const ptsContainer = document.getElementById('e1PedGrowthPoints');
+  if (ptsContainer) {
+    ptsContainer.innerHTML = lineHtml + circlesHtml;
   }
 };
 
@@ -21375,8 +21711,16 @@ window.renderSpecialtyTemplate = (specialty) => {
               <input type="number" class="form-input" id="drPedAge" value="8" min="0" max="36" oninput="window.updatePediatricGrowthChart()">
             </div>
             <div class="form-group" style="flex:1">
+              <label>${tr('Head Circ (cm)', 'محيط الرأس (سم)')}</label>
+              <input type="number" step="0.1" class="form-input dr-spec-input" id="drPedHeadCirc" name="head_circ_cm" data-label="${tr('Head Circumference', 'محيط الرأس')}" placeholder="cm" value="44" oninput="window.updatePediatricGrowthChart()">
+            </div>
+          </div>
+          <div style="display:flex;gap:8px" class="mb-8">
+            <div class="form-group" style="flex:1">
               <label>${tr('APGAR Score (5m)', 'أبغار 5د')}</label>
               <input type="number" class="form-input dr-spec-input" id="drApgarInput" name="apgar_score" data-label="${tr('APGAR Score', 'مقياس أبغار')}" value="9" placeholder="0-10">
+            </div>
+            <div class="form-group" style="flex:1">
             </div>
           </div>
           <div style="padding:8px;background:rgba(255,255,255,0.6);border:1px solid var(--outline);border-radius:8px;margin-bottom:8px;font-size:11px">
@@ -21404,15 +21748,22 @@ window.renderSpecialtyTemplate = (specialty) => {
 
         <div style="display:flex;flex-direction:column;gap:10px">
           <div style="padding:8px;background:#ffffff;border:1px solid var(--outline);border-radius:8px;text-align:center">
-            <div style="font-weight:bold;font-size:11px;margin-bottom:4px">📈 WHO Growth Percentile (Weight for Age)</div>
+            <div style="font-weight:bold;font-size:11px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center">
+              <span>📈 WHO Growth Percentile</span>
+              <select class="form-input" id="pedChartType" style="padding:1px 4px;font-size:9px;width:auto;margin:0" onchange="window.updatePediatricGrowthChart()">
+                <option value="weight">${tr('Weight for Age', 'الوزن مقابل العمر')}</option>
+                <option value="height">${tr('Height for Age', 'الطول مقابل العمر')}</option>
+                <option value="head">${tr('Head Circumference', 'محيط الرأس مقابل العمر')}</option>
+              </select>
+            </div>
             <svg id="pedGrowthChart" viewBox="0 0 300 150" style="width:100%;height:auto;background:#fafafa;border-radius:4px">
               <line x1="30" y1="130" x2="290" y2="130" stroke="#ddd" stroke-width="1"/>
               <line x1="30" y1="10" x2="30" y2="130" stroke="#ddd" stroke-width="1"/>
-              <path d="M 30,120 Q 100,105 180,95 T 280,85" fill="none" stroke="#fca5a5" stroke-dasharray="2,2" stroke-width="1.5"/>
-              <path d="M 30,110 Q 100,85 180,75 T 280,60" fill="none" stroke="#22c55e" stroke-width="1.5"/>
-              <path d="M 30,95 Q 100,65 180,50 T 280,30" fill="none" stroke="#fca5a5" stroke-dasharray="2,2" stroke-width="1.5"/>
-              <text x="160" y="145" font-size="8" text-anchor="middle">Age (Months)</text>
-              <text x="10" y="70" font-size="8" text-anchor="middle" transform="rotate(-90 10 70)">Weight (kg)</text>
+              <path id="pedPercentile3" d="M 30,120 Q 100,105 180,95 T 280,85" fill="none" stroke="#fca5a5" stroke-dasharray="2,2" stroke-width="1.5"/>
+              <path id="pedPercentile50" d="M 30,110 Q 100,85 180,75 T 280,60" fill="none" stroke="#22c55e" stroke-width="1.5"/>
+              <path id="pedPercentile97" d="M 30,95 Q 100,65 180,50 T 280,30" fill="none" stroke="#fca5a5" stroke-dasharray="2,2" stroke-width="1.5"/>
+              <text x="160" y="145" font-size="8" text-anchor="middle">${tr('Age (Months)', 'العمر (بالشهور)')}</text>
+              <text id="pedYLabel" x="10" y="70" font-size="8" text-anchor="middle" transform="rotate(-90 10 70)">${tr('Weight (kg)', 'الوزن (كجم)')}</text>
               <circle id="pedGrowthPoint" cx="100" cy="85" r="4.5" fill="#ef4444" stroke="#ffffff" stroke-width="1.5">
                 <animate attributeName="r" values="3.5;5.5;3.5" dur="1.5s" repeatCount="indefinite"/>
               </circle>
@@ -21660,14 +22011,52 @@ document.addEventListener('click', (e) => {
 window.updatePediatricGrowthChart = () => {
   const ageInput = document.getElementById('drPedAge');
   const weightInput = document.getElementById('drPedWeight');
+  const heightInput = document.getElementById('drPedHeight');
+  const headInput = document.getElementById('drPedHeadCirc');
+  const chartTypeSelect = document.getElementById('pedChartType');
   const point = document.getElementById('pedGrowthPoint');
-  if (!ageInput || !weightInput || !point) return;
+  
+  if (!ageInput || !point) return;
 
   const age = parseFloat(ageInput.value) || 0;
-  const weight = parseFloat(weightInput.value) || 0;
-
+  const chartType = chartTypeSelect ? chartTypeSelect.value : 'weight';
+  
+  // Update UI Elements
+  const p3 = document.getElementById('pedPercentile3');
+  const p50 = document.getElementById('pedPercentile50');
+  const p97 = document.getElementById('pedPercentile97');
+  const yLabel = document.getElementById('pedYLabel');
+  
   const x = 30 + Math.min(Math.max(age, 0), 36) / 36 * 250;
-  const y = 130 - Math.min(Math.max(weight, 0), 18) / 18 * 120;
+  let y = 130;
+  
+  if (chartType === 'weight') {
+    if (yLabel) yLabel.textContent = tr('Weight (kg)', 'الوزن (كجم)');
+    if (p3) p3.setAttribute('d', 'M 30,120 Q 100,105 180,95 T 280,85');
+    if (p50) p50.setAttribute('d', 'M 30,110 Q 100,85 180,75 T 280,60');
+    if (p97) p97.setAttribute('d', 'M 30,95 Q 100,65 180,50 T 280,30');
+    
+    const weight = weightInput ? parseFloat(weightInput.value) || 0 : 0;
+    y = 130 - Math.min(Math.max(weight, 0), 18) / 18 * 120;
+    
+  } else if (chartType === 'height') {
+    if (yLabel) yLabel.textContent = tr('Height (cm)', 'الطول (سم)');
+    if (p3) p3.setAttribute('d', 'M 30,125 Q 100,105 180,80 T 280,60');
+    if (p50) p50.setAttribute('d', 'M 30,115 Q 100,90 180,65 T 280,40');
+    if (p97) p97.setAttribute('d', 'M 30,105 Q 100,75 180,50 T 280,20');
+    
+    const height = heightInput ? parseFloat(heightInput.value) || 0 : 0;
+    y = 130 - Math.min(Math.max(height - 40, 0), 65) / 65 * 120;
+    
+  } else if (chartType === 'head') {
+    if (yLabel) yLabel.textContent = tr('Head Circ (cm)', 'محيط الرأس (سم)');
+    if (p3) p3.setAttribute('d', 'M 30,120 Q 100,95 180,85 T 280,75');
+    if (p50) p50.setAttribute('d', 'M 30,110 Q 100,80 180,65 T 280,50');
+    if (p97) p97.setAttribute('d', 'M 30,95 Q 100,60 180,45 T 280,30');
+    
+    const head = headInput ? parseFloat(headInput.value) || 0 : 0;
+    y = 130 - Math.min(Math.max(head - 30, 0), 25) / 25 * 120;
+  }
 
   point.setAttribute('cx', String(x));
   point.setAttribute('cy', String(y));
