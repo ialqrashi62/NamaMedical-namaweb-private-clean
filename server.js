@@ -455,6 +455,18 @@ function requireTenantContext(req, res, next) {
     next();
 }
 
+const requirePermission = makeRequirePermission({
+    pool,
+    getRequestTenantContext,
+    roleFallback: (req) => {
+        const role = req.session?.user?.role;
+        const perms = ROLE_PERMISSIONS[role];
+        if (perms === '*') return true; // Admin
+        const orderModules = ['doctor', 'lab', 'radiology', 'pharmacy'];
+        return !!(perms && orderModules.some(m => perms.includes(m)));
+    }
+});
+
 function requireFacilityContext(req, res, next) {
     const { tenantId, facilityId } = getRequestTenantContext(req);
     if (!tenantId) {
@@ -4126,22 +4138,91 @@ app.post('/api/clinical/records', requireAuth, requireRole('patients'), async (r
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/clinical/records/:id/lock', requireAuth, requireRole('patients'), async (req, res) => {
+app.post('/api/clinical/records/:id/lock', requireAuth, requireRole('patients'), requireTenantScope, async (req, res) => {
     try {
-        const id = parseInt(req.params.id, 10);
         const { tenantId } = getRequestTenantContext(req);
-        const rec = (await pool.query('SELECT * FROM patient_clinical_records WHERE id=$1 AND tenant_id=$2', [id, tenantId])).rows[0];
-        if (!rec) return res.status(404).json({ error: 'Record not found' });
-        if (rec.is_locked) return res.status(400).json({ error: 'Record already locked' });
+        const idParam = req.params.id;
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idParam);
 
-        // Compute a digital signature hash using crypto
+        let record;
+        let tableName;
+
+        if (isUuid) {
+            tableName = 'clinical_records';
+            const query = await pool.query('SELECT * FROM clinical_records WHERE id = $1 AND tenant_id = $2', [idParam, tenantId]);
+            if (query.rowCount === 0) return res.status(404).json({ error: 'Record not found' });
+            record = query.rows[0];
+        } else {
+            tableName = 'patient_clinical_records';
+            const idInt = parseInt(idParam, 10);
+            if (isNaN(idInt)) return res.status(400).json({ error: 'Invalid record ID format' });
+            const query = await pool.query('SELECT * FROM patient_clinical_records WHERE id = $1 AND tenant_id = $2', [idInt, tenantId]);
+            if (query.rowCount === 0) return res.status(404).json({ error: 'Record not found' });
+            record = query.rows[0];
+        }
+
+        if (record.is_locked || record.is_locked === 1) {
+            return res.status(409).json({ error: 'Record is already locked' });
+        }
+
+        // Clinical Signature Boundary: Check if the template represents a physician EMR or nursing record.
+        const templateId = record.template_id;
+        let isPhysicianEMR = true; // default fail-closed: treat as physician EMR
+
+        if (templateId) {
+            const templateQuery = await pool.query(
+                'SELECT t.template_name_en, d.code as department_code FROM clinical_templates t JOIN clinical_departments d ON t.department_id = d.id WHERE t.id = $1',
+                [templateId]
+            );
+            if (templateQuery.rowCount > 0) {
+                const temp = templateQuery.rows[0];
+                const nameLower = String(temp.template_name_en || '').toLowerCase();
+                // Nursing templates list
+                const isNursingTemplate = nameLower.includes('braden') || 
+                                         nameLower.includes('morse') || 
+                                         nameLower.includes('fall risk') || 
+                                         nameLower.includes('pain assessment') || 
+                                         nameLower.includes('count sheet') || 
+                                         nameLower.includes('nursing') || 
+                                         nameLower.includes('care plan') ||
+                                         nameLower.includes('triage') ||
+                                         nameLower.includes('apgar');
+                if (isNursingTemplate) {
+                    isPhysicianEMR = false;
+                }
+            }
+        }
+
+        // Role Boundary check
+        const userRole = req.session.user.role;
+        const allowedPhysicianRoles = new Set(['Doctor', 'OB/GYN', 'Neonatologist', 'Pathologist', 'Radiologist', 'Admin']);
+        
+        if (isPhysicianEMR && !allowedPhysicianRoles.has(userRole)) {
+            return res.status(403).json({ error: 'Only medical practitioners are authorized to sign physician EMR records.' });
+        }
+
         const crypto = require('crypto');
-        const signaturePayload = `${rec.id}|${JSON.stringify(rec.recorded_values)}|${req.session.user.id}`;
-        const signature = crypto.createHash('sha256').update(signaturePayload).digest('hex');
-
-        await pool.query('UPDATE patient_clinical_records SET is_locked=true, signature=$1 WHERE id=$2', [signature, id]);
-        res.json({ success: true, signature });
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+        if (tableName === 'clinical_records') {
+            const dataToHash = typeof record.record_data === 'string' ? record.record_data : JSON.stringify(record.record_data);
+            const hash = crypto.createHash('sha256').update(dataToHash).digest('hex');
+            const signature = `Signed by ${req.session.user?.display_name || 'System'} on ${new Date().toISOString()} | Hash: ${hash}`;
+            
+            const result = await pool.query(
+                'UPDATE clinical_records SET is_locked = 1, content_hash = $1, digital_signature = $2 WHERE id = $3 AND tenant_id = $4 RETURNING *',
+                [hash, signature, idParam, tenantId]
+            );
+            logAudit(req.session.user?.id, req.session.user?.display_name, 'LOCK_EMR_RECORD', 'EMR', `Locked clinical_records #${idParam} with hash ${hash}`, req.ip);
+            res.json(result.rows[0]);
+        } else {
+            const signaturePayload = `${record.id}|${JSON.stringify(record.recorded_values)}|${req.session.user.id}`;
+            const signature = crypto.createHash('sha256').update(signaturePayload).digest('hex');
+            await pool.query('UPDATE patient_clinical_records SET is_locked=true, signature=$1 WHERE id=$2 AND tenant_id=$3', [signature, parseInt(idParam, 10), tenantId]);
+            logAudit(req.session.user?.id, req.session.user?.display_name, 'LOCK_EMR_RECORD', 'EMR', `Locked patient_clinical_records #${idParam} with signature`, req.ip);
+            res.json({ success: true, signature });
+        }
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 // ===== INVOICES (Enhanced) =====
@@ -7232,7 +7313,7 @@ app.post('/api/or/slots/reserve', requireAuth, requireRole('surgery', 'doctor'),
 });
 
 // Cancel a slot (frees the room/surgeon window). Tenant scoped.
-app.put('/api/or/slots/:id/cancel', requireAuth, requireRole('surgery', 'doctor'), requireTenantScope, async (req, res) => {
+app.put('/api/or/slots/:id/cancel', requireAuth, requireRole('surgery', 'doctor'), requireTenantScope, requirePermission('or:cancel'), async (req, res) => {
     try {
         const { tenantId } = e12RequireTenant(req);
         const slotId = e12IntId(req.params.id);
@@ -12741,7 +12822,7 @@ app.put('/api/messages/:id/read', requireAuth, requireTenantScope, async (req, r
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.delete('/api/messages/:id', requireAuth, requireTenantScope, async (req, res) => {
+app.delete('/api/messages/:id', requireAuth, requireTenantScope, requirePermission('messages:delete'), async (req, res) => {
     try {
         const userId = req.session.user.id;
         const { tenantId } = getRequestTenantContext(req);
@@ -14145,7 +14226,7 @@ app.get('/api/pharmacy/expiring', requireAuth, requireRole('pharmacy'), requireT
 });
 
 // ===== INVOICE CANCEL (Credit Note) =====
-app.post('/api/invoices/cancel/:id', requireAuth, requireRole('invoices', 'accounts'), async (req, res) => {
+app.post('/api/invoices/cancel/:id', requireAuth, requireRole('invoices', 'accounts'), requireTenantScope, requirePermission('invoices:cancel'), async (req, res) => {
     try {
         const { reason } = req.body;
         // --- TENANT SCOPE: verify invoice belongs to current tenant before cancel (IDOR prevention) ---
@@ -16428,23 +16509,7 @@ app.put('/api/pharmacy/prescriptions/:id', requireAuth, requireTenantScope, asyn
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-// ===== E-X FOUNDATIONAL ROUTES (mounted AFTER all existing routes, BEFORE SPA catch-all) =====
-// Additive only: does NOT modify requireRole / ROLE_PERMISSIONS or any existing route.
-// requirePermission enforces the DB role_permissions matrix (closes L6) and falls back to the
-// legacy ROLE_PERMISSIONS module check when no matrix row exists for the role (non-breaking).
-const requirePermission = makeRequirePermission({
-    pool,
-    getRequestTenantContext,
-    // Legacy fallback: reuse the in-code ROLE_PERMISSIONS module intersection used by requireRole.
-    // For orders we map to clinical modules already granted to ordering roles (doctor/lab/radiology/pharmacy).
-    roleFallback: (req) => {
-        const role = req.session?.user?.role;
-        const perms = ROLE_PERMISSIONS[role];
-        if (perms === '*') return true; // Admin
-        const orderModules = ['doctor', 'lab', 'radiology', 'pharmacy'];
-        return !!(perms && orderModules.some(m => perms.includes(m)));
-    }
-});
+// E-X1 unified orders mounted additively using the requirePermission declared above.
 mountOrderRoutes(app, { pool, requireAuth, requireTenantScope, getRequestTenantContext, logAudit, requirePermission });
 
 // ===== SaaS Batch 1: Tenant Control Center / Super Admin (additive, flag-gated) =====
@@ -17205,38 +17270,7 @@ app.post('/api/clinical/records', requireAuth, requireRole('patients'), requireT
     }
 });
 
-// 7. POST /api/clinical/records/:id/lock - Lock and sign EMR record with SHA-256
-app.post('/api/clinical/records/:id/lock', requireAuth, requireRole('patients'), requireTenantScope, async (req, res) => {
-    try {
-        const { tenantId } = getRequestTenantContext(req);
-        const recordId = req.params.id;
-        
-        const recordQuery = await pool.query('SELECT * FROM clinical_records WHERE id = $1 AND tenant_id = $2', [recordId, tenantId]);
-        if (recordQuery.rowCount === 0) return res.status(404).json({ error: 'Record not found' });
-        
-        const record = recordQuery.rows[0];
-        if (record.is_locked === 1) {
-            return res.status(409).json({ error: 'Record is already locked' });
-        }
-        
-        // Calculate SHA-256 hash of record_data
-        const dataToHash = typeof record.record_data === 'string' ? record.record_data : JSON.stringify(record.record_data);
-        const hash = crypto.createHash('sha256').update(dataToHash).digest('hex');
-        
-        // Dynamic Signature simulation: username + timestamp + hash
-        const signature = `Signed by ${req.session.user?.display_name || 'System'} on ${new Date().toISOString()} | Hash: ${hash}`;
-        
-        const result = await pool.query(
-            'UPDATE clinical_records SET is_locked = 1, content_hash = $1, digital_signature = $2 WHERE id = $3 AND tenant_id = $4 RETURNING *',
-            [hash, signature, recordId, tenantId]
-        );
-        
-        logAudit(req.session.user?.id, req.session.user?.display_name, 'LOCK_EMR_RECORD', 'EMR', `Locked record #${recordId} with hash ${hash}`, req.ip);
-        res.json(result.rows[0]);
-    } catch (e) {
-        res.status(500).json({ error: 'Server error' });
-    }
-});
+// EMR lock/signature is unified and handled at the top route definition (line 4141) to support both tables and enforce clinical role boundaries.
 
 // Phase F2: SOAP Clinical Notes Endpoints
 app.get('/api/clinical/notes', requireAuth, requireRole('patients'), requireTenantScope, async (req, res) => {

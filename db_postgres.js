@@ -496,6 +496,7 @@ CREATE TABLE IF NOT EXISTS clinical_departments (
     code TEXT NOT NULL UNIQUE,
     name_ar TEXT DEFAULT '',
     name_en TEXT DEFAULT '',
+    owner_role VARCHAR(50) NOT NULL DEFAULT 'CMO',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ALTER TABLE clinical_departments ENABLE ROW LEVEL SECURITY;

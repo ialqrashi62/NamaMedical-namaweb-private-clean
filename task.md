@@ -15,7 +15,8 @@
   - [x] التحقق من عزل المستأجرين (Tenant Scope) على واجهات برمجة تطبيقات ZATCA و NPHIES.
   - [x] التحقق من فصل بيانات المصادقة الثنائية (MFA) وسجلات التدقيق التابعة للنظام.
 - [x] صياغة وإصدار تقرير تدقيق مطابقة الامتثال الوطني للمرحلة الأولى.
-- [x] تشغيل حزمة اختبارات النظام كاملة (86 ملفاً) للتأكد من خلو المشروع من التراجعات.
+- [x] تشغيل جميع اختبارات النظام الـ 172 والتأكد من الجودة 100%
+- [/] النشر التلقائي للإنتاج الفعلي والتحقق من سلامة الخدمة 200 OK
 - [x] Verify application in the browser using test credentials and confirm zero console errors
 - [x] Document results in reports:
   - `docs/STITCH_BATCH_E_GOVERNANCE_FACILITY_ANALYTICS_REPORT_AR.md`

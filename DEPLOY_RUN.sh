@@ -200,6 +200,9 @@ run migrations/e0_02_facilities_extend_up.sql;        val migrations/e0_02_facil
 run migrations/e0_03_facility_modules_up.sql;         val migrations/e0_03_facility_modules_validate.sql
 run migrations/e0_04_integration_settings_rls_up.sql; val migrations/e0_04_integration_settings_rls_validate.sql
 
+echo "=== P1 Phase F5 Department Owners ==="
+run migrations/p1_03_department_owners_up.sql; val migrations/p1_03_department_owners_validate.sql
+
 echo ""
 echo "=== ALL MIGRATIONS APPLIED + VALIDATED ==="
 echo "Next (operator): deploy the integration code + restart, then smoke:"
