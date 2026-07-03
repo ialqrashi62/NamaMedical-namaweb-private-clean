@@ -17396,6 +17396,85 @@ app.delete('/api/clinical/smart-templates/:id', requireAuth, requireRole('patien
     }
 });
 
+// Phase F3: ICU Prevention Bundles & Infection Control Endpoints
+app.get('/api/icu/prevention-bundles', requireAuth, requireRole('icu', 'doctor', 'nursing'), requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const { admission_id } = req.query;
+        if (!admission_id) {
+            return res.status(400).json({ error: 'admission_id is required' });
+        }
+        const result = await pool.query(
+            'SELECT * FROM icu_prevention_bundles WHERE tenant_id = $1 AND admission_id = $2 ORDER BY audit_date DESC, bundle_type ASC',
+            [tenantId, parseInt(admission_id)]
+        );
+        res.json(result.rows);
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.post('/api/icu/prevention-bundles', requireAuth, requireRole('icu', 'doctor', 'nursing'), requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId, facilityId } = getRequestTenantContext(req);
+        const { admission_id, bundle_type, audit_date, checked_items, non_compliance_reason } = req.body;
+        
+        if (!admission_id) {
+            return res.status(400).json({ error: 'admission_id is required' });
+        }
+        if (!bundle_type || !['VAP', 'CLABSI', 'CAUTI'].includes(bundle_type)) {
+            return res.status(400).json({ error: 'Invalid or missing bundle_type. Must be VAP, CLABSI, or CAUTI' });
+        }
+        if (!audit_date) {
+            return res.status(400).json({ error: 'audit_date is required' });
+        }
+        if (!checked_items || typeof checked_items !== 'object') {
+            return res.status(400).json({ error: 'checked_items must be an object' });
+        }
+        
+        // Define standard bundle checklist items
+        const bundleKeys = {
+            VAP: ['head_of_bed_elevation', 'sedation_interruption', 'pud_prophylaxis', 'dvt_prophylaxis', 'oral_care'],
+            CLABSI: ['hand_hygiene', 'sterile_barrier', 'skin_antisepsis', 'site_selection', 'daily_review'],
+            CAUTI: ['hand_hygiene', 'proper_indication', 'closed_drainage', 'unobstructed_flow', 'daily_review']
+        };
+        
+        const keys = bundleKeys[bundle_type];
+        let compliantCount = 0;
+        keys.forEach(k => {
+            if (checked_items[k] === true) compliantCount++;
+        });
+        
+        const compliance_rate = parseFloat(((compliantCount / keys.length) * 100).toFixed(2));
+        
+        if (compliance_rate < 100.0 && (!non_compliance_reason || !non_compliance_reason.trim())) {
+            return res.status(422).json({ error: 'non_compliance_reason is required when compliance rate is less than 100%' });
+        }
+        
+        // Verify admission exists and belongs to the tenant
+        const admissionCheck = await pool.query('SELECT 1 FROM admissions WHERE id = $1 AND tenant_id = $2', [parseInt(admission_id), tenantId]);
+        if (admissionCheck.rowCount === 0) {
+            return res.status(404).json({ error: 'Admission not found' });
+        }
+        
+        // Upsert daily bundle
+        const result = await pool.query(
+            `INSERT INTO icu_prevention_bundles (tenant_id, facility_id, admission_id, bundle_type, audit_date, checked_items, compliance_rate, non_compliance_reason, recorded_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             ON CONFLICT (tenant_id, admission_id, bundle_type, audit_date)
+             DO UPDATE SET checked_items = EXCLUDED.checked_items, compliance_rate = EXCLUDED.compliance_rate, non_compliance_reason = EXCLUDED.non_compliance_reason, recorded_by = EXCLUDED.recorded_by
+             RETURNING *`,
+            [tenantId, facilityId || null, parseInt(admission_id), bundle_type, audit_date, JSON.stringify(checked_items), compliance_rate, non_compliance_reason || null, req.session.user?.id || null]
+        );
+        
+        logAudit(req.session.user?.id, req.session.user?.display_name || req.session.user?.name, 'ICU_PREVENTION_BUNDLE_RECORD', 'ICU', `Recorded ${bundle_type} bundle audit for admission #${admission_id} on ${audit_date}. Compliance: ${compliance_rate}%`, tenantId);
+        
+        res.status(201).json(result.rows[0]);
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
 // ===== SaaS Billing Webhooks (Moyasar & Stripe) =====
 async function assignTenantPlanHelper(tenantId, planKey, source, assignedBy = null) {
     // 1. Check if plan exists
