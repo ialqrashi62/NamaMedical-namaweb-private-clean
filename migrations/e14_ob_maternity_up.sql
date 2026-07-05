@@ -233,6 +233,14 @@ CREATE TABLE IF NOT EXISTS obgyn_lab_panels (
     is_active INTEGER DEFAULT 1
 );
 
+-- Update old rows with missing tenant_id to use default tenant (1)
+UPDATE obgyn_pregnancies SET tenant_id = 1 WHERE tenant_id IS NULL;
+UPDATE obgyn_deliveries SET tenant_id = 1 WHERE tenant_id IS NULL;
+
+-- Enforce NOT NULL on tenant_id columns
+ALTER TABLE obgyn_pregnancies ALTER COLUMN tenant_id SET NOT NULL;
+ALTER TABLE obgyn_deliveries ALTER COLUMN tenant_id SET NOT NULL;
+
 -- ===== Indexes (RLS + tenant filtering) =====
 CREATE INDEX IF NOT EXISTS idx_obgyn_pregnancies_tenant_patient ON obgyn_pregnancies(tenant_id, patient_id);
 CREATE INDEX IF NOT EXISTS idx_obgyn_pregnancies_tenant_status ON obgyn_pregnancies(tenant_id, status);
