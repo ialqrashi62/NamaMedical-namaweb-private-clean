@@ -10515,32 +10515,191 @@ async function renderWaitingQueue(el) {
 
   // Group by doctor
   const byDoctor = {};
-  patients.forEach(p => { const d = p.doctor || p.doctor_name || tr('Unassigned', 'غير محدد'); if (!byDoctor[d]) byDoctor[d] = []; byDoctor[d].push(p); });
+  patients.forEach(p => { 
+    const d = p.doctor || p.doctor_name || tr('Unassigned', 'غير محدد'); 
+    if (!byDoctor[d]) byDoctor[d] = []; 
+    byDoctor[d].push(p); 
+  });
+
+  const getAcuityStyle = (level) => {
+    switch(parseInt(level, 10)) {
+      case 1: return { color: '#ef4444', bg: '#fef2f2', border: '#fca5a5', name_ar: 'إنعاش حرج (ESI-1)', name_en: 'Resuscitation (ESI-1)' };
+      case 2: return { color: '#f97316', bg: '#fff7ed', border: '#ffedd5', name_ar: 'حالة طارئة (ESI-2)', name_en: 'Emergent (ESI-2)' };
+      case 3: return { color: '#eab308', bg: '#fef9c3', border: '#fef08a', name_ar: 'عاجل (ESI-3)', name_en: 'Urgent (ESI-3)' };
+      case 4: return { color: '#3b82f6', bg: '#eff6ff', border: '#bfdbfe', name_ar: 'أقل عجلة (ESI-4)', name_en: 'Less Urgent (ESI-4)' };
+      default: return { color: '#10b981', bg: '#ecfdf5', border: '#a7f3d0', name_ar: 'غير عاجل (ESI-5)', name_en: 'Non-Urgent (ESI-5)' };
+    }
+  };
 
   content.innerHTML = `
-    <h2>${tr('Waiting Queue', 'قائمة الانتظار')}</h2>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px">
-      <div class="card" style="padding:16px;text-align:center;background:#e3f2fd"><h3 style="margin:0;color:#1565c0">${patients.length}</h3><p style="margin:4px 0 0;font-size:12px">${tr('In Queue', 'في الانتظار')}</p></div>
-      <div class="card" style="padding:16px;text-align:center;background:#e8f5e9"><h3 style="margin:0;color:#2e7d32">${todayAppts.length}</h3><p style="margin:4px 0 0;font-size:12px">${tr('Today Appointments', 'مواعيد اليوم')}</p></div>
-      <div class="card" style="padding:16px;text-align:center;background:#fff3e0"><h3 style="margin:0;color:#e65100">${Object.keys(byDoctor).length}</h3><p style="margin:4px 0 0;font-size:12px">${tr('Active Doctors', 'أطباء نشطون')}</p></div>
-    </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <h4 style="margin:0">${tr('Queue by Doctor', 'الطابور حسب الطبيب')}</h4>
+    <div style="display:flex;justify-content:between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+      <h2>${tr('Waiting Queue Dashboard', 'لوحة تحكم قائمة الانتظار')}</h2>
       <div style="display:flex;gap:8px;align-items:center">
-        <span style="font-size:12px;color:#666" id="queueTimer">⏱️ ${tr('Auto-refresh: 30s', 'تحديث تلقائي: 30 ثانية')}</span>
-        <button class="btn btn-sm" onclick="navigateTo(currentPage)" style="background:#e3f2fd;color:#1565c0">🔄 ${tr('Refresh', 'تحديث')}</button>
+        <span style="font-size:12px;color:var(--text-dim,#666)" id="queueTimer">⏱️ ${tr('Auto-refresh: 15s', 'تحديث تلقائي: 15 ثانية')}</span>
+        <button class="btn btn-sm" onclick="navigateTo(currentPage)" style="background:#e3f2fd;color:#1565c0">🔄 ${tr('Refresh', 'تحديث')} </button>
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(350px,1fr));gap:16px">
-      ${Object.entries(byDoctor).map(([doc, pts]) => '<div class="card" style="padding:16px"><h4 style="margin:0 0 8px;color:#1565c0">👨‍⚕️ ' + escapeHTML(doc) + ' <span style="font-size:12px;color:#666">(' + pts.length + ')</span></h4>' + pts.map((p, i) => '<div style="padding:8px;margin:4px 0;border-radius:8px;background:' + (i === 0 ? '#e8f5e9' : '#f5f5f5') + ';display:flex;justify-content:space-between;align-items:center"><span>' + (i + 1) + '. ' + escapeHTML(isArabic ? (p.name_ar || p.name_en || p.patient_name || p.name || '') : (p.name_en || p.name_ar || p.patient_name || p.name || '')) + '</span><span style="font-size:11px;color:#666">' + escapeHTML((p.queue_number || '') || '#' + (i + 1)) + '</span></div>').join('') + '</div>').join('')}
-      ${Object.keys(byDoctor).length === 0 ? '<div class="card" style="padding:40px;text-align:center;color:#999;grid-column:1/-1">' + tr('No patients in queue', 'لا يوجد مرضى في الانتظار') + '</div>' : ''}
-    </div>`;
 
-  // Auto-refresh every 30 seconds
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px">
+      <div class="card glass-card-premium" style="padding:20px;text-align:center;border-left:5px solid #1565c0;background:rgba(21,101,192,0.05)">
+        <h3 style="margin:0;color:#1565c0;font-size:28px">${patients.length}</h3>
+        <p style="margin:6px 0 0;font-size:13px;font-weight:bold">${tr('Patients in Queue', 'المرضى في الانتظار')}</p>
+      </div>
+      <div class="card glass-card-premium" style="padding:20px;text-align:center;border-left:5px solid #2e7d32;background:rgba(46,125,50,0.05)">
+        <h3 style="margin:0;color:#2e7d32;font-size:28px">${todayAppts.length}</h3>
+        <p style="margin:6px 0 0;font-size:13px;font-weight:bold">${tr('Today Appointments', 'مواعيد اليوم')}</p>
+      </div>
+      <div class="card glass-card-premium" style="padding:20px;text-align:center;border-left:5px solid #e65100;background:rgba(230,81,0,0.05)">
+        <h3 style="margin:0;color:#e65100;font-size:28px">${Object.keys(byDoctor).length}</h3>
+        <p style="margin:6px 0 0;font-size:13px;font-weight:bold">${tr('Active Doctors', 'الأطباء النشطون')}</p>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:20px">
+      ${Object.entries(byDoctor).map(([doc, pts]) => {
+        return `
+          <div class="card glass-card-premium" style="padding:20px">
+            <h4 style="margin:0 0 12px;color:var(--primary);display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border,#e0e0e0);padding-bottom:8px">
+              <span>👨‍⚕️ ${escapeHTML(doc)}</span>
+              <span class="badge" style="background:var(--primary-light,#e3f2fd);color:var(--primary);font-size:12px">${pts.length} ${tr('Patients', 'مرضى')}</span>
+            </h4>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              ${pts.map((p, i) => {
+                const acuity = getAcuityStyle(p.triage_level);
+                return `
+                  <div style="padding:14px;border-radius:12px;background:${acuity.bg};border:1px solid ${acuity.border};border-left:5px solid ${acuity.color};display:flex;flex-direction:column;gap:8px">
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                      <span style="font-weight:bold;font-size:15px;color:var(--text,#333)">
+                        ${i + 1}. ${escapeHTML(isArabic ? (p.name_ar || p.name_en) : (p.name_en || p.name_ar))}
+                      </span>
+                      <span style="font-size:12px;font-weight:bold;color:${acuity.color};padding:2px 8px;border-radius:20px;background:white;border:1px solid ${acuity.color}">
+                        ${isArabic ? acuity.name_ar : acuity.name_en}
+                      </span>
+                    </div>
+                    
+                    <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#666">
+                      <span>📁 MRN: <strong>${escapeHTML(String(p.file_number || p.patient_id))}</strong></span>
+                      <span>🚪 ${tr('Room:', 'غرفة:')} <strong>${escapeHTML(p.exam_room_id || tr('Not assigned', 'لم تحدد'))}</strong></span>
+                      <span>⏱️ ${tr('Status:', 'الحالة:')} <strong style="color:var(--primary)">${escapeHTML(p.status)}</strong></span>
+                    </div>
+
+                    ${p.acuity_notes ? `<div style="font-size:12px;background:rgba(255,255,255,0.6);padding:6px 10px;border-radius:6px;color:#555;border:1px dashed ${acuity.border}">📝 ${escapeHTML(p.acuity_notes)}</div>` : ''}
+
+                    <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+                      <button class="btn btn-sm" onclick="callPatientNotification(${p.id})" style="background:#e3f2fd;color:#1565c0;flex:1;min-width:70px">🔔 ${tr('Call', 'نداء')}</button>
+                      <button class="btn btn-sm" onclick="triagePatientModal(${p.id}, ${p.triage_level}, '${jsStr(p.acuity_notes || '')}')" style="background:#fff3e0;color:#e65100;flex:1;min-width:70px">🩺 ${tr('Triage', 'فرز')}</button>
+                      
+                      ${p.status === 'CheckedIn' || p.status === 'WaitingForProvider' ? `
+                        <button class="btn btn-sm btn-primary" onclick="updateQueueStatus(${p.id}, 'InConsultation')" style="flex:1.5;min-width:100px">⚡ ${tr('Consult', 'دخول العيادة')}</button>
+                      ` : ''}
+
+                      ${p.status === 'InConsultation' ? `
+                        <button class="btn btn-sm" onclick="updateQueueStatus(${p.id}, 'WaitingForResults')" style="background:#f3e5f5;color:#8e24aa;flex:1.2;min-width:80px">⏱️ ${tr('Hold', 'تعليق للنتائج')}</button>
+                        <button class="btn btn-sm btn-success" onclick="updateQueueStatus(${p.id}, 'ReadyForDischarge')" style="background:#e8f5e9;color:#2e7d32;flex:1.2;min-width:80px">🏁 ${tr('Discharge', 'إنهاء وخروج')}</button>
+                      ` : ''}
+
+                      ${p.status === 'WaitingForResults' ? `
+                        <button class="btn btn-sm btn-primary" onclick="updateQueueStatus(${p.id}, 'InConsultation')" style="flex:1.5;min-width:100px">⚡ ${tr('Resume', 'استئناف')}</button>
+                      ` : ''}
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      }).join('')}
+      ${Object.keys(byDoctor).length === 0 ? `
+        <div class="card glass-card-premium" style="padding:60px;text-align:center;color:#999;grid-column:1/-1">
+          <div style="font-size:48px;margin-bottom:12px">🪑</div>
+          <h3>${tr('No patients in waiting queue', 'لا يوجد مرضى في طابور الانتظار حالياً')}</h3>
+        </div>
+      ` : ''}
+    </div>
+  `;
+
+  // Auto-refresh every 15 seconds
   if (window._queueInterval) clearInterval(window._queueInterval);
-  window._queueInterval = setInterval(() => { if (currentPage === NAV_ITEMS.findIndex(n => n.en === 'Waiting Queue')) navigateTo(currentPage); }, 30000);
-
+  window._queueInterval = setInterval(() => { 
+    if (currentPage === NAV_ITEMS.findIndex(n => n.en === 'Waiting Queue')) navigateTo(currentPage); 
+  }, 15000);
 }
+
+window.triagePatientModal = (queueId, currentLevel, currentNotes) => {
+  const modal = document.createElement('div');
+  modal.id = 'triageModal';
+  modal.className = 'modal-backdrop';
+  modal.innerHTML = `
+    <div class="card glass-card-premium" style="max-width:450px;margin:10% auto;padding:24px;position:relative">
+      <h3 style="margin:0 0 16px;color:var(--primary)">🩺 ${tr('Clinical Triage & Prioritization', 'الفرز الطبي وتحديد الأولويات')}</h3>
+      <div class="form-group" style="margin-bottom:16px">
+        <label>${tr('Acuity / Triage Level (ESI)', 'مستوى الفرز الطبي والأولوية (ESI)')}</label>
+        <select id="triageLevelSelect" class="form-input">
+          <option value="1" ${currentLevel == 1 ? 'selected' : ''}>🔴 ESI-1: Resuscitation (إنعاش حرج)</option>
+          <option value="2" ${currentLevel == 2 ? 'selected' : ''}>🟠 ESI-2: Emergent (حالة طارئة)</option>
+          <option value="3" ${currentLevel == 3 ? 'selected' : ''}>🟡 ESI-3: Urgent (عاجل)</option>
+          <option value="4" ${currentLevel == 4 ? 'selected' : ''}>🔵 ESI-4: Less Urgent (أقل عجلة)</option>
+          <option value="5" ${currentLevel == 5 ? 'selected' : ''}>🟢 ESI-5: Non-Urgent (غير عاجل)</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:20px">
+        <label>${tr('Triage / Acuity Notes', 'ملاحظات الفرز وتوصيف الحالة')}</label>
+        <textarea id="triageNotesArea" class="form-input" style="height:80px" placeholder="${tr('Describe patient condition, pain score, or vitals...', 'أدخل وصف الحالة، مستوى الألم، أو العلامات الحيوية...')}">${escapeHTML(currentNotes || '')}</textarea>
+      </div>
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('triageModal').remove()">${tr('Cancel', 'إلغاء')}</button>
+        <button class="btn btn-primary" style="flex:2" onclick="saveTriageData(${queueId})">${tr('Save & Route to Doctor', 'حفظ وتوجيه للطبيب')}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+};
+
+window.saveTriageData = async (queueId) => {
+  const triage_level = parseInt(document.getElementById('triageLevelSelect').value, 10);
+  const acuity_notes = document.getElementById('triageNotesArea').value;
+  try {
+    await API.put(`/api/queue/patients/${queueId}/triage`, { triage_level, acuity_notes });
+    showToast(tr('Triage assessment updated!', 'تم تحديث تقييم الفرز الطبي وتوجيه المريض!'));
+    document.getElementById('triageModal').remove();
+    navigateTo(currentPage);
+  } catch (e) {
+    showToast(e.message || tr('Error saving triage', 'خطأ في حفظ الفرز'), 'error');
+  }
+};
+
+window.callPatientNotification = async (queueId) => {
+  try {
+    const res = await API.put(`/api/queue/patients/${queueId}/call`);
+    showToast(tr('Patient calling signal sent!', 'تم إرسال إشارة استدعاء المريض!') + ' 🔔');
+    
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const pName = res.patient_name || '';
+      const pRoom = res.room || '';
+      const text = isArabic 
+        ? `الرجاء من المريض ${pName} التوجه إلى عيادة الفحص ${pRoom}` 
+        : `Please, patient ${pName} proceed to exam room ${pRoom}`;
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = isArabic ? 'ar-SA' : 'en-US';
+      utterance.rate = 0.9;
+      window.speechSynthesis.speak(utterance);
+    }
+  } catch (e) {
+    showToast(e.message || tr('Error calling patient', 'خطأ في استدعاء المريض'), 'error');
+  }
+};
+
+window.updateQueueStatus = async (queueId, status) => {
+  try {
+    await API.put(`/api/queue/patients/${queueId}/status`, { status });
+    showToast(tr('Queue status updated!', 'تم تحديث حالة المريض في الطابور!'));
+    navigateTo(currentPage);
+  } catch (e) {
+    showToast(e.message || tr('Error updating queue status', 'خطأ في تحديث الحالة'), 'error');
+  }
+};
+
 window.callPatient = async function (id) {
   await API.put('/api/patients/' + id, { status: 'With Doctor' });
   showToast(tr('Patient called', 'تم مناداة المريض'));

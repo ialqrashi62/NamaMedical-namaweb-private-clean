@@ -206,6 +206,9 @@ run migrations/p1_03_department_owners_up.sql; val migrations/p1_03_department_o
 echo "=== P1 Phase F6 Pricing Overrides ==="
 run migrations/p1_04_pricing_overrides_up.sql; val migrations/p1_04_pricing_overrides_validate.sql
 
+echo "=== P1 Phase waiting_queue ACUITY ==="
+run migrations/p1_05_waiting_queue_acuity_up.sql; val migrations/p1_05_waiting_queue_acuity_validate.sql
+
 echo ""
 echo "=== ALL MIGRATIONS APPLIED + VALIDATED ==="
 echo "Next (operator): deploy the integration code + restart, then smoke:"
