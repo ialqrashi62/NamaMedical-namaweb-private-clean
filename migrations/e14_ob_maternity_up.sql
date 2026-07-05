@@ -241,9 +241,12 @@ UPDATE obgyn_deliveries SET tenant_id = 1 WHERE tenant_id IS NULL;
 ALTER TABLE obgyn_pregnancies ALTER COLUMN tenant_id SET NOT NULL;
 ALTER TABLE obgyn_deliveries ALTER COLUMN tenant_id SET NOT NULL;
 
--- Add Foreign Key constraints for tenant_id
+-- Add Foreign Key constraints for tenant_id and patient_id
 ALTER TABLE obgyn_pregnancies DROP CONSTRAINT IF EXISTS fk_obgyn_pregnancies_tenant;
 ALTER TABLE obgyn_pregnancies ADD CONSTRAINT fk_obgyn_pregnancies_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
+
+ALTER TABLE obgyn_pregnancies DROP CONSTRAINT IF EXISTS fk_obgyn_pregnancies_patient;
+ALTER TABLE obgyn_pregnancies ADD CONSTRAINT fk_obgyn_pregnancies_patient FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE;
 
 ALTER TABLE obgyn_deliveries DROP CONSTRAINT IF EXISTS fk_obgyn_deliveries_tenant;
 ALTER TABLE obgyn_deliveries ADD CONSTRAINT fk_obgyn_deliveries_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
