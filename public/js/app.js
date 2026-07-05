@@ -2674,7 +2674,7 @@ window.e1RenderProblems = async (pid) => {
   body.innerHTML = `
     <div class="form-group mb-8"><label>${tr('Problem description', 'وصف المشكلة')}</label><input class="form-input" id="e1ProbDesc"></div>
     <div class="flex gap-8 mb-8">
-      <div class="form-group" style="flex:1"><label>ICD-10</label><input class="form-input" id="e1ProbIcd"></div>
+      <div class="form-group" style="flex:1"><label>${tr('Problem ICD-10', 'رمز تشخيص المشكلة')}</label><input class="form-input" id="e1ProbIcd"></div>
       <div class="form-group" style="flex:1"><label>SNOMED</label><input class="form-input" id="e1ProbSnomed"></div>
     </div>
     <button class="btn btn-primary btn-sm mb-12" onclick="e1AddProblem(${safeId(pid)})">➕ ${tr('Add Problem', 'إضافة مشكلة')}</button>
@@ -5587,8 +5587,8 @@ async function renderDoctor(el) {
   
   el.innerHTML = `
     <div class="page-title">👨‍⚕️ ${tr('Doctor Station', 'محطة الطبيب')}</div>
-    <div class="doctor-split-layout">
-      <div>
+    <div class="doctor-workspace-grid">
+      <div class="doctor-main-col">
         <div class="card glass-card-premium mb-16">
           <div class="card-title">📝 ${tr('Select Patient', 'اختيار المريض')}</div>
           <select class="form-input w-full" id="drPatient" onchange="loadPatientInfo()">
@@ -5623,6 +5623,8 @@ async function renderDoctor(el) {
             <button class="btn btn-sm" onclick="showMedicalReportForm('medical_report')" style="flex:1;background:#e3f2fd;border:1px solid #1565c0;color:#1565c0;min-width:120px">📋 ${tr('Med Report', 'تقرير طبي')}</button>
             <button class="btn btn-sm" onclick="showMedicalReportForm('fitness')" style="flex:1;background:#e8f5e9;border:1px solid #2e7d32;color:#2e7d32;min-width:120px">✅ ${tr('Fitness', 'شهادة لياقة')}</button>
           </div>
+      </div>
+      <div class="doctor-side-col">
         <div class="card glass-card-premium mb-16">
           <div class="card-title">🏥 ${tr('Procedures / Services Performed', 'الإجراءات / الخدمات المنفذة')} ${drSpecialty ? `<span class="badge badge-info" style="font-size:11px;
 margin-right:8px">${escapeHTML(drSpecialty)}</span>` : ''}</div>
@@ -5998,11 +6000,11 @@ margin-right:8px">${escapeHTML(drSpecialty)}</span>` : ''}</div>
           <button class="btn btn-info w-full" onclick="scheduleFollowup()">📅 ${tr('Book Follow-up', 'حجز موعد متابعة')}</button>
         </div>
       </div>
-      <div class="card glass-card-premium">
-        <div class="card-title">📋 ${tr('Medical Records', 'السجلات الطبية')}</div>
-        <input class="search-filter" placeholder="${tr('Search...', 'بحث...')}" oninput="filterTable(this,'drTable')">
-        <div id="drTable">${makeTable([tr('Patient', 'المريض'), tr('Diagnosis', 'التشخيص'), tr('Symptoms', 'الأعراض'), tr('Date/Time', 'التاريخ/الوقت'), tr('Status', 'الحالة'), tr('Actions', 'إجراءات')], records.map(r => ({ cells: [r.patient_name || '', r.diagnosis, r.symptoms, r.visit_date ? new Date(r.visit_date).toLocaleString('ar-SA', { dateStyle: 'short', timeStyle: 'short' }) : '', emrStatusBadge(r.emr_status), emrRecordActions(r)] })))}</div>
-      </div>
+    </div>
+    <div class="card glass-card-premium mt-20">
+      <div class="card-title">📋 ${tr('Medical Records', 'السجلات الطبية')}</div>
+      <input class="search-filter" placeholder="${tr('Search...', 'بحث...')}" oninput="filterTable(this,'drTable')">
+      <div id="drTable">${makeTable([tr('Patient', 'المريض'), tr('Diagnosis', 'التشخيص'), tr('Symptoms', 'الأعراض'), tr('Date/Time', 'التاريخ/الوقت'), tr('Status', 'الحالة'), tr('Actions', 'إجراءات')], records.map(r => ({ cells: [r.patient_name || '', r.diagnosis, r.symptoms, r.visit_date ? new Date(r.visit_date).toLocaleString('ar-SA', { dateStyle: 'short', timeStyle: 'short' }) : '', emrStatusBadge(r.emr_status), emrRecordActions(r)] })))}</div>
     </div>`;
 }
 function statusText(s) { return s === 'Waiting' ? tr('Waiting', 'بالانتظار') : s === 'With Doctor' ? tr('With Doctor', 'مع الطبيب') : tr('Done', 'منتهي'); }

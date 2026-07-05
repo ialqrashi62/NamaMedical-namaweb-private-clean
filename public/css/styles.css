@@ -2266,6 +2266,27 @@ body {
   }
 }
 
+/* Doctor Workspace Grid Layout */
+.doctor-workspace-grid {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.doctor-main-col,
+.doctor-side-col {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 1200px) {
+  .doctor-workspace-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+
 
 
 
