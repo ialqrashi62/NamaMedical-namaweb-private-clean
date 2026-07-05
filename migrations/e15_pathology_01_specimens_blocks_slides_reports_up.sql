@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS path_specimens (
     tenant_id         INTEGER NOT NULL REFERENCES tenants(id),
     facility_id       INTEGER,
     patient_id        INTEGER NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
-    visit_id          INTEGER REFERENCES visits(id),
+    visit_id          INTEGER,
     accession_number  TEXT NOT NULL,
     specimen_type     TEXT,
     site              TEXT,
