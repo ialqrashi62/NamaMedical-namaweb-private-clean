@@ -2205,6 +2205,68 @@ body {
   color: #ffffff !important;
 }
 
+/* ===== DOCTOR STATION UPGRADED DESIGN (v3) ===== */
+.doctor-split-layout {
+  display: grid;
+  grid-template-columns: 1fr 380px; /* Forms get main 1fr space, records list gets 380px */
+  gap: 20px;
+}
+
+[dir="rtl"] .doctor-split-layout {
+  grid-template-columns: 380px 1fr; /* In RTL, records is on the right (380px), forms are on the left (1fr) */
+}
+
+/* Ensure children order behaves correctly in RTL */
+[dir="rtl"] .doctor-split-layout > :first-child {
+  order: 2; /* Forms goes to the second grid column (left, 1fr) */
+}
+
+[dir="rtl"] .doctor-split-layout > :last-child {
+  order: 1; /* Records list goes to the first grid column (right, 380px) */
+}
+
+/* Premium specialty tabs styling */
+.e1-tab {
+  background: var(--input, #ffffff);
+  border: 1px solid var(--border, rgba(0,0,0,0.08));
+  color: var(--text-dim, #42474d);
+  font-weight: 600;
+  font-size: 12px;
+  border-radius: var(--radius-xs, 8px);
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.e1-tab:hover {
+  background: var(--hover, rgba(0,0,0,0.02));
+  color: var(--text, #191c1d);
+  border-color: var(--accent, #006970);
+}
+
+.e1-tab.btn-primary {
+  background: var(--accent, #006970) !important;
+  border-color: var(--accent, #006970) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px var(--accent-glow, rgba(0, 105, 112, 0.15)) !important;
+}
+
+@media (max-width: 1024px) {
+  .doctor-split-layout,
+  [dir="rtl"] .doctor-split-layout {
+    grid-template-columns: 1fr !important;
+  }
+  [dir="rtl"] .doctor-split-layout > :first-child,
+  [dir="rtl"] .doctor-split-layout > :last-child {
+    order: unset !important;
+  }
+}
+
+
 
 
 

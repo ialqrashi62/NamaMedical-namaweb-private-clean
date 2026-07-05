@@ -5534,7 +5534,7 @@ async function renderDoctor(el) {
   // Show premium loading skeletons instantly
   el.innerHTML = `
     <div class="page-title">👨‍⚕️ ${tr('Doctor Station', 'محطة الطبيب')}</div>
-    <div class="split-layout">
+    <div class="doctor-split-layout">
       <div>
         <div class="card glass-card-premium mb-16">
           <div class="skeleton-bar title mb-16"></div>
@@ -5587,7 +5587,7 @@ async function renderDoctor(el) {
   
   el.innerHTML = `
     <div class="page-title">👨‍⚕️ ${tr('Doctor Station', 'محطة الطبيب')}</div>
-    <div class="split-layout">
+    <div class="doctor-split-layout">
       <div>
         <div class="card glass-card-premium mb-16">
           <div class="card-title">📝 ${tr('Select Patient', 'اختيار المريض')}</div>
