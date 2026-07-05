@@ -21021,6 +21021,7 @@ window.e1LoadPedHistory = async (pid) => {
   } catch (err) {
     container.innerHTML = `<div style="color:red">${tr('Error loading history', 'خطأ في تحميل السجل')}</div>`;
   }
+};
 window.e1UpdateGrowthChart = (pid) => {
   const chartTypeSelect = document.getElementById('e1PedChartType');
   const chart = document.getElementById('e1PedGrowthChart');
