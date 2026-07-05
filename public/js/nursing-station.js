@@ -168,6 +168,8 @@ async function renderNursingStation(el) {
     return;
   }
 
+  if (!Array.isArray(worklist)) worklist = [];
+  if (!Array.isArray(emarOrders)) emarOrders = [];
   window._NS.worklist = worklist;
   window._NS.emarOrders = emarOrders;
   window._NS.currentUser = currentUser.user || currentUser;
@@ -253,6 +255,16 @@ window.nsRenderWorklist = function(patients) {
   const body = document.getElementById('nsWorklistBody');
   const count = document.getElementById('nsWorklistCount');
   if (!body) return;
+  // Queue rows carry the queue-row id in `id` and the real patient id in `patient_id`.
+  // Resolve to the patient id and drop duplicate queue rows for the same patient.
+  if (!Array.isArray(patients)) patients = [];
+  const seenPids = new Set();
+  patients = patients.filter(p => {
+    const pid = p.patient_id || p.id;
+    if (!pid || seenPids.has(pid)) return false;
+    seenPids.add(pid);
+    return true;
+  });
   if (count) count.textContent = patients.length;
 
   if (!patients.length) {
@@ -264,9 +276,10 @@ window.nsRenderWorklist = function(patients) {
   }
 
   body.innerHTML = patients.map(p => {
+    const pid = p.patient_id || p.id;
     const name = isArabic ? (p.name_ar || p.name_en || '-') : (p.name_en || p.name_ar || '-');
     const initial = (name || '?').charAt(0).toUpperCase();
-    const isActive = window._NS.selectedPatientId === p.id;
+    const isActive = window._NS.selectedPatientId === pid;
     const ewsScore = p.ews_score || 0;
     const ewsColor = getEWSColor(ewsScore);
     const statusColor = p.status === 'With Doctor' ? '#16a34a' : p.status === 'With Nurse' ? '#0ea5e9' : '#ca8a04';
@@ -276,8 +289,8 @@ window.nsRenderWorklist = function(patients) {
 
     return `
       <div class="ns-worklist-item ${isActive ? 'active' : ''}"
-           onclick="window.nsSelectPatient(${safeId(p.id)})"
-           data-pid="${safeId(p.id)}">
+           onclick="window.nsSelectPatient(${safeId(pid)})"
+           data-pid="${safeId(pid)}">
         <div class="ns-worklist-avatar" style="background:linear-gradient(135deg,${tColor},${tColor}88)">${escapeHTML(initial)}</div>
         <div class="ns-worklist-info">
           <div class="ns-worklist-name">${escapeHTML(name)}</div>
@@ -301,8 +314,8 @@ window.nsRefreshWorklist = async function() {
     const q = await API.get('/api/queue/patients').catch(() =>
       API.get('/api/patients').then(p => p.filter(x => x.status === 'Waiting' || x.status === 'With Nurse' || x.status === 'With Doctor'))
     );
-    window._NS.worklist = q;
-    window.nsRenderWorklist(q);
+    window._NS.worklist = Array.isArray(q) ? q : [];
+    window.nsRenderWorklist(window._NS.worklist);
   } catch (e) { /* silent */ }
 };
 
@@ -333,6 +346,15 @@ window.nsSelectPatient = async function(patientId) {
       API.get('/api/emar/orders').catch(() => []),
     ]);
   } catch (e) { console.error('Chart load error:', e); }
+
+  // API.get resolves with the error JSON (not a throw) on 4xx/5xx — normalize shapes
+  const asArray = v => (Array.isArray(v) ? v : []);
+  vitals = asArray(vitals);
+  problems = asArray(problems);
+  allergies = asArray(allergies);
+  medications = asArray(medications);
+  emarOrders = asArray(emarOrders);
+  if (!chart || typeof chart !== 'object' || chart.error) chart = {};
 
   const patient = chart.patient || {};
   window._NS.selectedPatientData = { patient, chart, vitals, problems, allergies, medications, emarOrders };

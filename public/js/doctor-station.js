@@ -166,6 +166,16 @@ async function renderDoctor(el) {
 window.dsRenderWaitList = function(patients) {
   const list = document.getElementById('dsWaitList');
   if (!list) return;
+  // Queue rows carry the queue-row id in `id` and the real patient id in `patient_id`.
+  // Resolve to the patient id and drop duplicate queue rows for the same patient.
+  if (!Array.isArray(patients)) patients = [];
+  const seenPids = new Set();
+  patients = patients.filter(p => {
+    const pid = p.patient_id || p.id;
+    if (!pid || seenPids.has(pid)) return false;
+    seenPids.add(pid);
+    return true;
+  });
   const countEl = document.getElementById('dsWaitCount');
   if (countEl) countEl.textContent = patients.length;
 
@@ -178,17 +188,18 @@ window.dsRenderWaitList = function(patients) {
   }
 
   list.innerHTML = patients.map(p => {
+    const pid = p.patient_id || p.id;
     const name = isArabic ? (p.name_ar || p.name_en || '-') : (p.name_en || p.name_ar || '-');
     const initial = (name || '?').charAt(0).toUpperCase();
     const waitMin = Math.round(parseFloat(p.wait_minutes || 0));
     const timerClass = waitMin > 60 ? 'critical' : waitMin > 30 ? 'warning' : 'normal';
     const timerText = waitMin > 0 ? (waitMin + ' ' + tr('min', 'د')) : tr('Now', 'الآن');
-    const isActive = window._DS.selectedPatientId === p.id;
+    const isActive = window._DS.selectedPatientId === pid;
     const isWithDoc = p.status === 'With Doctor';
     return `
       <div class="ds-wait-item ${isActive ? 'active' : ''} ${isWithDoc ? 'with-doctor' : ''}"
-           onclick="window.dsSelectPatient(${safeId(p.id)})"
-           data-pid="${safeId(p.id)}">
+           onclick="window.dsSelectPatient(${safeId(pid)})"
+           data-pid="${safeId(pid)}">
         <div class="ds-wait-avatar">${escapeHTML(initial)}</div>
         <div class="ds-wait-info">
           <div class="ds-wait-name">${escapeHTML(name)}</div>
@@ -243,6 +254,14 @@ window.dsSelectPatient = async function(patientId) {
       API.get(`/api/patients/${patientId}/medications`).catch(() => []),
     ]);
   } catch (e) { console.error('Chart load error:', e); }
+
+  // API.get resolves with the error JSON (not a throw) on 4xx/5xx — normalize shapes
+  const asArray = v => (Array.isArray(v) ? v : []);
+  vitals = asArray(vitals);
+  problems = asArray(problems);
+  allergies = asArray(allergies);
+  medications = asArray(medications);
+  if (!chart || typeof chart !== 'object' || chart.error) chart = {};
 
   const patient = chart.patient || {};
   window._DS.selectedPatientData = { patient, chart, vitals, problems, allergies, medications };
