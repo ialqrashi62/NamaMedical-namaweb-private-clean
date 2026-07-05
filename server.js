@@ -15636,7 +15636,7 @@ app.put('/api/appointments/:id/checkin', requireAuth, requireRole('appointments'
         if (!appt) return res.status(404).json({ error: 'Appointment not found' });
 
         // Update appointment status
-        await pool.query("UPDATE appointments SET status='Checked-In', check_in_time=CURRENT_TIMESTAMP WHERE id=$1", [req.params.id]);
+        await pool.query("UPDATE appointments SET status='Checked-In' WHERE id=$1", [req.params.id]);
 
         // Create visit lifecycle entry (visit_lifecycle schema provisioned out-of-band; no DDL in handler)
         const visit = await pool.query(
