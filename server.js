@@ -19727,6 +19727,166 @@ app.get('/api/pediatrics/apgar/:patientId', requireAuth, requireTenantScope, asy
 });
 
 
+
+// ===== NURSING STATION EXTENSIONS (v1) =====
+// Auto-provision visit_lifecycle table (fixes production error: relation does not exist)
+async function ensureVisitLifecycleTable() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS visit_lifecycle (
+                id SERIAL PRIMARY KEY,
+                tenant_id INTEGER,
+                patient_id INTEGER,
+                patient_name VARCHAR(255),
+                appointment_id INTEGER,
+                doctor VARCHAR(255),
+                department VARCHAR(255),
+                status VARCHAR(64) DEFAULT 'arrived',
+                arrived_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                with_nurse_at TIMESTAMPTZ,
+                with_doctor_at TIMESTAMPTZ,
+                discharged_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_visit_lifecycle_patient ON visit_lifecycle(patient_id)`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_visit_lifecycle_date ON visit_lifecycle(created_at)`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_visit_lifecycle_tenant ON visit_lifecycle(tenant_id)`);
+        console.log('[NS] visit_lifecycle table ensured ✅');
+    } catch (e) { console.warn('[NS] visit_lifecycle ensure:', e.message); }
+}
+
+// Auto-provision nursing_io table
+async function ensureNursingIOTable() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS nursing_io (
+                id SERIAL PRIMARY KEY,
+                tenant_id INTEGER,
+                patient_id INTEGER,
+                entry_type VARCHAR(32) NOT NULL CHECK (entry_type IN ('intake','output')),
+                source VARCHAR(128) NOT NULL,
+                volume_ml INTEGER NOT NULL DEFAULT 0,
+                entry_time VARCHAR(10),
+                shift VARCHAR(64),
+                nurse_name VARCHAR(255),
+                notes TEXT DEFAULT '',
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_nursing_io_patient ON nursing_io(patient_id)`);
+        console.log('[NS] nursing_io table ensured ✅');
+    } catch (e) { console.warn('[NS] nursing_io ensure:', e.message); }
+}
+
+// Auto-provision nursing_handover table
+async function ensureNursingHandoverTable() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS nursing_handover (
+                id SERIAL PRIMARY KEY,
+                tenant_id INTEGER,
+                patient_id INTEGER,
+                nurse_name VARCHAR(255),
+                shift VARCHAR(64),
+                sbar_s TEXT DEFAULT '',
+                sbar_b TEXT DEFAULT '',
+                sbar_a TEXT DEFAULT '',
+                sbar_r TEXT DEFAULT '',
+                news2_score INTEGER DEFAULT 0,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_nursing_handover_patient ON nursing_handover(patient_id)`);
+        console.log('[NS] nursing_handover table ensured ✅');
+    } catch (e) { console.warn('[NS] nursing_handover ensure:', e.message); }
+}
+
+// Run table provisioning on startup
+Promise.all([ensureVisitLifecycleTable(), ensureNursingIOTable(), ensureNursingHandoverTable()])
+    .then(() => console.log('[NS] All nursing extension tables ready ✅'))
+    .catch(e => console.warn('[NS] Table setup warning:', e.message));
+
+// ===== I&O: GET — get all entries for a patient =====
+app.get('/api/nursing/io/:patientId', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const tenantId = req.user?.tenant_id;
+        const pid = parseInt(req.params.patientId, 10);
+        const date = req.query.date || new Date().toISOString().slice(0, 10);
+        const whereClause = tenantId
+            ? 'WHERE ni.patient_id=$1 AND ni.tenant_id=$2 AND ni.created_at::date=$3'
+            : 'WHERE ni.patient_id=$1 AND ni.created_at::date=$2';
+        const params = tenantId ? [pid, tenantId, date] : [pid, date];
+        const r = await pool.query(
+            `SELECT * FROM nursing_io ni ${whereClause} ORDER BY ni.created_at ASC`,
+            params
+        );
+        const entries = r.rows;
+        const intake  = entries.filter(e => e.entry_type === 'intake').reduce((s, e) => s + (e.volume_ml || 0), 0);
+        const output  = entries.filter(e => e.entry_type === 'output').reduce((s, e) => s + (e.volume_ml || 0), 0);
+        res.json({ entries, intake, output, balance: intake - output });
+    } catch (e) { console.error('[NS I&O GET]', e); res.status(500).json({ error: e.message }); }
+});
+
+// ===== I&O: POST — add entry =====
+app.post('/api/nursing/io', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const tenantId = req.user?.tenant_id;
+        const { patient_id, entry_type, source, volume_ml, entry_time, shift, notes } = req.body;
+        if (!patient_id || !entry_type || !source || !volume_ml) {
+            return res.status(400).json({ error: 'patient_id, entry_type, source, volume_ml required' });
+        }
+        if (!['intake', 'output'].includes(entry_type)) {
+            return res.status(400).json({ error: 'entry_type must be intake or output' });
+        }
+        const r = await pool.query(
+            `INSERT INTO nursing_io (tenant_id, patient_id, entry_type, source, volume_ml, entry_time, shift, nurse_name, notes)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+            [tenantId, patient_id, entry_type, source, parseInt(volume_ml, 10),
+             entry_time || new Date().toTimeString().slice(0,5),
+             shift || 'General',
+             req.user?.name || req.user?.username || 'Nurse',
+             notes || '']
+        );
+        res.json(r.rows[0]);
+    } catch (e) { console.error('[NS I&O POST]', e); res.status(500).json({ error: e.message }); }
+});
+
+// ===== Handover SBAR: GET =====
+app.get('/api/nursing/handover/:patientId', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const tenantId = req.user?.tenant_id;
+        const pid = parseInt(req.params.patientId, 10);
+        const whereClause = tenantId ? 'WHERE patient_id=$1 AND tenant_id=$2' : 'WHERE patient_id=$1';
+        const params = tenantId ? [pid, tenantId] : [pid];
+        const r = await pool.query(
+            `SELECT * FROM nursing_handover ${whereClause} ORDER BY created_at DESC LIMIT 10`,
+            params
+        );
+        res.json(r.rows);
+    } catch (e) { console.error('[NS Handover GET]', e); res.status(500).json({ error: e.message }); }
+});
+
+// ===== Handover SBAR: POST =====
+app.post('/api/nursing/handover', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const tenantId = req.user?.tenant_id;
+        const { patient_id, sbar_s, sbar_b, sbar_a, sbar_r, shift, news2_score } = req.body;
+        if (!patient_id) return res.status(400).json({ error: 'patient_id required' });
+        const r = await pool.query(
+            `INSERT INTO nursing_handover (tenant_id, patient_id, nurse_name, shift, sbar_s, sbar_b, sbar_a, sbar_r, news2_score)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+            [tenantId, patient_id,
+             req.user?.name || req.user?.username || 'Nurse',
+             shift || 'General',
+             sbar_s || '', sbar_b || '', sbar_a || '', sbar_r || '',
+             parseInt(news2_score, 10) || 0]
+        );
+        res.json(r.rows[0]);
+    } catch (e) { console.error('[NS Handover POST]', e); res.status(500).json({ error: e.message }); }
+});
+
 // ===== SPA CATCH-ALL (must be LAST route) =====
 app.get('*', (req, res) => {
     if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });

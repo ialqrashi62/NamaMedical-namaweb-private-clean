@@ -937,6 +937,110 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
       </div>
     </div>
 
+    <!-- Diet Order -->
+    <div class="ds-order-section">
+      <div class="ds-order-section-header" onclick="window.dsToggleSection(this)">
+        🥗 ${tr('Diet Order', 'أمر الحمية')} <span style="margin-inline-start:auto">▾</span>
+      </div>
+      <div class="ds-order-section-body">
+        <div class="form-group mb-8">
+          <label style="font-size:11px;font-weight:700">${tr('Diet Type', 'نوع الحمية')}</label>
+          <select class="form-input" id="dsDietType">
+            <option value="Normal Diet">🍽️ ${tr('Normal Diet', 'حمية عادية')}</option>
+            <option value="Diabetic Diet">🩸 ${tr('Diabetic Diet', 'حمية سكري')}</option>
+            <option value="Renal Diet">🫘 ${tr('Renal Diet', 'حمية كلوي')}</option>
+            <option value="Low Sodium Diet">🧂 ${tr('Low Sodium', 'منخفض الصوديوم')}</option>
+            <option value="Cardiac Diet">❤️ ${tr('Cardiac Diet', 'حمية قلبية')}</option>
+            <option value="High Protein Diet">💪 ${tr('High Protein', 'عالي البروتين')}</option>
+            <option value="NPO (Nothing by Mouth)">🚫 NPO — ${tr('Nothing by Mouth', 'ممنوع الطعام والشراب')}</option>
+            <option value="Clear Liquid Diet">💧 ${tr('Clear Liquids Only', 'سوائل شفافة فقط')}</option>
+          </select>
+        </div>
+        <div class="form-group mb-8">
+          <label style="font-size:11px;font-weight:700">${tr('Duration', 'المدة')}</label>
+          <select class="form-input" id="dsDietDuration">
+            <option>24 ساعة</option>
+            <option>48 ساعة</option>
+            <option>حتى إشعار آخر</option>
+          </select>
+        </div>
+        <button class="btn w-full" onclick="window.dsOrderDiet(${pid})"
+          style="height:36px;font-size:12px;background:#16a34a;color:#fff;border:none">
+          🥗 ${tr('Order Diet', 'طلب الحمية')}
+        </button>
+      </div>
+    </div>
+
+    <!-- IV Fluids Order -->
+    <div class="ds-order-section">
+      <div class="ds-order-section-header" onclick="window.dsToggleSection(this)">
+        💉 ${tr('IV Fluids', 'السوائل الوريدية')} <span style="margin-inline-start:auto">▾</span>
+      </div>
+      <div class="ds-order-section-body">
+        <div class="form-group mb-8">
+          <label style="font-size:11px;font-weight:700">${tr('Fluid Type', 'نوع السائل')}</label>
+          <select class="form-input" id="dsIvType">
+            <option value="Normal Saline 0.9% (NS)">Normal Saline 0.9% (NS)</option>
+            <option value="Dextrose 5% in Water (D5W)">Dextrose 5% in Water (D5W)</option>
+            <option value="Lactated Ringer's (LR)">Lactated Ringer's (LR)</option>
+            <option value="Half-Normal Saline (0.45% NS)">Half-Normal Saline (0.45% NS)</option>
+            <option value="D5 in 0.45% NS">D5 in 0.45% NS</option>
+            <option value="D5 in Lactated Ringer's">D5 in Lactated Ringer's</option>
+          </select>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px" class="mb-8">
+          <div>
+            <label style="font-size:10px;font-weight:700;color:var(--text-dim)">${tr('Rate (mL/hr)', 'المعدل mL/ساعة')}</label>
+            <input class="form-input" id="dsIvRate" type="number" min="10" max="500" value="100" style="height:32px;font-size:12px;padding:4px 8px">
+          </div>
+          <div>
+            <label style="font-size:10px;font-weight:700;color:var(--text-dim)">${tr('Duration (hr)', 'المدة (ساعة)')}</label>
+            <input class="form-input" id="dsIvDuration" type="number" min="1" max="72" value="8" style="height:32px;font-size:12px;padding:4px 8px">
+          </div>
+        </div>
+        <div class="form-group mb-8">
+          <label style="font-size:11px;font-weight:700">${tr('Additive', 'إضافة')}</label>
+          <input class="form-input" id="dsIvAdditive" placeholder="${tr('e.g. KCl 20mEq, MgSO4...', 'مثال: KCl 20mEq')}">
+        </div>
+        <button class="btn w-full" onclick="window.dsOrderIV(${pid})"
+          style="height:36px;font-size:12px;background:#0369a1;color:#fff;border:none">
+          💉 ${tr('Order IV Fluids', 'طلب سوائل وريدية')}
+        </button>
+      </div>
+    </div>
+
+    <!-- Nursing Order -->
+    <div class="ds-order-section">
+      <div class="ds-order-section-header" onclick="window.dsToggleSection(this)">
+        🩺 ${tr('Nursing Orders', 'أوامر التمريض')} <span style="margin-inline-start:auto">▾</span>
+      </div>
+      <div class="ds-order-section-body">
+        <div class="form-group mb-8">
+          <label style="font-size:11px;font-weight:700">${tr('Order Type', 'نوع الأمر')}</label>
+          <select class="form-input" id="dsNursingType">
+            <option value="Monitor BP every 4h">📊 ${tr('Monitor BP q4h', 'قياس الضغط كل 4 ساعات')}</option>
+            <option value="Monitor BP every 2h">📊 ${tr('Monitor BP q2h', 'قياس الضغط كل ساعتين')}</option>
+            <option value="Vital Signs every 4h">❤️ ${tr('Vital Signs q4h', 'مؤشرات حيوية كل 4 ساعات')}</option>
+            <option value="Strict I&O monitoring">💧 ${tr('Strict I&O Monitoring', 'مراقبة السوائل الدقيقة')}</option>
+            <option value="Daily weight">⚖️ ${tr('Daily Weight', 'وزن يومي')}</option>
+            <option value="Fall precautions">⚠️ ${tr('Fall Precautions', 'احتياطات السقوط')}</option>
+            <option value="Bed rest">🛏️ ${tr('Bed Rest', 'راحة تامة')}</option>
+            <option value="Wound care daily">🩹 ${tr('Wound Care Daily', 'رعاية الجرح يومياً')}</option>
+            <option value="Foley catheter care">🔧 ${tr('Foley Catheter Care', 'رعاية القسطرة')}</option>
+            <option value="Oxygen 2-4L/min via nasal cannula">💨 ${tr('O2 2-4L via NC', 'أكسجين 2-4 لتر/دقيقة')}</option>
+          </select>
+        </div>
+        <div class="form-group mb-8">
+          <label style="font-size:11px;font-weight:700">${tr('Additional Notes', 'ملاحظات إضافية')}</label>
+          <input class="form-input" id="dsNursingNote" placeholder="${tr('Specify if needed...', 'حدد إن لزم...')}">
+        </div>
+        <button class="btn w-full" onclick="window.dsOrderNursing(${pid})"
+          style="height:36px;font-size:12px;background:#7c3aed;color:#fff;border:none">
+          🩺 ${tr('Issue Nursing Order', 'إصدار أمر تمريض')}
+        </button>
+      </div>
+    </div>
+
     <!-- Sign & Close -->
     <div style="padding:12px 0">
       <button class="btn w-full" onclick="window.dsSignEncounter()"
@@ -948,6 +1052,7 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
 
   window.dsRenderRxItems();
 };
+
 
 /* ============================================================ */
 /*  Collapsible Sections                                         */
@@ -1040,7 +1145,13 @@ window.dsRenderRxItems = function() {
     return;
   }
 
-  container.innerHTML = window._DS.rxItems.map((item, idx) => `
+  container.innerHTML = window._DS.rxItems.map((item, idx) => {
+    // Auto-calculate Qty Total based on duration days × frequency multiplier
+    const durDays = parseInt(item.duration) || 7;
+    const freqMult = item.frequency?.includes('4 مرات') ? 4 : item.frequency?.includes('3 مرات') ? 3 : item.frequency?.includes('مرتان') ? 2 : item.frequency?.includes('6') ? 4 : item.frequency?.includes('8') ? 3 : 1;
+    const qtyTotal = (item.qty || 1) * freqMult * durDays;
+
+    return `
     <div style="background:var(--surface-container,#f8fafc);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <strong style="font-size:12px">💊 ${escapeHTML(item.nameAr || item.nameEn)}</strong>
@@ -1068,7 +1179,7 @@ window.dsRenderRxItems = function() {
         <div>
           <label style="font-size:10px;font-weight:700;color:var(--text-dim)">${tr('Frequency', 'التكرار')}</label>
           <select class="form-input" style="height:30px;font-size:12px;padding:2px 6px"
-            onchange="window._DS.rxItems[${idx}].frequency=this.value">
+            onchange="window._DS.rxItems[${idx}].frequency=this.value;window.dsRenderRxItems()">
             <option ${item.frequency === 'مرة يومياً' ? 'selected' : ''}>مرة يومياً</option>
             <option ${item.frequency === 'مرتان يومياً' ? 'selected' : ''}>مرتان يومياً</option>
             <option ${item.frequency === '3 مرات يومياً' ? 'selected' : ''}>3 مرات يومياً</option>
@@ -1081,7 +1192,7 @@ window.dsRenderRxItems = function() {
         <div>
           <label style="font-size:10px;font-weight:700;color:var(--text-dim)">${tr('Duration', 'المدة')}</label>
           <select class="form-input" style="height:30px;font-size:12px;padding:2px 6px"
-            onchange="window._DS.rxItems[${idx}].duration=this.value">
+            onchange="window._DS.rxItems[${idx}].duration=this.value;window.dsRenderRxItems()">
             <option>3 أيام</option>
             <option ${item.duration === '5 أيام' ? 'selected' : ''}>5 أيام</option>
             <option ${item.duration === '7 أيام' ? 'selected' : ''} selected>7 أيام</option>
@@ -1091,12 +1202,29 @@ window.dsRenderRxItems = function() {
             <option>استمراري</option>
           </select>
         </div>
+        <div>
+          <label style="font-size:10px;font-weight:700;color:var(--text-dim)">${tr('Refill (0-3)', 'التكرار المسموح')}</label>
+          <select class="form-input" style="height:30px;font-size:12px;padding:2px 6px"
+            onchange="window._DS.rxItems[${idx}].refill=parseInt(this.value)">
+            <option value="0" ${!item.refill ? 'selected' : ''}>0 — ${tr('No Refill', 'بدون تكرار')}</option>
+            <option value="1" ${item.refill===1 ? 'selected' : ''}>1x Refill</option>
+            <option value="2" ${item.refill===2 ? 'selected' : ''}>2x Refill</option>
+            <option value="3" ${item.refill===3 ? 'selected' : ''}>3x Refill</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:10px;font-weight:700;color:var(--text-dim)">${tr('Qty Total', 'الكمية الإجمالية')}</label>
+          <div style="height:30px;display:flex;align-items:center;padding:0 8px;background:var(--primary-glow,#eff6ff);border-radius:8px;border:1px solid var(--primary);font-size:12px;font-weight:700;color:var(--primary)">
+            ${isNaN(qtyTotal) ? '—' : qtyTotal} ${tr('units', 'وحدة')}
+          </div>
+        </div>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 };
 
 window.dsRemoveRxItem = function(idx) {
+
   window._DS.rxItems.splice(idx, 1);
   window.dsRenderRxItems();
 };
@@ -1196,6 +1324,65 @@ window.dsOrderReferral = async function(patientId) {
     document.getElementById('dsRefNote') && (document.getElementById('dsRefNote').value = '');
   } catch (e) { showToast(e?.message || tr('Error', 'خطأ'), 'error'); }
 };
+
+/* ============================================================ */
+/*  CLINICAL ORDERS: Diet, IV Fluids, Nursing                   */
+/* ============================================================ */
+window.dsOrderDiet = async function(patientId) {
+  if (!patientId) return showToast(tr('No patient selected', 'لا يوجد مريض محدد'), 'error');
+  const dietType = document.getElementById('dsDietType')?.value || 'Normal Diet';
+  const duration = document.getElementById('dsDietDuration')?.value || '24 ساعة';
+  try {
+    await API.post('/api/orders', {
+      patient_id: patientId,
+      type: 'diet',
+      description: `[DIET] ${dietType}`,
+      status: 'Pending',
+      notes: `${tr('Duration', 'المدة')}: ${duration}`,
+    });
+    showToast(tr(`✅ Diet ordered: ${dietType}`, `✅ تم طلب الحمية: ${dietType}`));
+  } catch (e) { showToast(e?.message || tr('Error', 'خطأ'), 'error'); }
+};
+
+window.dsOrderIV = async function(patientId) {
+  if (!patientId) return showToast(tr('No patient selected', 'لا يوجد مريض محدد'), 'error');
+  const fluidType  = document.getElementById('dsIvType')?.value || 'Normal Saline 0.9% (NS)';
+  const rate       = document.getElementById('dsIvRate')?.value || '100';
+  const duration   = document.getElementById('dsIvDuration')?.value || '8';
+  const additive   = document.getElementById('dsIvAdditive')?.value || '';
+  const totalVol   = Math.round(parseFloat(rate) * parseFloat(duration));
+  const desc = `[IV] ${fluidType} @ ${rate}mL/hr × ${duration}hr${additive ? ' + ' + additive : ''}`;
+  try {
+    await API.post('/api/orders', {
+      patient_id: patientId,
+      type: 'iv',
+      description: desc,
+      status: 'Pending',
+      notes: `${tr('Total Volume', 'الحجم الكلي')}: ${totalVol}mL${additive ? ' | ' + tr('Additive', 'إضافة') + ': ' + additive : ''}`,
+    });
+    showToast(tr(`✅ IV ordered: ${fluidType}`, `✅ تم طلب السائل: ${fluidType}`));
+    document.getElementById('dsIvAdditive') && (document.getElementById('dsIvAdditive').value = '');
+  } catch (e) { showToast(e?.message || tr('Error', 'خطأ'), 'error'); }
+};
+
+window.dsOrderNursing = async function(patientId) {
+  if (!patientId) return showToast(tr('No patient selected', 'لا يوجد مريض محدد'), 'error');
+  const orderType = document.getElementById('dsNursingType')?.value || '';
+  const note      = document.getElementById('dsNursingNote')?.value || '';
+  try {
+    await API.post('/api/orders', {
+      patient_id: patientId,
+      type: 'nursing',
+      description: `[NURSING] ${orderType}`,
+      status: 'Pending',
+      notes: note,
+    });
+    showToast(tr(`✅ Nursing order issued`, `✅ تم إصدار أمر التمريض`));
+    document.getElementById('dsNursingNote') && (document.getElementById('dsNursingNote').value = '');
+  } catch (e) { showToast(e?.message || tr('Error', 'خطأ'), 'error'); }
+};
+
+
 
 /* ============================================================ */
 /*  SAVE DIAGNOSIS RECORD                                        */
