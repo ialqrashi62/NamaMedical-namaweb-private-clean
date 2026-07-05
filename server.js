@@ -15641,17 +15641,17 @@ app.put('/api/appointments/:id/checkin', requireAuth, requireRole('appointments'
         // Create visit lifecycle entry (visit_lifecycle schema provisioned out-of-band; no DDL in handler)
         const visit = await pool.query(
             'INSERT INTO visit_lifecycle (patient_id, patient_name, appointment_id, doctor, department, status, arrived_at) VALUES ($1,$2,$3,$4,$5,$6,CURRENT_TIMESTAMP) RETURNING *',
-            [appt.patient_id, appt.patient_name, appt.id, appt.doctor, appt.department || 'General', 'arrived']
+            [appt.patient_id, appt.patient_name, appt.id, appt.doctor_name || '', appt.department || 'General', 'arrived']
         );
 
-        // Auto-add to waiting queue
+        // Auto-add to waiting queue (with correct tenantId and default status 'CheckedIn')
         await pool.query(
-            "INSERT INTO waiting_queue (patient_id, patient_name, doctor, department, status, check_in_time) VALUES ($1,$2,$3,$4,'Waiting',CURRENT_TIMESTAMP)",
-            [appt.patient_id, appt.patient_name, appt.doctor, appt.department || 'General']
+            "INSERT INTO waiting_queue (tenant_id, patient_id, patient_name, doctor, department, status, check_in_time) VALUES ($1,$2,$3,$4,$5,'CheckedIn',CURRENT_TIMESTAMP)",
+            [tenantId || 1, appt.patient_id, appt.patient_name, appt.doctor_name || '', appt.department || 'General']
         );
 
         logAudit(req.session.user?.id, req.session.user?.display_name, 'CHECK_IN', 'Appointments',
-            'Patient ' + appt.patient_name + ' checked in for Dr. ' + appt.doctor, req.ip);
+            'Patient ' + appt.patient_name + ' checked in for Dr. ' + (appt.doctor_name || ''), req.ip);
 
         res.json({ success: true, visit_id: visit.rows[0].id });
     } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
