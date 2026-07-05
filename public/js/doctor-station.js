@@ -1,12 +1,17 @@
 /**
  * ============================================================
- * DOCTOR STATION — World-Class Clinical Workstation (v2)
+ * DOCTOR STATION — World-Class Clinical Workstation (v3)
  * محطة الطبيب — مستوى عالمي (Epic / Cerner / Oracle Health)
  * ============================================================
  * Three-Panel Layout:
- *   LEFT  — قائمة انتظار المرضى (Wait Queue)
- *   CENTER — الملف السريري للمريض (Patient Chart)
- *   RIGHT  — لوحة الأوامر الطبية (CPOE Orders Panel)
+ *   LEFT   — قائمة انتظار المرضى (Wait Queue) مع Triage Levels
+ *   CENTER — الملف السريري (11 تبويب: Summary,History,Problems,
+ *             Medications,Allergies,Vitals,Notes,Orders,Results,History+)
+ *   RIGHT  — لوحة CPOE الموسّعة (Dx,Rx,Lab,Rad,Nursing,Diet,IV,Referral,Discharge)
+ * ============================================================
+ * v3 New: Orders Board, Lab Results Viewer, Extended History,
+ *         BMI/BP in header, Triage badge, Insurance info,
+ *         Diet/IV/Nursing orders, Rx templates, Refill support
  * ============================================================
  */
 
@@ -275,46 +280,70 @@ window.dsRenderPatientChart = function(patient, chart, vitals, problems, allergi
     ? `<span class="ds-alert-chip critical">⚠️ ${activeProblems.length} ${tr('Active Problem', 'مشكلة نشطة')}</span>`
     : '';
 
+  // --- حساب BMI وآخر BP ودرجة الفرز ---
+  const _lv = {};
+  vitals.forEach(v => { if (!_lv[v.score_type]) _lv[v.score_type] = v.score_value; });
+  const _w = parseFloat(_lv['weight']||0), _h = parseFloat(_lv['height']||0);
+  const bmiVal = (_w>0&&_h>0) ? (_w/((_h/100)**2)).toFixed(1) : null;
+  const bmiLabel = bmiVal ? (parseFloat(bmiVal)<18.5?'⬇️ نقص':parseFloat(bmiVal)<25?'✅ طبيعي':parseFloat(bmiVal)<30?'🟡 زيادة':'🔴 سمنة') : null;
+  const bpRaw = _lv['blood_pressure']||'';
+  const bpSys = parseInt((bpRaw.split('/')||[])[0]||0);
+  const bpColor = bpSys>=160?'#dc2626':bpSys>=140?'#ea580c':bpSys>0?'#16a34a':'';
+  const triageLevel = chart.queueInfo?.triage_level || null;
+  const triageColors = {1:'#dc2626',2:'#ea580c',3:'#ca8a04',4:'#16a34a',5:'#6b7280'};
+  const triageLabels = {1:tr('Resuscitation','إنعاش'),2:tr('Emergent','طارئ'),3:tr('Urgent','مستعجل'),4:tr('Less Urgent','غير مستعجل'),5:tr('Non-Urgent','عادي')};
+
   centerPanel.innerHTML = `
-    <!-- Patient Header Banner -->
+    <!-- Patient Header Banner v3 -->
     <div class="ds-patient-header">
       <div class="ds-patient-avatar">${escapeHTML(initial)}</div>
-      <div class="ds-patient-info">
-        <div class="ds-patient-name">${escapeHTML(name)}</div>
-        <div class="ds-patient-meta">
+      <div class="ds-patient-info" style="flex:1">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <div class="ds-patient-name">${escapeHTML(name)}</div>
+          ${triageLevel ? `<span style="background:${triageColors[triageLevel]||'#6b7280'};color:#fff;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">T${triageLevel} ${escapeHTML(triageLabels[triageLevel]||'')}</span>` : ''}
+          ${patient.blood_type ? `<span style="background:#7c3aed22;color:#7c3aed;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">🩸 ${escapeHTML(patient.blood_type)}</span>` : ''}
+        </div>
+        <div class="ds-patient-meta" style="flex-wrap:wrap">
           <span class="ds-patient-meta-item">🗂️ ${escapeHTML(String(fileNo))}</span>
-          <span class="ds-patient-meta-item">📅 ${tr('Age:', 'العمر:')} ${escapeHTML(String(age))}</span>
-          <span class="ds-patient-meta-item">${gender === 'ذكر' || gender === 'Male' ? '👨' : gender === 'أنثى' || gender === 'Female' ? '👩' : '🧑'} ${escapeHTML(gender)}</span>
-          ${patient.department ? `<span class="ds-patient-meta-item">🏥 ${escapeHTML(patient.department)}</span>` : ''}
+          <span class="ds-patient-meta-item">📅 ${tr('Age','العمر')}: ${escapeHTML(String(age))}</span>
+          <span class="ds-patient-meta-item">${gender==='ذكر'||gender==='Male'?'👨':gender==='أنثى'||gender==='Female'?'👩':'🧑'} ${escapeHTML(gender)}</span>
           ${patient.national_id ? `<span class="ds-patient-meta-item">🪪 ${escapeHTML(patient.national_id)}</span>` : ''}
+          ${bmiVal ? `<span class="ds-patient-meta-item" title="BMI">⚖️ BMI: <strong>${bmiVal}</strong> ${bmiLabel}</span>` : ''}
+          ${bpRaw ? `<span class="ds-patient-meta-item" style="color:${bpColor||'inherit'};font-weight:700">🫀 BP: ${escapeHTML(bpRaw)}</span>` : ''}
+          ${patient.insurance_company ? `<span class="ds-patient-meta-item">🏢 ${escapeHTML(patient.insurance_company)}</span>` : ''}
+          ${patient.insurance_number ? `<span class="ds-patient-meta-item">📄 ${escapeHTML(patient.insurance_number)}</span>` : ''}
+          ${chart.queueInfo?.exam_room_name ? `<span class="ds-patient-meta-item">🚪 ${escapeHTML(chart.queueInfo.exam_room_name)}</span>` : ''}
         </div>
         <div class="ds-patient-alerts">
           ${allergyChips}${problemChip}${pendingChip}
-          ${patient.status === 'With Doctor' ? `<span class="ds-alert-chip info">👨‍⚕️ ${tr('With Doctor', 'مع الطبيب')}</span>` : ''}
+          ${patient.status === 'With Doctor' ? `<span class="ds-alert-chip info">👨‍⚕️ ${tr('With Doctor','مع الطبيب')}</span>` : ''}
         </div>
       </div>
       <div class="ds-patient-actions">
         <button class="btn btn-sm btn-primary" onclick="window.dsMarkWithDoctor(${safeId(patient.id)})"
           style="font-size:11px;padding:6px 12px" id="btnMarkDoctor">
-          👨‍⚕️ ${tr('Start Visit', 'بدء الزيارة')}
+          👨‍⚕️ ${tr('Start Visit','بدء الزيارة')}
         </button>
         <button class="btn btn-sm" onclick="window.dsSignEncounter()"
           style="font-size:11px;padding:6px 12px;background:#7c3aed;color:#fff;border-color:#7c3aed">
-          ✍️ ${tr('Sign & Close', 'توقيع وإغلاق')}
+          ✍️ ${tr('Sign & Close','توقيع وإغلاق')}
         </button>
       </div>
     </div>
 
-    <!-- Chart Tabs -->
+    <!-- Chart Tabs (v3: 10 tabs) -->
     <div class="ds-chart-tabs" id="dsChartTabs">
       ${[
-        { id: 'summary', icon: '📊', en: 'Summary', ar: 'الملخص' },
-        { id: 'history', icon: '📅', en: 'History', ar: 'التاريخ', count: records.length },
-        { id: 'problems', icon: '⚠️', en: 'Problems', ar: 'المشكلات', count: problems.length },
-        { id: 'medications', icon: '💊', en: 'Medications', ar: 'الأدوية', count: medications.length },
-        { id: 'allergies', icon: '🚨', en: 'Allergies', ar: 'الحساسيات', count: allergies.length },
-        { id: 'vitals', icon: '❤️', en: 'Vitals', ar: 'المؤشرات', count: vitals.length },
-        { id: 'notes', icon: '📝', en: 'Notes', ar: 'الملاحظات' },
+        { id: 'summary',     icon: '📊', en: 'Summary',    ar: 'الملخص' },
+        { id: 'history',     icon: '📅', en: 'History',    ar: 'التاريخ',    count: records.length },
+        { id: 'problems',    icon: '⚠️', en: 'Problems',   ar: 'المشكلات',  count: problems.length },
+        { id: 'medications', icon: '💊', en: 'Medications', ar: 'الأدوية',  count: medications.length },
+        { id: 'allergies',   icon: '🚨', en: 'Allergies',  ar: 'الحساسيات', count: allergies.length },
+        { id: 'vitals',      icon: '❤️', en: 'Vitals',     ar: 'المؤشرات',  count: vitals.length },
+        { id: 'notes',       icon: '📝', en: 'Notes',      ar: 'الملاحظات' },
+        { id: 'orders',      icon: '📋', en: 'Orders',     ar: 'الأوامر' },
+        { id: 'results',     icon: '🔬', en: 'Results',    ar: 'النتائج' },
+        { id: 'history_ext', icon: '👨‍👩‍👦', en: 'History+',  ar: 'التاريخ+' },
       ].map(t => `
         <div class="ds-tab ${t.id === window._DS.activeTab ? 'active' : ''}"
              onclick="window.dsSwitchTab('${t.id}')" data-tab="${t.id}">
@@ -346,16 +375,19 @@ window.dsSwitchTab = function(tabId) {
   const d = window._DS.selectedPatientData || {};
 
   switch (tabId) {
-    case 'summary': content.innerHTML = window.dsTabSummary(d); break;
-    case 'history': content.innerHTML = window.dsTabHistory(d); break;
-    case 'problems': content.innerHTML = window.dsTabProblems(d); break;
+    case 'summary':     content.innerHTML = window.dsTabSummary(d); break;
+    case 'history':     content.innerHTML = window.dsTabHistory(d); break;
+    case 'problems':    content.innerHTML = window.dsTabProblems(d); break;
     case 'medications': content.innerHTML = window.dsTabMedications(d); break;
-    case 'allergies': content.innerHTML = window.dsTabAllergies(d); break;
-    case 'vitals': content.innerHTML = window.dsTabVitals(d); break;
+    case 'allergies':   content.innerHTML = window.dsTabAllergies(d); break;
+    case 'vitals':      content.innerHTML = window.dsTabVitals(d); break;
     case 'notes':
       content.innerHTML = window.dsTabNotes(d);
       window.dsInitSoapNotes();
       break;
+    case 'orders':      window.dsTabOrders(content); break;
+    case 'results':     window.dsTabResults(content); break;
+    case 'history_ext': window.dsTabHistoryExt(content); break;
     default: content.innerHTML = `<p>${tr('Coming soon', 'قريباً')}</p>`;
   }
 };
@@ -1351,5 +1383,273 @@ window.checkDrugInteractions = async function(drugNames) {
   return { hasCritical, alerts };
 };
 
-console.log('[DoctorStation] Module v2 loaded — محطة الطبيب جاهزة');
+console.log('[DoctorStation] Module v3 loaded — محطة الطبيب مستوى Epic/Cerner/Oracle جاهزة');
+
+/* ============================================================ */
+/*  TAB: ORDERS BOARD (لوحة الأوامر النشطة)                   */
+/* ============================================================ */
+window.dsTabOrders = async function(container) {
+  const pid = window._DS.selectedPatientId;
+  if (!pid) return;
+  container.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text-dim)"><div style="font-size:32px">⏳</div><p>${tr('Loading orders...', 'جاري تحميل الأوامر...')}</p></div>`;
+  let data = { orders: [], prescriptions: [] };
+  try { data = await API.get(`/api/patients/${pid}/active-orders`); } catch { data = { orders: [], prescriptions: [] }; }
+  const { orders = [], prescriptions = [] } = data;
+  const allItems = [
+    ...orders.map(o => ({ ...o, _cat: o.order_category || (o.is_radiology==1?'radiology':'lab'), _icon: o.is_radiology==1?'📡':'🔬' })),
+    ...prescriptions.map(p => ({ ...p, _cat: 'medication', _icon: '💊', description: p.drug_name || p.description })),
+  ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+  if (!allItems.length) {
+    container.innerHTML = `<div style="text-align:center;padding:32px;color:var(--text-dim)"><div style="font-size:48px;opacity:.3">📋</div><p>${tr('No active orders', 'لا توجد أوامر نشطة')}</p></div>`;
+    return;
+  }
+  const statusColor = { Pending: '#ca8a04', STAT: '#dc2626', 'In Progress': '#0ea5e9', Completed: '#16a34a', Dispensed: '#16a34a', Cancelled: '#6b7280' };
+  const catLabel = { lab: tr('Lab', 'مختبر'), radiology: tr('Radiology', 'أشعة'), medication: tr('Medication', 'دواء'), referral: tr('Referral', 'تحويل'), nursing: tr('Nursing', 'تمريض'), diet: tr('Diet', 'غذاء'), iv: tr('IV Fluids', 'سوائل') };
+  container.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <strong style="font-size:13px">📋 ${tr('Active Orders Board', 'لوحة الأوامر')} (${allItems.length})</strong>
+    </div>
+    ${allItems.map(o => `
+      <div style="background:var(--surface-container,#f8fafc);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px">
+        <div style="font-size:22px">${escapeHTML(o._icon||'📋')}</div>
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:12px">${escapeHTML(o.description || '-')}</div>
+          <div style="font-size:11px;color:var(--text-dim)">${escapeHTML(catLabel[o._cat]||o._cat||'')} · ${escapeHTML(o.created_at?.split('T')[0]||'')}</div>
+        </div>
+        <span style="background:${statusColor[o.status]||'#6b7280'}22;color:${statusColor[o.status]||'#6b7280'};padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap">${escapeHTML(o.status||'')}</span>
+      </div>
+    `).join('')}
+  `;
+};
+
+/* ============================================================ */
+/*  TAB: RESULTS (نتائج المختبر والأشعة)                          */
+/* ============================================================ */
+window.dsTabResults = async function(container) {
+  const pid = window._DS.selectedPatientId;
+  if (!pid) return;
+  container.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text-dim)"><div style="font-size:32px">⏳</div><p>${tr('Loading results...', 'جاري تحميل النتائج...')}</p></div>`;
+  let data = { labOrders: [], radOrders: [], labResults: [] };
+  try { data = await API.get(`/api/patients/${pid}/lab-results`); } catch { data = { labOrders: [], radOrders: [], labResults: [] }; }
+  const { labOrders = [], radOrders = [], labResults = [] } = data;
+
+  if (!labOrders.length && !radOrders.length && !labResults.length) {
+    container.innerHTML = `<div style="text-align:center;padding:32px;color:var(--text-dim)"><div style="font-size:48px;opacity:.3">🔬</div><p>${tr('No lab results found', 'لا توجد نتائج مختبر مدخلة')}</p></div>`;
+    return;
+  }
+
+  // Group labResults by test_name for latest value
+  const byTest = {};
+  labResults.forEach(r => { if (!byTest[r.test_name]) byTest[r.test_name] = []; byTest[r.test_name].push(r); });
+
+  container.innerHTML = `
+    ${labResults.length ? `
+    <div style="margin-bottom:16px">
+      <div style="font-weight:700;font-size:12px;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase">🔬 ${tr('Lab Results', 'نتائج المختبر')} (${labResults.length})</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="background:var(--surface-container,#f1f5f9);">
+            <th style="padding:6px 8px;text-align:start;font-weight:700">${tr('Test', 'الفحص')}</th>
+            <th style="padding:6px 8px;text-align:start;font-weight:700">${tr('Result', 'النتيجة')}</th>
+            <th style="padding:6px 8px;text-align:start;font-weight:700">${tr('Unit', 'الوحدة')}</th>
+            <th style="padding:6px 8px;text-align:start;font-weight:700">${tr('Reference', 'المرجع')}</th>
+            <th style="padding:6px 8px;text-align:start;font-weight:700">${tr('Date', 'التاريخ')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${labResults.map(r => {
+            const isCrit = r.is_critical;
+            const isAbn = r.is_abnormal || isCrit;
+            const rowColor = isCrit ? '#fee2e2' : isAbn ? '#fef9c3' : '';
+            const textColor = isCrit ? '#dc2626' : isAbn ? '#ca8a04' : 'inherit';
+            const refRange = (r.reference_low!=null && r.reference_high!=null) ? `${r.reference_low} - ${r.reference_high}` : (r.reference_range || '-');
+            return `<tr style="background:${rowColor};border-bottom:1px solid var(--border)">
+              <td style="padding:6px 8px;font-weight:600;color:${textColor}">
+                ${isCrit ? '🚨 ' : isAbn ? '⚠️ ' : ''}${escapeHTML(r.test_name||'-')}
+              </td>
+              <td style="padding:6px 8px;font-weight:700;color:${textColor}">${escapeHTML(String(r.result_value??r.result_text??'-'))}</td>
+              <td style="padding:6px 8px;color:var(--text-dim)">${escapeHTML(r.unit||'')}</td>
+              <td style="padding:6px 8px;color:var(--text-dim)">${escapeHTML(refRange)}</td>
+              <td style="padding:6px 8px;color:var(--text-dim)">${escapeHTML(r.order_date?.split('T')[0]||r.result_date?.split('T')[0]||'')}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>` : ''}
+    ${radOrders.length ? `
+    <div style="margin-top:16px">
+      <div style="font-weight:700;font-size:12px;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase">📡 ${tr('Radiology Orders', 'طلبات الأشعة')} (${radOrders.length})</div>
+      ${radOrders.map(o => `
+        <div style="background:var(--surface-container,#f8fafc);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px">
+          <div style="font-weight:700;font-size:12px">${escapeHTML(o.description||o.order_type||'-')}</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:4px">${escapeHTML(o.created_at?.split('T')[0]||'')} · حالة: <strong>${escapeHTML(o.status||'-')}</strong></div>
+          ${o.results ? `<div style="font-size:12px;margin-top:6px;padding:6px;background:#f0f9ff;border-radius:6px;border-inline-start:3px solid #0ea5e9">${escapeHTML(o.results)}</div>` : ''}
+        </div>
+      `).join('')}
+    </div>` : ''}
+  `;
+};
+
+/* ============================================================ */
+/*  TAB: HISTORY+ (تاريخ شامل: اجتماعي وعائلي وجراحي)          */
+/* ============================================================ */
+window.dsTabHistoryExt = async function(container) {
+  const pid = window._DS.selectedPatientId;
+  if (!pid) return;
+  container.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text-dim)"><div style="font-size:32px">⏳</div><p>${tr('Loading extended history...', 'جاري تحميل التاريخ...')}</p></div>`;
+  let data = { social: {}, family: [], surgical: [], immunizations: [] };
+  try { data = await API.get(`/api/patients/${pid}/history-extended`); } catch { /* graceful */ }
+  const { social = {}, family = [], surgical = [], immunizations = [] } = data;
+  const smokingMap = { never: tr('Never Smoked', 'لم يدخن قط'), former: tr('Former Smoker', 'دخن سابقاً'), current: tr('Current Smoker', 'يدخن حالياً') };
+
+  container.innerHTML = `
+    <!-- Social History -->
+    <div style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <strong style="font-size:12px;color:var(--text-dim);text-transform:uppercase">👤 ${tr('Social History', 'التاريخ الاجتماعي')}</strong>
+        <button class="btn btn-sm" style="font-size:10px;padding:4px 8px" onclick="window.dsEditSocialHistory(${pid})">✏️ ${tr('Edit', 'تعديل')}</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        ${[['smoking_status', tr('Smoking', 'التدخين'), smokingMap[social.smoking_status] || social.smoking_status || '-'],
+           ['occupation', tr('Occupation', 'المهنة'), social.occupation || '-'],
+           ['marital_status', tr('Marital Status', 'الحالة الاجتماعية'), social.marital_status || '-'],
+           ['exercise_frequency', tr('Exercise', 'الرياضة'), social.exercise_frequency || '-'],
+        ].map(([k,label,val]) => `
+          <div style="background:var(--surface-container,#f8fafc);border-radius:8px;padding:8px 10px">
+            <div style="font-size:10px;color:var(--text-dim);font-weight:700">${escapeHTML(label)}</div>
+            <div style="font-size:13px;font-weight:600">${escapeHTML(val)}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+
+    <!-- Family History -->
+    <div style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <strong style="font-size:12px;color:var(--text-dim);text-transform:uppercase">👨‍👩‍👦 ${tr('Family History', 'التاريخ العائلي')} (${family.length})</strong>
+        <button class="btn btn-sm" style="font-size:10px;padding:4px 8px" onclick="window.dsAddFamilyHistory(${pid})">+ ${tr('Add', 'إضافة')}</button>
+      </div>
+      ${family.length ? family.map(f => `
+        <div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:18px">👨‍👩‍👦</div>
+          <div><div style="font-weight:700;font-size:12px">${escapeHTML(f.condition||'-')}</div>
+          <div style="font-size:11px;color:var(--text-dim)">${escapeHTML(f.relation||'')} ${f.icd_code?'· '+f.icd_code:''}</div></div>
+        </div>
+      `).join('') : `<div style="color:var(--text-dim);font-size:12px;padding:8px">— ${tr('None recorded', 'لا يوجد')}</div>`}
+    </div>
+
+    <!-- Surgical History -->
+    <div style="margin-bottom:16px">
+      <div style="font-weight:700;font-size:12px;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase">💉 ${tr('Surgical History', 'التاريخ الجراحي')} (${surgical.length})</div>
+      ${surgical.length ? surgical.map(s => `
+        <div style="background:var(--surface-container,#f8fafc);border-radius:8px;padding:8px 10px;margin-bottom:6px">
+          <div style="font-weight:700;font-size:12px">${escapeHTML(s.procedure_name||'-')}</div>
+          <div style="font-size:11px;color:var(--text-dim)">${escapeHTML(s.procedure_date||'')} ${s.hospital?'· '+s.hospital:''}</div>
+        </div>
+      `).join('') : `<div style="color:var(--text-dim);font-size:12px;padding:8px">— ${tr('None recorded', 'لا يوجد')}</div>`}
+    </div>
+
+    <!-- Immunizations -->
+    <div>
+      <div style="font-weight:700;font-size:12px;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase">💉 ${tr('Immunizations', 'التطعيمات')} (${immunizations.length})</div>
+      ${immunizations.length ? immunizations.map(i => `
+        <div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:18px">💉</div>
+          <div><div style="font-weight:700;font-size:12px">${escapeHTML(i.vaccine_name||i.vaccine||'-')}</div>
+          <div style="font-size:11px;color:var(--text-dim)">${escapeHTML(i.given_date?.split('T')[0]||i.vaccine_date?.split('T')[0]||'')} ${i.dose_number?'· جرعة '+i.dose_number:''}</div></div>
+        </div>
+      `).join('') : `<div style="color:var(--text-dim);font-size:12px;padding:8px">— ${tr('None recorded', 'لا يوجد')}</div>`}
+    </div>
+  `;
+};
+
+/* ============================================================ */
+/*  EDIT SOCIAL HISTORY MODAL                                    */
+/* ============================================================ */
+window.dsEditSocialHistory = function(pid) {
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = `<div style="background:var(--bg-card);border-radius:16px;padding:24px;width:480px;max-height:90vh;overflow-y:auto">
+    <h3 style="margin:0 0 16px;color:var(--primary)">👤 ${tr('Social History', 'التاريخ الاجتماعي')}</h3>
+    <div class="form-group mb-8"><label>${tr('Smoking Status', 'حالة التدخين')}</label>
+      <select class="form-input" id="shSmoke">
+        <option value="never">${tr('Never', 'لم يدخن')}</option>
+        <option value="former">${tr('Former Smoker', 'دخن سابقاً')}</option>
+        <option value="current">${tr('Current Smoker', 'يدخن حالياً')}</option>
+      </select></div>
+    <div class="form-group mb-8"><label>${tr('Marital Status', 'الحالة الاجتماعية')}</label>
+      <select class="form-input" id="shMarital">
+        <option value="Single">${tr('Single', 'أعزب')}</option>
+        <option value="Married">${tr('Married', 'متزوج')}</option>
+        <option value="Divorced">${tr('Divorced', 'مطلق')}</option>
+        <option value="Widowed">${tr('Widowed', 'أرمل')}</option>
+      </select></div>
+    <div class="form-group mb-8"><label>${tr('Occupation', 'المهنة')}</label><input class="form-input" id="shOccupation" placeholder="${tr('Job title', 'المسمى الوظيفي')}"></div>
+    <div class="form-group mb-12"><label>${tr('Exercise Frequency', 'تكرار الرياضة')}</label>
+      <select class="form-input" id="shExercise">
+        <option value="None">${tr('None', 'لا يمارس')}</option>
+        <option value="Occasional">${tr('Occasional', 'أحياناً')}</option>
+        <option value="3x per week">${tr('3x per week', '3 مرات/أسبوع')}</option>
+        <option value="Daily">${tr('Daily', 'يومياً')}</option>
+      </select></div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-primary" style="flex:1" onclick="window.dsSaveSocialHistory(${pid})">💾 ${tr('Save', 'حفظ')}</button>
+      <button class="btn btn-secondary" style="flex:1" onclick="this.closest('[style*=fixed]').remove()">${tr('Cancel', 'إلغاء')}</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+};
+
+window.dsSaveSocialHistory = async function(pid) {
+  try {
+    await API.post(`/api/patients/${pid}/social-history`, {
+      smoking_status: document.getElementById('shSmoke')?.value || '',
+      marital_status: document.getElementById('shMarital')?.value || '',
+      occupation: document.getElementById('shOccupation')?.value || '',
+      exercise_frequency: document.getElementById('shExercise')?.value || '',
+    });
+    showToast(tr('Social history saved!', 'تم حفظ التاريخ الاجتماعي!'));
+    document.querySelector('[style*="position:fixed"][style*="inset:0"]')?.remove();
+    window.dsSwitchTab('history_ext');
+  } catch (e) { showToast(e?.message || tr('Error', 'خطأ'), 'error'); }
+};
+
+window.dsAddFamilyHistory = function(pid) {
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = `<div style="background:var(--bg-card);border-radius:16px;padding:24px;width:400px">
+    <h3 style="margin:0 0 16px;color:var(--primary)">👨‍👩‍👦 ${tr('Add Family History', 'إضافة تاريخ عائلي')}</h3>
+    <div class="form-group mb-8"><label>${tr('Relation', 'صلة القرابة')}</label>
+      <select class="form-input" id="fhRelation">
+        <option>${tr('Father', 'الأب')}</option><option>${tr('Mother', 'الأم')}</option>
+        <option>${tr('Sibling', 'أخ/أخت')}</option><option>${tr('Grandparent', 'جد/جدة')}</option>
+      </select></div>
+    <div class="form-group mb-8"><label>${tr('Condition', 'التشخيص')}</label><input class="form-input" id="fhCondition" placeholder="${tr('e.g. DM, HTN, Cancer', 'مثال: سكري, ضغط')}"></div>
+    <div class="form-group mb-12"><label>ICD-10</label><input class="form-input" id="fhIcd" placeholder="E11, I10..."></div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-primary" style="flex:1" onclick="window.dsSaveFamilyHistory(${pid})">💾 ${tr('Save', 'حفظ')}</button>
+      <button class="btn btn-secondary" style="flex:1" onclick="this.closest('[style*=fixed]').remove()">${tr('Cancel', 'إلغاء')}</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+};
+
+window.dsSaveFamilyHistory = async function(pid) {
+  const condition = document.getElementById('fhCondition')?.value?.trim() || '';
+  if (!condition) return showToast(tr('Enter condition', 'أدخل التشخيص'), 'error');
+  try {
+    await API.post(`/api/patients/${pid}/family-history`, {
+      relation: document.getElementById('fhRelation')?.value || '',
+      condition,
+      icd_code: document.getElementById('fhIcd')?.value || '',
+    });
+    showToast(tr('Family history added!', 'تم إضافة التاريخ العائلي!'));
+    document.querySelector('[style*="position:fixed"][style*="inset:0"]')?.remove();
+    window.dsSwitchTab('history_ext');
+  } catch (e) { showToast(e?.message || tr('Error', 'خطأ'), 'error'); }
+};
+
 

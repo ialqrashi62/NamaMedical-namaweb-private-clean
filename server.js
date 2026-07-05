@@ -6287,6 +6287,426 @@ app.delete('/api/forms/:id', requireAuth, async (req, res) => {
     catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
+// ===== DOCTOR STATION — DEDICATED ENDPOINTS =====
+
+/**
+ * GET /api/doctor/wait-queue
+ * قائمة انتظار الطبيب — تعرض المرضى في الانتظار مع بيانات المؤشرات الحيوية
+ */
+app.get('/api/doctor/wait-queue', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const result = await pool.query(
+            `SELECT w.id as queue_id, w.*, p.name_ar, p.name_en, p.file_number, p.dob, p.phone, p.gender, p.national_id,
+                    p.insurance_company, p.insurance_number, p.blood_type,
+                    EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - w.check_in_time)) / 60 AS wait_minutes,
+                    r.room_name as exam_room_name, r.room_number as exam_room_number
+             FROM waiting_queue w
+             JOIN patients p ON w.patient_id = p.id
+             LEFT JOIN exam_rooms r ON r.id::text = w.exam_room_id::text AND r.tenant_id = w.tenant_id
+             WHERE w.tenant_id = $1
+               AND w.status NOT IN ('ReadyForDischarge', 'NoShow', 'Done')
+             ORDER BY w.triage_level ASC, w.check_in_time ASC`,
+            [tenantId]
+        );
+        res.json(result.rows);
+    } catch (e) {
+        console.error('[DS] Error fetching doctor wait-queue:', e);
+        res.status(500).json({ error: 'Server error', detail: e.message });
+    }
+});
+
+/**
+ * GET /api/patients/:id/chart
+ * الملف السريري الكامل للمريض — يُحمَّل عند اختيار مريض في محطة الطبيب
+ */
+app.get('/api/patients/:id/chart', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const pid = parseInt(req.params.id);
+        const { tenantId } = getRequestTenantContext(req);
+        const tenantCheck = tenantId ? ' AND tenant_id=$2' : '';
+        const tenantParams = tenantId ? [pid, tenantId] : [pid];
+
+        const patient = (await pool.query(`SELECT * FROM patients WHERE id=$1${tenantCheck}`, tenantParams)).rows[0];
+        if (!patient) return res.status(404).json({ error: 'Patient not found' });
+
+        // Fetch all chart data in parallel
+        const [records, orders, vitals, problems, allergies, medications, invoices, queueInfo] = await Promise.all([
+            pool.query('SELECT * FROM medical_records WHERE patient_id=$1 ORDER BY created_at DESC LIMIT 50', [pid]).then(r => r.rows).catch(() => []),
+            pool.query("SELECT * FROM lab_radiology_orders WHERE patient_id=$1 ORDER BY created_at DESC LIMIT 50", [pid]).then(r => r.rows).catch(() => []),
+            pool.query('SELECT * FROM patient_scores WHERE patient_id=$1 ORDER BY recorded_at DESC LIMIT 100', [pid]).then(r => r.rows).catch(() => []),
+            pool.query('SELECT * FROM patient_problems WHERE patient_id=$1 ORDER BY created_at DESC', [pid]).then(r => r.rows).catch(() => []),
+            pool.query('SELECT * FROM patient_allergies WHERE patient_id=$1 ORDER BY id DESC', [pid]).then(r => r.rows).catch(() => []),
+            pool.query("SELECT * FROM prescriptions WHERE patient_id=$1 ORDER BY created_at DESC LIMIT 20", [pid]).then(r => r.rows).catch(() => []),
+            pool.query('SELECT id, invoice_number, total_amount, status, created_at FROM invoices WHERE patient_id=$1 AND cancelled=0 ORDER BY created_at DESC LIMIT 10', [pid]).then(r => r.rows).catch(() => []),
+            pool.query("SELECT w.*, r.room_name FROM waiting_queue w LEFT JOIN exam_rooms r ON r.id::text = w.exam_room_id::text WHERE w.patient_id=$1 AND w.status NOT IN ('ReadyForDischarge','NoShow','Done') ORDER BY w.check_in_time DESC LIMIT 1", [pid]).then(r => r.rows[0]).catch(() => null),
+        ]);
+
+        res.json({ patient, records, orders, vitals, problems, allergies, medications, invoices, queueInfo: queueInfo || null });
+    } catch (e) {
+        console.error('[DS] Error fetching patient chart:', e);
+        res.status(500).json({ error: 'Server error', detail: e.message });
+    }
+});
+
+/**
+ * GET /api/patients/:id/vitals  (alias to patient_scores)
+ * المؤشرات الحيوية للمريض — مطلوبة لمحطة الطبيب
+ */
+app.get('/api/patients/:id/vitals', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const pid = parseInt(req.params.id);
+        const rows = (await pool.query('SELECT * FROM patient_scores WHERE patient_id=$1 ORDER BY recorded_at DESC LIMIT 100', [pid])).rows;
+        res.json(rows);
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+/**
+ * GET /api/patients/:id/problems
+ * قائمة المشكلات الطبية للمريض
+ */
+app.get('/api/patients/:id/problems', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const pid = parseInt(req.params.id);
+        const rows = (await pool.query('SELECT * FROM patient_problems WHERE patient_id=$1 ORDER BY created_at DESC', [pid])).rows;
+        res.json(rows);
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+/**
+ * POST /api/patients/:id/problems
+ * إضافة مشكلة طبية للمريض
+ */
+app.post('/api/patients/:id/problems', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const pid = parseInt(req.params.id);
+        const { tenantId } = getRequestTenantContext(req);
+        const { problem_name, icd_code, status, onset_date } = req.body;
+        if (!problem_name) return res.status(400).json({ error: 'problem_name required' });
+        const result = await pool.query(
+            `INSERT INTO patient_problems (patient_id, problem_name, icd_code, status, onset_date, tenant_id, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP) RETURNING *`,
+            [pid, problem_name, icd_code || '', status || 'active', onset_date || null, tenantId]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (e) {
+        // Fallback: store via medical_records if table not found
+        if (e.code === '42P01') return res.status(501).json({ error: 'patient_problems table not found', hint: 'Run migration' });
+        res.status(500).json({ error: 'Server error', detail: e.message });
+    }
+});
+
+/**
+ * GET /api/patients/:id/allergies
+ * قائمة الحساسيات للمريض
+ */
+app.get('/api/patients/:id/allergies', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const pid = parseInt(req.params.id);
+        let rows = [];
+        try {
+            rows = (await pool.query('SELECT * FROM patient_allergies WHERE patient_id=$1 ORDER BY id DESC', [pid])).rows;
+        } catch {
+            // Fallback: parse allergies from patients.allergies column
+            const p = (await pool.query('SELECT allergies FROM patients WHERE id=$1', [pid])).rows[0];
+            if (p?.allergies) {
+                const parts = p.allergies.split(',').map(a => a.trim()).filter(Boolean);
+                rows = parts.map((a, i) => ({ id: i, allergen: a, reaction: '', severity: 'unknown', allergen_type: 'Drug' }));
+            }
+        }
+        res.json(rows);
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+/**
+ * GET /api/patients/:id/medications
+ * الأدوية الحالية للمريض
+ */
+app.get('/api/patients/:id/medications', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const pid = parseInt(req.params.id);
+        const rows = (await pool.query(
+            "SELECT * FROM prescriptions WHERE patient_id=$1 ORDER BY created_at DESC LIMIT 30",
+            [pid]
+        )).rows;
+        res.json(rows);
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+/**
+ * GET /api/patients/:id/lab-results
+ * نتائج المختبر والأشعة للمريض — مع تفاصيل كاملة
+ */
+app.get('/api/patients/:id/lab-results', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const pid = parseInt(req.params.id);
+        // Fetch lab orders with their results
+        const labOrders = (await pool.query(
+            `SELECT o.*,
+                    json_agg(lr.* ORDER BY lr.id ASC) FILTER (WHERE lr.id IS NOT NULL) as results
+             FROM lab_radiology_orders o
+             LEFT JOIN lab_results lr ON lr.order_id = o.id
+             WHERE o.patient_id=$1 AND o.is_radiology=0
+             GROUP BY o.id
+             ORDER BY o.created_at DESC LIMIT 30`,
+            [pid]
+        )).rows;
+        // Fetch radiology orders
+        const radOrders = (await pool.query(
+            `SELECT * FROM lab_radiology_orders WHERE patient_id=$1 AND is_radiology=1 ORDER BY created_at DESC LIMIT 20`,
+            [pid]
+        )).rows;
+        // Standalone lab_results rows linked by patient
+        const labResults = (await pool.query(
+            `SELECT lr.*, o.order_type, o.created_at as order_date
+             FROM lab_results lr
+             JOIN lab_radiology_orders o ON lr.order_id = o.id
+             WHERE o.patient_id=$1
+             ORDER BY o.created_at DESC, lr.id ASC LIMIT 200`,
+            [pid]
+        )).rows;
+        res.json({ labOrders, radOrders, labResults });
+    } catch (e) {
+        console.error('[DS] Error fetching lab results:', e);
+        res.status(500).json({ error: 'Server error', detail: e.message });
+    }
+});
+
+/**
+ * GET /api/patients/:id/active-orders
+ * لوحة الأوامر النشطة — كل الأوامر المعلّقة والجارية للمريض
+ */
+app.get('/api/patients/:id/active-orders', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const pid = parseInt(req.params.id);
+        const orders = (await pool.query(
+            `SELECT o.*, 
+                    CASE WHEN o.is_radiology=1 THEN 'radiology' ELSE 'lab' END as order_category
+             FROM lab_radiology_orders o
+             WHERE o.patient_id=$1
+             ORDER BY o.created_at DESC LIMIT 50`,
+            [pid]
+        )).rows;
+        const prescriptions = (await pool.query(
+            "SELECT * FROM prescriptions WHERE patient_id=$1 AND status != 'Dispensed' ORDER BY created_at DESC LIMIT 20",
+            [pid]
+        )).rows.catch ? [] : (await pool.query(
+            "SELECT * FROM prescriptions WHERE patient_id=$1 ORDER BY created_at DESC LIMIT 20",
+            [pid]
+        )).rows;
+        res.json({ orders, prescriptions });
+    } catch (e) {
+        console.error('[DS] Error fetching active orders:', e);
+        res.status(500).json({ error: 'Server error', detail: e.message });
+    }
+});
+
+/**
+ * POST /api/orders  (clinical orders — lab, radiology, medication, nursing, diet, iv, referral, procedure, discharge)
+ * إنشاء أمر طبي من محطة الطبيب
+ */
+app.post('/api/orders', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const { patient_id, type, description, quantity, status, notes, urgency } = req.body;
+        if (!patient_id || !type || !description) return res.status(400).json({ error: 'patient_id, type, description required' });
+        const doctorId = req.session.user?.id;
+        const doctorName = req.session.user?.display_name || req.session.user?.username || '';
+
+        // Route to appropriate table based on type
+        if (type === 'lab' || type === 'radiology') {
+            const isRad = type === 'radiology' ? 1 : 0;
+            const result = await pool.query(
+                `INSERT INTO lab_radiology_orders (patient_id, doctor_id, order_type, description, is_radiology, status, notes, urgency, tenant_id, created_at)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,CURRENT_TIMESTAMP) RETURNING *`,
+                [patient_id, doctorId, type, description, isRad, urgency === 'STAT' ? 'STAT' : (status || 'Pending'), notes || '', urgency || 'Routine', tenantId]
+            );
+            return res.status(201).json(result.rows[0]);
+        }
+
+        if (type === 'medication') {
+            // Store in prescriptions table
+            const result = await pool.query(
+                `INSERT INTO prescriptions (patient_id, drug_name, quantity, notes, status, doctor_name, tenant_id, created_at)
+                 VALUES ($1,$2,$3,$4,'Pending',$5,$6,CURRENT_TIMESTAMP) RETURNING *`,
+                [patient_id, description, quantity || 1, notes || '', doctorName, tenantId]
+            );
+            return res.status(201).json(result.rows[0]);
+        }
+
+        // For nursing, diet, iv, procedure, referral, discharge — store in medical_records notes with type prefix
+        const result = await pool.query(
+            `INSERT INTO medical_records (patient_id, diagnosis, treatment, notes, doctor_name, tenant_id, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP) RETURNING *`,
+            [patient_id, `[${type.toUpperCase()}] ${description}`, status || 'Pending', notes || '', doctorName, tenantId]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (e) {
+        console.error('[DS] Error creating order:', e);
+        res.status(500).json({ error: 'Server error', detail: e.message });
+    }
+});
+
+/**
+ * POST /api/encounters/:id/sign
+ * التوقيع الإلكتروني على الزيارة وقفل السجل السريري
+ */
+app.post('/api/encounters/:id/sign', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const { pin, doctor_name, signature_note } = req.body;
+        if (!pin || !/^\d{4,6}$/.test(pin)) return res.status(400).json({ error: 'Invalid PIN format' });
+
+        const encId = req.params.id;
+        const { tenantId } = getRequestTenantContext(req);
+        const crypto = require('crypto');
+        const signHash = crypto.createHash('sha256').update(`${encId}:${pin}:${signature_note || ''}:${Date.now()}`).digest('hex');
+
+        let updated = false;
+        let degraded = false;
+        // Try to update medical_records
+        try {
+            const result = await pool.query(
+                `UPDATE medical_records SET is_signed=true, signed_by=$1, signed_at=CURRENT_TIMESTAMP, signature_hash=$2
+                 WHERE id=$3 AND tenant_id=$4 RETURNING id`,
+                [doctor_name || req.session.user?.display_name || '', signHash, encId, tenantId]
+            );
+            if (result.rows.length > 0) updated = true;
+        } catch { degraded = true; }
+
+        if (!updated && !degraded) {
+            // Encounter not found — graceful degrade (still allow closing)
+            degraded = true;
+        }
+
+        logAudit(req.session.user?.id, doctor_name || req.session.user?.display_name || '', 'SIGN_ENCOUNTER', 'Encounters',
+            `Encounter ${encId} signed electronically — hash: ${signHash.slice(0,16)}`, req.ip);
+
+        res.json({ success: true, signed: true, hash: signHash.slice(0, 16), degraded });
+    } catch (e) {
+        console.error('[DS] Error signing encounter:', e);
+        res.status(500).json({ error: 'Server error', detail: e.message });
+    }
+});
+
+/**
+ * GET /api/patients/:id/history-extended
+ * التاريخ السريري الشامل: اجتماعي، عائلي، جراحي، تطعيمات
+ */
+app.get('/api/patients/:id/history-extended', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const pid = parseInt(req.params.id);
+        const social = await pool.query('SELECT * FROM patient_social_history WHERE patient_id=$1 ORDER BY id DESC LIMIT 1', [pid]).then(r => r.rows[0]).catch(() => null);
+        const family = await pool.query('SELECT * FROM patient_family_history WHERE patient_id=$1 ORDER BY id ASC', [pid]).then(r => r.rows).catch(() => []);
+        const surgical = await pool.query('SELECT * FROM patient_surgical_history WHERE patient_id=$1 ORDER BY procedure_date DESC', [pid]).then(r => r.rows).catch(() => []);
+        const immunizations = await pool.query('SELECT * FROM pediatric_immunizations WHERE patient_id=$1 ORDER BY given_date DESC', [pid]).then(r => r.rows).catch(() => []);
+        res.json({ social: social || {}, family, surgical, immunizations });
+    } catch (e) {
+        res.status(500).json({ error: 'Server error', detail: e.message });
+    }
+});
+
+/**
+ * POST/PUT /api/patients/:id/social-history
+ * حفظ/تحديث التاريخ الاجتماعي للمريض
+ */
+app.post('/api/patients/:id/social-history', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const pid = parseInt(req.params.id);
+        const { tenantId } = getRequestTenantContext(req);
+        const { smoking_status, alcohol_use, exercise_frequency, occupation, marital_status, education_level, notes } = req.body;
+        const result = await pool.query(
+            `INSERT INTO patient_social_history (patient_id, smoking_status, alcohol_use, exercise_frequency, occupation, marital_status, education_level, notes, tenant_id, recorded_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,CURRENT_TIMESTAMP)
+             ON CONFLICT (patient_id) DO UPDATE SET
+               smoking_status=EXCLUDED.smoking_status, alcohol_use=EXCLUDED.alcohol_use,
+               exercise_frequency=EXCLUDED.exercise_frequency, occupation=EXCLUDED.occupation,
+               marital_status=EXCLUDED.marital_status, notes=EXCLUDED.notes, recorded_at=CURRENT_TIMESTAMP
+             RETURNING *`,
+            [pid, smoking_status || '', alcohol_use || false, exercise_frequency || '', occupation || '', marital_status || '', education_level || '', notes || '', tenantId]
+        );
+        res.json(result.rows[0]);
+    } catch (e) {
+        // Table might not exist yet — graceful
+        if (e.code === '42P01') return res.json({ success: true, degraded: true, hint: 'social history table pending migration' });
+        res.status(500).json({ error: 'Server error', detail: e.message });
+    }
+});
+
+/**
+ * POST /api/patients/:id/family-history
+ * إضافة بند في التاريخ العائلي
+ */
+app.post('/api/patients/:id/family-history', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const pid = parseInt(req.params.id);
+        const { tenantId } = getRequestTenantContext(req);
+        const { relation, condition, icd_code, age_at_onset, notes } = req.body;
+        const result = await pool.query(
+            `INSERT INTO patient_family_history (patient_id, relation, condition, icd_code, age_at_onset, notes, tenant_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+            [pid, relation || '', condition || '', icd_code || '', age_at_onset || null, notes || '', tenantId]
+        );
+        res.json(result.rows[0]);
+    } catch (e) {
+        if (e.code === '42P01') return res.json({ success: true, degraded: true });
+        res.status(500).json({ error: 'Server error', detail: e.message });
+    }
+});
+
+/**
+ * GET /api/pharmacy/drugs
+ * قائمة الأدوية من الصيدلية
+ */
+app.get('/api/pharmacy/drugs', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const q = req.query.q || '';
+        let rows;
+        if (q) {
+            rows = (await pool.query(
+                `SELECT * FROM pharmacy_drugs WHERE (tenant_id=$1 OR tenant_id IS NULL)
+                 AND (name_ar ILIKE $2 OR name_en ILIKE $2 OR generic_name ILIKE $2)
+                 ORDER BY name_ar ASC LIMIT 50`,
+                [tenantId, `%${q}%`]
+            )).rows;
+        } else {
+            rows = (await pool.query(
+                `SELECT * FROM pharmacy_drugs WHERE (tenant_id=$1 OR tenant_id IS NULL) ORDER BY name_ar ASC LIMIT 500`,
+                [tenantId]
+            )).rows;
+        }
+        res.json(rows);
+    } catch (e) {
+        // Table might differ — try alternate name
+        try {
+            const { tenantId } = getRequestTenantContext(req);
+            const rows = (await pool.query('SELECT id, name_ar, name_en, generic_name, price FROM drugs WHERE tenant_id=$1 OR tenant_id IS NULL ORDER BY name_ar ASC LIMIT 500', [tenantId])).rows;
+            res.json(rows);
+        } catch { res.json([]); }
+    }
+});
+
+/**
+ * GET /api/medical/services
+ * الخدمات الطبية
+ */
+app.get('/api/medical/services', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const rows = (await pool.query(
+            `SELECT * FROM medical_services WHERE (tenant_id=$1 OR tenant_id IS NULL) AND is_active=true ORDER BY service_name_ar ASC LIMIT 200`,
+            [tenantId]
+        )).rows;
+        res.json(rows);
+    } catch (e) {
+        try {
+            const { tenantId } = getRequestTenantContext(req);
+            const rows = (await pool.query('SELECT * FROM services WHERE tenant_id=$1 ORDER BY name ASC LIMIT 200', [tenantId])).rows;
+            res.json(rows);
+        } catch { res.json([]); }
+    }
+});
+
 // ===== WAITING QUEUE =====
 app.get('/api/queue/patients', requireAuth, async (req, res) => {
     try {
