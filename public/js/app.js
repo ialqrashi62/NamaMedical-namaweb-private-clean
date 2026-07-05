@@ -10587,7 +10587,7 @@ async function renderWaitingQueue(el) {
 
                     <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
                       <button class="btn btn-sm" onclick="callPatientNotification(${p.id})" style="background:#e3f2fd;color:#1565c0;flex:1;min-width:70px">🔔 ${tr('Call', 'نداء')}</button>
-                      <button class="btn btn-sm" onclick="triagePatientModal(${p.id}, ${p.triage_level}, '${jsStr(p.acuity_notes || '')}')" style="background:#fff3e0;color:#e65100;flex:1;min-width:70px">🩺 ${tr('Triage', 'فرز')}</button>
+                      <button class="btn btn-sm" onclick="triagePatientModal(${p.id}, ${p.triage_level}, '${jsStr(p.acuity_notes || '')}', '${jsStr(p.exam_room_id || '')}')" style="background:#fff3e0;color:#e65100;flex:1;min-width:70px">🩺 ${tr('Triage', 'فرز')}</button>
                       
                       ${p.status === 'CheckedIn' || p.status === 'WaitingForProvider' ? `
                         <button class="btn btn-sm btn-primary" onclick="updateQueueStatus(${p.id}, 'InConsultation')" style="flex:1.5;min-width:100px">⚡ ${tr('Consult', 'دخول العيادة')}</button>
@@ -10625,13 +10625,19 @@ async function renderWaitingQueue(el) {
   }, 15000);
 }
 
-window.triagePatientModal = (queueId, currentLevel, currentNotes) => {
+window.triagePatientModal = async (queueId, currentLevel, currentNotes, currentRoom) => {
+  let activeRooms = [];
+  try {
+    activeRooms = await API.get('/api/settings/rooms/active').catch(() => []);
+  } catch (e) { console.error(e); }
+
   const modal = document.createElement('div');
   modal.id = 'triageModal';
   modal.className = 'modal-backdrop';
   modal.innerHTML = `
     <div class="card glass-card-premium" style="max-width:450px;margin:10% auto;padding:24px;position:relative">
       <h3 style="margin:0 0 16px;color:var(--primary)">🩺 ${tr('Clinical Triage & Prioritization', 'الفرز الطبي وتحديد الأولويات')}</h3>
+      
       <div class="form-group" style="margin-bottom:16px">
         <label>${tr('Acuity / Triage Level (ESI)', 'مستوى الفرز الطبي والأولوية (ESI)')}</label>
         <select id="triageLevelSelect" class="form-input">
@@ -10642,10 +10648,24 @@ window.triagePatientModal = (queueId, currentLevel, currentNotes) => {
           <option value="5" ${currentLevel == 5 ? 'selected' : ''}>🟢 ESI-5: Non-Urgent (غير عاجل)</option>
         </select>
       </div>
+
+      <div class="form-group" style="margin-bottom:16px">
+        <label>${tr('Assign Exam Room / Clinic', 'تحديد عيادة الفحص / الغرفة')}</label>
+        <select id="triageRoomSelect" class="form-input">
+          <option value="">-- ${tr('Select Clinic/Room', 'اختر العيادة/الغرفة')} --</option>
+          ${activeRooms.map(r => `
+            <option value="${escapeHTML(r.room_number)}" ${currentRoom === r.room_number ? 'selected' : ''}>
+              🚪 ${escapeHTML(r.room_number)} - ${escapeHTML(isArabic ? (r.name_ar || r.name_en) : (r.name_en || r.name_ar))}
+            </option>
+          `).join('')}
+        </select>
+      </div>
+
       <div class="form-group" style="margin-bottom:20px">
         <label>${tr('Triage / Acuity Notes', 'ملاحظات الفرز وتوصيف الحالة')}</label>
         <textarea id="triageNotesArea" class="form-input" style="height:80px" placeholder="${tr('Describe patient condition, pain score, or vitals...', 'أدخل وصف الحالة، مستوى الألم، أو العلامات الحيوية...')}">${escapeHTML(currentNotes || '')}</textarea>
       </div>
+
       <div style="display:flex;gap:12px">
         <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('triageModal').remove()">${tr('Cancel', 'إلغاء')}</button>
         <button class="btn btn-primary" style="flex:2" onclick="saveTriageData(${queueId})">${tr('Save & Route to Doctor', 'حفظ وتوجيه للطبيب')}</button>
@@ -10658,8 +10678,9 @@ window.triagePatientModal = (queueId, currentLevel, currentNotes) => {
 window.saveTriageData = async (queueId) => {
   const triage_level = parseInt(document.getElementById('triageLevelSelect').value, 10);
   const acuity_notes = document.getElementById('triageNotesArea').value;
+  const exam_room_id = document.getElementById('triageRoomSelect').value;
   try {
-    await API.put(`/api/queue/patients/${queueId}/triage`, { triage_level, acuity_notes });
+    await API.put(`/api/queue/patients/${queueId}/triage`, { triage_level, acuity_notes, exam_room_id });
     showToast(tr('Triage assessment updated!', 'تم تحديث تقييم الفرز الطبي وتوجيه المريض!'));
     document.getElementById('triageModal').remove();
     navigateTo(currentPage);

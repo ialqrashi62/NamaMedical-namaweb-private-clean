@@ -6381,14 +6381,14 @@ app.put('/api/queue/patients/:id/status', requireAuth, async (req, res) => {
 app.put('/api/queue/patients/:id/triage', requireAuth, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
-        const { triage_level, acuity_notes } = req.body;
+        const { triage_level, acuity_notes, exam_room_id } = req.body;
         
         const result = await pool.query(
             `UPDATE waiting_queue 
-             SET triage_level = $1, acuity_notes = $2, status = 'WaitingForProvider', updated_at = CURRENT_TIMESTAMP
-             WHERE id = $3 AND tenant_id = $4
+             SET triage_level = $1, acuity_notes = $2, exam_room_id = $3, status = 'WaitingForProvider', updated_at = CURRENT_TIMESTAMP
+             WHERE id = $4 AND tenant_id = $5
              RETURNING *`,
-            [triage_level, acuity_notes || '', req.params.id, tenantId]
+            [triage_level, acuity_notes || '', exam_room_id || '', req.params.id, tenantId]
         );
         
         if (result.rows.length === 0) {
@@ -6417,6 +6417,98 @@ app.put('/api/queue/patients/:id/call', requireAuth, async (req, res) => {
         res.json({ success: true, message: 'Patient calling broadcasted', patient_name: record.name_ar || record.name_en, room: record.exam_room_id });
     } catch (e) {
         console.error('Error calling patient:', e);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// ===== EXAM ROOMS & CLINICS =====
+app.get('/api/settings/rooms', requireAuth, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const result = await pool.query(
+            "SELECT * FROM exam_rooms WHERE tenant_id = $1 ORDER BY room_number ASC",
+            [tenantId]
+        );
+        res.json(result.rows);
+    } catch (e) {
+        console.error('Error fetching rooms:', e);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.get('/api/settings/rooms/active', requireAuth, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const result = await pool.query(
+            "SELECT * FROM exam_rooms WHERE tenant_id = $1 AND status = 'Available' ORDER BY room_number ASC",
+            [tenantId]
+        );
+        res.json(result.rows);
+    } catch (e) {
+        console.error('Error fetching active rooms:', e);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.post('/api/settings/rooms', requireAuth, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const { room_number, name_ar, name_en, department_id, status } = req.body;
+        
+        if (!room_number) {
+            return res.status(400).json({ error: 'Room number is required' });
+        }
+
+        const result = await pool.query(
+            `INSERT INTO exam_rooms (tenant_id, room_number, name_ar, name_en, department_id, status)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             RETURNING *`,
+            [tenantId, room_number, name_ar || '', name_en || '', department_id || null, status || 'Available']
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (e) {
+        console.error('Error creating room:', e);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.put('/api/settings/rooms/:id', requireAuth, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const { room_number, name_ar, name_en, department_id, status } = req.body;
+
+        const result = await pool.query(
+            `UPDATE exam_rooms
+             SET room_number = $1, name_ar = $2, name_en = $3, department_id = $4, status = $5
+             WHERE id = $6 AND tenant_id = $7
+             RETURNING *`,
+            [room_number, name_ar || '', name_en || '', department_id || null, status || 'Available', req.params.id, tenantId]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Room not found' });
+        }
+        res.json(result.rows[0]);
+    } catch (e) {
+        console.error('Error updating room:', e);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.delete('/api/settings/rooms/:id', requireAuth, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        const result = await pool.query(
+            "DELETE FROM exam_rooms WHERE id = $1 AND tenant_id = $2 RETURNING *",
+            [req.params.id, tenantId]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Room not found' });
+        }
+        res.json({ success: true, message: 'Room deleted successfully' });
+    } catch (e) {
+        console.error('Error deleting room:', e);
         res.status(500).json({ error: 'Server error' });
     }
 });

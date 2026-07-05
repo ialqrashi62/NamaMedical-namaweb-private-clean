@@ -17,8 +17,7 @@
 -- ============================================================
 BEGIN;
 
-DROP TABLE IF EXISTS lab_samples CASCADE;
-CREATE TABLE lab_samples (
+CREATE TABLE IF NOT EXISTS lab_samples (
     id SERIAL PRIMARY KEY,
     tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     facility_id INTEGER,

@@ -84,3 +84,30 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_surgery_preop_assessments_tenant_id 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_surgery_preop_tests_tenant_id ON "surgery_preop_tests" (tenant_id);
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_telemedicine_sessions_tenant_id ON "telemedicine_sessions" (tenant_id);
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_transport_requests_tenant_id ON "transport_requests" (tenant_id);
+
+-- ---------- 25 missing prepared FORCE-RLS tables ----------
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_branches_tenant_id ON "branches" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_cme_activities_tenant_id ON "cme_activities" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_cme_events_tenant_id ON "cme_events" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_cme_registrations_tenant_id ON "cme_registrations" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_company_settings_tenant_id ON "company_settings" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_cssd_batches_tenant_id ON "cssd_batches" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_cssd_instrument_sets_tenant_id ON "cssd_instrument_sets" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_cssd_load_items_tenant_id ON "cssd_load_items" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_cssd_sterilization_cycles_tenant_id ON "cssd_sterilization_cycles" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_departments_tenant_id ON "departments" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_discount_rules_tenant_id ON "discount_rules" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_employees_tenant_id ON "employees" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_finance_cost_centers_tenant_id ON "finance_cost_centers" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_finance_fiscal_years_tenant_id ON "finance_fiscal_years" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_form_templates_tenant_id ON "form_templates" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_infection_control_reports_tenant_id ON "infection_control_reports" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_insurance_companies_tenant_id ON "insurance_companies" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_insurance_contracts_tenant_id ON "insurance_contracts" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_insurance_policies_tenant_id ON "insurance_policies" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_maintenance_orders_tenant_id ON "maintenance_orders" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_medical_reports_tenant_id ON "medical_reports" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_pathology_specimens_tenant_id ON "pathology_specimens" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_pharmacy_prescriptions_tenant_id ON "pharmacy_prescriptions" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_referrals_tenant_id ON "referrals" (tenant_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_visit_lifecycle_tenant_id ON "visit_lifecycle" (tenant_id);
