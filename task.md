@@ -1,13 +1,17 @@
-# 📋 قائمة مهام ترقية محطة التمريض وتصليب الأمان
+# 📋 قائمة مهام مراجعة المنظومة الطبية الشاملة (HOS_PRO)
 
-- `[x]` تعديل دالة الاتصال في [db_postgres.js](file:///c:/Users/ice/Desktop/NamaMedical/namaweb/db_postgres.js) لإضافة `idleTimeoutMillis: 1000`
-- `[x]` تعديل [app.js](file:///c:/Users/ice/Desktop/NamaMedical/namaweb/public/js/app.js) لربط دالة `renderNursing(el)` مع محطة التمريض المطورة
-- `[x]` إنشاء ملفات الهجرة لتصليب RLS على جداول التمريض:
-  - `[x]` [e6_04_nursing_rls_up.sql](file:///c:/Users/ice/Desktop/NamaMedical/namaweb/migrations/e6_04_nursing_rls_up.sql)
-  - `[x]` [e6_04_nursing_rls_down.sql](file:///c:/Users/ice/Desktop/NamaMedical/namaweb/migrations/e6_04_nursing_rls_down.sql)
-  - `[x]` [e6_04_nursing_rls_validate.sql](file:///c:/Users/ice/Desktop/NamaMedical/namaweb/migrations/e6_04_nursing_rls_validate.sql)
-- `[x]` تطبيق هجرة RLS التمريض محلياً على قاعدة بيانات التطوير
-- `[x]` التحقق من صحة واجهات التمريض يدوياً/برمجياً
-- `[x]` تشغيل كامل حزمة الاختبارات (npm run test) للتأكد من نجاحها وعدم تعليقها
-- `[x]` توثيق التعديلات وحفظها في الـ AI Brain وكتابة تقرير الإنجاز
-- `[x]` نشر التغييرات الفورية لبيئة الإنتاج jumanasoft.com وإعادة تشغيل PM2 والتحقق من رابط الصحة
+- `[x]` تفعيل وقراءة مهارات HOS_PRO بالكامل وفهم سياقها.
+- `[x]` فحص القائمة الجانبية الحالية (Sidebar) في `namaweb/public/js/app.js` وعد عناصرها (44 قسماً وظيفياً، 0 روابط مكسورة، 0 submenu هرمي بالقائمة الجانبية).
+- `[x]` إجراء تحليل الفجوات والمقارنة العالمية (Global Benchmark & Gap Analysis) وتحديد 25 قسماً مفقوداً ودمج 4 أقسام وتحديد P0-P3.
+- `[x]` بناء الكتالوج الرئيسي للأقسام (Master Department Catalog) وتوزيع 73 وحدة على 10 مجموعات تشغيلية.
+- `[x]` صياغة مخطط المتطلبات الفنية والسريرية (Requirements Blueprint) لجميع الموديولات الطبية والمساندة المقترحة.
+- `[x]` بناء مصفوفة الصلاحيات (RBAC Matrix) وقواعد منع تداخل المسؤوليات والتدقيق (PDPL & CBAHI).
+- `[x]` إعداد مصفوفة التمريض التخصصية وبوابات السلامة الطبية للأقسام عالية الخطورة (Safety Gates).
+- `[x]` تصميم واجهات المستخدم وحالات شاشات الأقسام الطبية والأزرار العامة والسريرية (UI/UX Blueprint).
+- `[x]` تخطيط جداول قواعد البيانات المقترحة وعلاقاتها وعزل المستأجرين وتصميم الـ APIs والتكاملات (HL7/FHIR/ZATCA/NPHIES).
+- `[x]` صياغة سيناريوهات سير العمل المتكاملة وتدفق البيانات (End-to-End Clinical Workflows).
+- `[x]` بناء خطة الاختبار والقبول البرمجي والسريري وفحص حظر Mojibake (QA & Acceptance Testing).
+- `[x]` توثيق وحفظ كامل المخرجات في المسار `.ai-brain/` بصيغة UTF-8 سليمة.
+- `[x]` تحديث ذاكرة المشروع (`AI_PROJECT_MEMORY.md`) وسجل المخرجات المنجزة (`walkthrough.md`).
+- `[x]` إجراء التدقيق الختامي وضمان عدم سقوط أي قسم طبي (Final No-Missing Department Audit).
+

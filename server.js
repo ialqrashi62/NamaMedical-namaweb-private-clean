@@ -8022,6 +8022,26 @@ app.put('/api/or/surgeries/:id/status', requireAuth, requireRole('surgery', 'doc
             if (!cl || cl.state !== 'Completed') {
                 return res.status(409).json({ error: 'WHO Sign-Out must be completed before the surgery can be Completed' });
             }
+
+            // PACU Aldrete Score Gate (Safety Gate): prevent discharging from PACU with Aldrete < 9 without documented override
+            const pacuQ = tenantId
+                ? 'SELECT aldrete_score FROM pacu_records WHERE surgery_id=$1 AND tenant_id=$2'
+                : 'SELECT aldrete_score FROM pacu_records WHERE surgery_id=$1';
+            const pacu = (await pool.query(pacuQ, tenantId ? [surgeryId, tenantId] : [surgeryId])).rows[0];
+            if (pacu) {
+                const score = pacu.aldrete_score;
+                if (score !== null && score !== undefined && score < 9) {
+                    const overrideReason = String(req.body.override_reason || req.body.pacu_override_reason || '').trim();
+                    if (!overrideReason) {
+                        return res.status(409).json({
+                            error: 'Patient cannot be discharged from PACU with Aldrete Score < 9 without a documented anesthesiologist override reason.',
+                            code: 'PACU_ALDRETE_BELOW_MINIMUM'
+                        });
+                    }
+                    logAudit(req.session.user?.id, req.session.user?.display_name || '', 'PACU_ALDRETE_OVERRIDE', 'Surgery',
+                        `Discharged from PACU with Aldrete Score ${score} < 9 for surgery ${surgeryId} patient #${surgery.patient_id} with reason: ${overrideReason.slice(0, 160)}`, req.ip);
+                }
+            }
         }
 
         const updQ = tenantId
@@ -13305,6 +13325,115 @@ app.post('/api/clinical-pharmacy/education', requireAuth, requireTenantScope, as
             [patient_id, patient_name || '', medication || '', instructions || '', side_effects || '', precautions || '', req.session.user.name, tenantId || null, facilityId || null]);
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// ===== OVR — INCIDENT REPORTS (بلاغات الحوادث — CBAHI Safety Culture) =====
+// Auto-create table if not exists
+(async () => {
+  try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS incident_reports (
+      id SERIAL PRIMARY KEY,
+      tenant_id INTEGER,
+      facility_id INTEGER,
+      incident_type VARCHAR(100) NOT NULL,
+      sac_classification VARCHAR(10) DEFAULT 'SAC4',
+      incident_datetime TIMESTAMP,
+      location VARCHAR(255),
+      description TEXT,
+      immediate_actions TEXT,
+      is_anonymous BOOLEAN DEFAULT false,
+      reporter_id INTEGER,
+      reporter_name VARCHAR(255),
+      status VARCHAR(50) DEFAULT 'Open',
+      rca_status VARCHAR(100),
+      rca_notes TEXT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`);
+  } catch(e) { console.warn('[OVR] Table auto-create skipped:', e.message); }
+})();
+
+app.get('/api/incidents/ovr', requireAuth, requireTenantScope, async (req, res) => {
+  try {
+    const { tenantId } = getRequestTenantContext(req);
+    const user = req.session.user;
+    const isPrivileged = ['admin', 'quality', 'director'].includes(user.role);
+    let rows;
+    if (isPrivileged) {
+      rows = (await pool.query(
+        'SELECT * FROM incident_reports WHERE (tenant_id=$1 OR tenant_id IS NULL) ORDER BY created_at DESC LIMIT 100',
+        [tenantId]
+      )).rows;
+    } else {
+      // Non-privileged: only see their own non-anonymous reports
+      rows = (await pool.query(
+        'SELECT * FROM incident_reports WHERE tenant_id=$1 AND (is_anonymous=false AND reporter_id=$2) ORDER BY created_at DESC LIMIT 50',
+        [tenantId, user.id]
+      )).rows;
+    }
+    res.json(rows);
+  } catch (e) { console.error('[OVR GET]', e.message); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.post('/api/incidents/ovr', requireAuth, requireTenantScope, async (req, res) => {
+  try {
+    const { tenantId, facilityId } = getRequestTenantContext(req);
+    const user = req.session.user;
+    const { incident_type, sac_classification, incident_datetime, location, description, immediate_actions, is_anonymous } = req.body;
+    if (!incident_type || !description) return res.status(422).json({ error: 'incident_type and description are required' });
+    const reporterId = is_anonymous ? null : user.id;
+    const reporterName = is_anonymous ? null : (user.display_name || user.username);
+    const result = await pool.query(
+      `INSERT INTO incident_reports (tenant_id, facility_id, incident_type, sac_classification, incident_datetime, location, description, immediate_actions, is_anonymous, reporter_id, reporter_name)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      [tenantId, facilityId || null, incident_type, sac_classification || 'SAC4',
+       incident_datetime ? new Date(incident_datetime) : new Date(),
+       location || '', description, immediate_actions || '', is_anonymous ? true : false,
+       reporterId, reporterName]
+    );
+    logAudit(user.id, user.display_name || user.username, 'CREATE_OVR_INCIDENT', 'Safety',
+      `SAC: ${sac_classification} | Type: ${incident_type} | Anonymous: ${is_anonymous}`, req.ip);
+    res.status(201).json(result.rows[0]);
+  } catch (e) { console.error('[OVR POST]', e.message); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.put('/api/incidents/ovr/:id', requireAuth, requireTenantScope, async (req, res) => {
+  try {
+    const { tenantId } = getRequestTenantContext(req);
+    const user = req.session.user;
+    if (!['admin', 'quality', 'director'].includes(user.role)) return res.status(403).json({ error: 'Forbidden' });
+    const { status, rca_status, rca_notes } = req.body;
+    const result = await pool.query(
+      `UPDATE incident_reports SET status=$1, rca_status=$2, rca_notes=$3, updated_at=NOW()
+       WHERE id=$4 AND (tenant_id=$5 OR tenant_id IS NULL) RETURNING *`,
+      [status || 'Open', rca_status || null, rca_notes || null, req.params.id, tenantId]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
+    logAudit(user.id, user.display_name || user.username, 'UPDATE_OVR_INCIDENT', 'Safety',
+      `ID: ${req.params.id} → status: ${status} | RCA: ${rca_status}`, req.ip);
+    res.json(result.rows[0]);
+  } catch (e) { console.error('[OVR PUT]', e.message); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ===== ADMIN AUDIT LOG VIEWER =====
+app.get('/api/admin/audit-log', requireAuth, async (req, res) => {
+  try {
+    const user = req.session.user;
+    if (!['admin', 'director'].includes(user.role)) return res.status(403).json({ error: 'Forbidden — Admin only' });
+    const { search, module: mod, from } = req.query;
+    const conditions = [];
+    const params = [];
+    let idx = 1;
+    if (search) { conditions.push(`(action ILIKE $${idx} OR module ILIKE $${idx} OR user_name ILIKE $${idx} OR details ILIKE $${idx})`); params.push('%' + search + '%'); idx++; }
+    if (mod) { conditions.push(`module=$${idx}`); params.push(mod); idx++; }
+    if (from) { conditions.push(`created_at>=$${idx}`); params.push(new Date(from)); idx++; }
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+    const rows = (await pool.query(
+      `SELECT id, user_id, user_name, action, module, details, ip, created_at FROM audit_log ${where} ORDER BY created_at DESC LIMIT 500`,
+      params
+    )).rows;
+    res.json(rows);
+  } catch (e) { console.error('[AUDIT-LOG GET]', e.message); res.status(500).json({ error: 'Server error' }); }
 });
 
 // ===== REHABILITATION / PT =====

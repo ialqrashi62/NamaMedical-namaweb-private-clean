@@ -68,9 +68,15 @@ assert(reserve(10, 11, '2026-07-01', '10:00', '12:00').status === 200, 'adjacent
 assert(reserve(20, 22, '2026-07-01', '08:00', '10:00').status === 200, 'different room+surgeon allowed');
 
 // WHO + status gating happy path and gates
-let who = 'Not Started', status = 'Scheduled';
+let who = 'Not Started', status = 'Scheduled', aldreteScore = 10, overrideReason = '';
 function startIncision() { const reached = E12_WHO_ORDER.indexOf(who) >= E12_WHO_ORDER.indexOf('Time-Out'); if (!reached) return { status: 409 }; if (!TR[status].includes('InProgress')) return { status: 409 }; status = 'InProgress'; return { status: 200 }; }
-function complete() { if (who !== 'Completed') return { status: 409 }; if (!TR[status].includes('Completed')) return { status: 409 }; status = 'Completed'; return { status: 200 }; }
+function complete() {
+    if (who !== 'Completed') return { status: 409 };
+    if (!TR[status].includes('Completed')) return { status: 409 };
+    if (aldreteScore < 9 && !overrideReason) return { status: 409, code: 'PACU_ALDRETE_BELOW_MINIMUM' };
+    status = 'Completed';
+    return { status: 200 };
+}
 assert(startIncision().status === 409, 'cannot start incision before Time-Out');
 who = whoNext(who, 'sign-in').newState;
 assert(startIncision().status === 409, 'still cannot incise after only Sign-In');
@@ -79,9 +85,13 @@ assert(startIncision().status === 200 && status === 'InProgress', 'incision allo
 assert(complete().status === 409, 'cannot complete before Sign-Out');
 who = whoNext(who, 'sign-out').newState; // -> Completed
 assert(who === 'Completed', 'Sign-Out advances WHO to Completed');
-// move to PACU then complete
+// move to PACU then complete with Aldrete check
 status = 'PACU';
-assert(complete().status === 200 && status === 'Completed', 'complete allowed after Sign-Out + PACU');
+aldreteScore = 7;
+overrideReason = '';
+assert(complete().status === 409 && complete().code === 'PACU_ALDRETE_BELOW_MINIMUM', 'cannot discharge from PACU with Aldrete < 9 without override reason');
+overrideReason = 'Anesthesiologist approved early release';
+assert(complete().status === 200 && status === 'Completed', 'discharge allowed with override reason');
 
 // Consumption decrement (fail-closed on insufficient stock)
 function consume(stock, lines) {
