@@ -2224,6 +2224,61 @@ ALTER TABLE integration_settings ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
 ALTER TABLE queue_advertisements ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
 ALTER TABLE maintenance_pm_schedules ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
 ALTER TABLE maintenance_equipment ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
+
+-- Wisdom Dental & Periodontal Expansion
+ALTER TABLE dental_records ADD COLUMN IF NOT EXISTS affected_surfaces TEXT DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS dental_periodontal_exams (
+    id SERIAL PRIMARY KEY,
+    patient_id INTEGER,
+    tooth_number INTEGER,
+    probing_depth INTEGER,
+    bleeding_on_probing BOOLEAN DEFAULT FALSE,
+    gingival_recession INTEGER DEFAULT 0,
+    tenant_id INTEGER,
+    facility_id INTEGER,
+    exam_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_dental_periodontal_tenant ON dental_periodontal_exams (tenant_id, facility_id, patient_id);
+
+CREATE TABLE IF NOT EXISTS dental_images (
+    id SERIAL PRIMARY KEY,
+    patient_id INTEGER,
+    tooth_number INTEGER,
+    image_path TEXT,
+    image_type TEXT DEFAULT 'X-Ray',
+    tenant_id INTEGER,
+    facility_id INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_dental_images_tenant ON dental_images (tenant_id, facility_id, patient_id);
+
+-- Cardiology & Oncology Expansion
+CREATE TABLE IF NOT EXISTS cardiology_cath_reports (
+    id SERIAL PRIMARY KEY,
+    patient_id INTEGER,
+    blockage_lad INTEGER DEFAULT 0,
+    blockage_lcx INTEGER DEFAULT 0,
+    blockage_rca INTEGER DEFAULT 0,
+    findings TEXT DEFAULT '',
+    tenant_id INTEGER,
+    facility_id INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_cardio_cath_tenant ON cardiology_cath_reports (tenant_id, facility_id, patient_id);
+
+CREATE TABLE IF NOT EXISTS oncology_patient_regimens (
+    id SERIAL PRIMARY KEY,
+    patient_id INTEGER,
+    regimen_name TEXT,
+    cycle_number INTEGER,
+    status TEXT DEFAULT 'Scheduled',
+    start_date TEXT,
+    tenant_id INTEGER,
+    facility_id INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_onco_regimens_tenant ON oncology_patient_regimens (tenant_id, facility_id, patient_id);
             `);
 
             // Perform backfill

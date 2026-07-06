@@ -2152,11 +2152,14 @@ window.saveNeonatal = async (deliveryId) => {
 let dentalTab = 'charting';
 let dentalSelectedPatientId = null;
 let dentalSelectedTooth = null;
+let dentalSelectedSurface = 'Occlusal';
 
 async function renderDental(el) {
-  const [patients, dentalRecords] = await Promise.all([
+  const [patients, dentalRecords, periodontalRecords, dentalImages] = await Promise.all([
     API.get('/api/patients').catch(() => []),
-    dentalSelectedPatientId ? API.get('/api/dental/records/' + dentalSelectedPatientId).catch(() => []) : Promise.resolve([])
+    dentalSelectedPatientId ? API.get('/api/dental/records/' + dentalSelectedPatientId).catch(() => []) : Promise.resolve([]),
+    dentalSelectedPatientId ? API.get('/api/dental/periodontal/' + dentalSelectedPatientId).catch(() => []) : Promise.resolve([]),
+    dentalSelectedPatientId ? API.get('/api/dental/images/' + dentalSelectedPatientId).catch(() => []) : Promise.resolve([])
   ]);
 
   if (!dentalSelectedPatientId && patients.length > 0) {
@@ -2171,7 +2174,8 @@ async function renderDental(el) {
     sorted.forEach(rec => {
       toothStatusMap[rec.tooth_number] = {
         condition: rec.condition,
-        treatment: rec.treatment_done
+        treatment: rec.treatment_done,
+        surfaces: rec.affected_surfaces ? rec.affected_surfaces.split(',') : []
       };
     });
   }
@@ -2191,7 +2195,9 @@ async function renderDental(el) {
     </div>
 
     <div class="tab-bar">
-      <button class="tab-btn ${dentalTab === 'charting' ? 'active' : ''}" onclick="dentalTab='charting';navigateTo(43)">🦷 ${tr('Dental Charting', 'مخطط الأسنان التفاعلي')}</button>
+      <button class="tab-btn ${dentalTab === 'charting' ? 'active' : ''}" onclick="dentalTab='charting';navigateTo(43)">🦷 ${tr('Odontogram & Surfaces', 'مخطط الأسنان والأسطح')}</button>
+      <button class="tab-btn ${dentalTab === 'periodontal' ? 'active' : ''}" onclick="dentalTab='periodontal';navigateTo(43)">📋 ${tr('Periodontal Charting', 'فحص جيوب اللثة')}</button>
+      <button class="tab-btn ${dentalTab === 'images' ? 'active' : ''}" onclick="dentalTab='images';navigateTo(43)">🖼️ ${tr('X-Rays & Imaging', 'أشعة وصور الأسنان')}</button>
       <button class="tab-btn ${dentalTab === 'history' ? 'active' : ''}" onclick="dentalTab='history';navigateTo(43)">📋 ${tr('Treatment History', 'سجل العلاجات السابقة')}</button>
     </div>
 
@@ -2228,10 +2234,37 @@ async function renderDental(el) {
         </div>
 
         <div class="card">
-          <h3>🩺 ${tr('Record Treatment / Diagnosis', 'تسجيل التشخيص والتدخل العلاجي')}</h3>
-          <div style="margin:12px 0;padding:8px 12px;background:rgba(14,165,233,0.1);border-radius:8px;font-weight:bold;color:var(--primary)">
-            ${tr('Selected Tooth:', 'السن المحدد:')} <span id="dentalSelectedToothLabel">${dentalSelectedTooth ? dentalSelectedTooth : tr('Click a tooth on diagram', 'انقر على سن في المخطط')}</span>
+          <h3>🩺 ${tr('5-Surface Charting Simulator', 'محاكي أسطح الأسنان الخمسة')}</h3>
+          <div style="margin:12px 0;padding:8px 12px;background:rgba(14,165,233,0.1);border-radius:8px;font-weight:bold;color:var(--primary);display:flex;justify-content:between;align-items:center">
+            <span>${tr('Selected Tooth:', 'السن المحدد:')} <span id="dentalSelectedToothLabel">${dentalSelectedTooth ? dentalSelectedTooth : tr('Click a tooth', 'انقر على سن')}</span></span>
+            <span>${tr('Selected Surface:', 'السطح المحدد:')} <span id="dentalSelectedSurfaceLabel">${dentalSelectedSurface}</span></span>
           </div>
+
+          <!-- 5-Surface Tooth Interactive Graphic -->
+          <div style="display:flex;justify-content:center;margin:20px 0">
+            <svg width="150" height="150" viewBox="0 0 100 100" style="border:1px dashed var(--outline);border-radius:10px;background:#f8fafc">
+              <!-- Buccal/Outer (Top) -->
+              <polygon points="10,10 90,10 70,30 30,30" fill="${getSurfaceColor('Buccal')}" stroke="var(--outline)" stroke-width="1.5" style="cursor:pointer" onclick="window.selectDentalSurface('Buccal')" />
+              <text x="50" y="22" font-size="6" text-anchor="middle" font-weight="bold" fill="#475569">Buccal (B)</text>
+              
+              <!-- Distal (Right) -->
+              <polygon points="90,10 90,90 70,70 70,30" fill="${getSurfaceColor('Distal')}" stroke="var(--outline)" stroke-width="1.5" style="cursor:pointer" onclick="window.selectDentalSurface('Distal')" />
+              <text x="78" y="52" font-size="6" text-anchor="middle" font-weight="bold" fill="#475569">Distal (D)</text>
+              
+              <!-- Lingual/Inner (Bottom) -->
+              <polygon points="10,90 90,90 70,70 30,70" fill="${getSurfaceColor('Lingual')}" stroke="var(--outline)" stroke-width="1.5" style="cursor:pointer" onclick="window.selectDentalSurface('Lingual')" />
+              <text x="50" y="82" font-size="6" text-anchor="middle" font-weight="bold" fill="#475569">Lingual (L)</text>
+              
+              <!-- Mesial (Left) -->
+              <polygon points="10,10 10,90 30,70 30,30" fill="${getSurfaceColor('Mesial')}" stroke="var(--outline)" stroke-width="1.5" style="cursor:pointer" onclick="window.selectDentalSurface('Mesial')" />
+              <text x="22" y="52" font-size="6" text-anchor="middle" font-weight="bold" fill="#475569">Mesial (M)</text>
+              
+              <!-- Occlusal (Center) -->
+              <rect x="30" y="30" width="40" height="40" fill="${getSurfaceColor('Occlusal')}" stroke="var(--outline)" stroke-width="1.5" style="cursor:pointer" onclick="window.selectDentalSurface('Occlusal')" />
+              <text x="50" y="52" font-size="6" text-anchor="middle" font-weight="bold" fill="#475569">Occlusal (O)</text>
+            </svg>
+          </div>
+
           <div class="form-grid" style="grid-template-columns:1fr;gap:12px">
             <div class="form-group">
               <label>${tr('Condition / Diagnosis', 'الحالة التشخيصية للسن')}</label>
@@ -2257,7 +2290,97 @@ async function renderDental(el) {
               </select>
             </div>
           </div>
-          <button class="btn btn-primary" onclick="window.saveDentalRecord()" style="margin-top:16px;width:100%">💾 ${tr('Save Tooth Record', 'حفظ سجل السن')}</button>
+          <button class="btn btn-primary" onclick="window.saveDentalRecord()" style="margin-top:16px;width:100%">💾 ${tr('Save Tooth & Surface Record', 'حفظ سجل السن والسطح')}</button>
+        </div>
+      </div>
+    `;
+  } else if (dentalTab === 'periodontal') {
+    content.innerHTML = `
+      <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:20px;align-items:start">
+        <div class="card">
+          <h3>📊 ${tr('Record Periodontal Pocket Exam', 'تسجيل فحص جيوب اللثة')}</h3>
+          <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+            <div class="form-group">
+              <label>${tr('Select Tooth#:', 'اختر رقم السن:')}</label>
+              <input type="number" id="perioToothNumber" class="form-input" min="1" max="48" value="${dentalSelectedTooth || 11}" />
+            </div>
+            <div class="form-group">
+              <label>${tr('Probing Depth (1-10 mm):', 'عمق الجيوب (1-10 مم):')}</label>
+              <input type="number" id="perioProbingDepth" class="form-input" min="1" max="10" value="3" />
+            </div>
+            <div class="form-group">
+              <label>${tr('Gingival Recession (mm):', 'تراجع اللثة (مم):')}</label>
+              <input type="number" id="perioGingivalRecession" class="form-input" min="0" max="10" value="0" />
+            </div>
+            <div class="form-group flex items-center" style="padding-top:24px">
+              <input type="checkbox" id="perioBleeding" style="width:20px;height:20px;margin-right:8px" />
+              <label for="perioBleeding" style="cursor:pointer;font-weight:bold;color:var(--error)">🩸 ${tr('Bleeding on Probing', 'نزيف عند الفحص')}</label>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="window.savePeriodontalRecord()" style="margin-top:16px;width:100%">💾 ${tr('Save Periodontal Record', 'حفظ سجل اللثة')}</button>
+        </div>
+
+        <div class="card">
+          <h3>📋 ${tr('Periodontal Exam History', 'السجل التاريخي لفحوصات اللثة')}</h3>
+          ${periodontalRecords.length ? makeTable(
+            [tr('Date', 'التاريخ'), tr('Tooth#', 'السن'), tr('Probing Depth', 'عمق الجيوب'), tr('Recession', 'تراجع اللثة'), tr('Bleeding', 'النزيف')],
+            periodontalRecords.map(r => ({
+              cells: [
+                new Date(r.exam_date).toLocaleDateString(isArabic ? 'ar-SA' : 'en-US'),
+                r.tooth_number,
+                r.probing_depth + ' mm',
+                r.gingival_recession + ' mm',
+                r.bleeding_on_probing ? '🩸 Yes / نعم' : 'No / لا'
+              ]
+            }))
+          ) : `<div class="empty-state"><p>${tr('No previous periodontal exams recorded', 'لا توجد سجلات فحص لثة سابقة')}</p></div>`}
+        </div>
+      </div>
+    `;
+  } else if (dentalTab === 'images') {
+    content.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+        <div class="card">
+          <h3>🖼️ ${tr('Link Dental X-Ray / Image', 'ربط صورة أو أشعة أسنان')}</h3>
+          <div class="form-grid" style="grid-template-columns:1fr;gap:12px;margin-top:12px">
+            <div class="form-group">
+              <label>${tr('Select Tooth#:', 'رقم السن:')}</label>
+              <input type="number" id="imageToothNumber" class="form-input" min="1" max="48" value="${dentalSelectedTooth || 11}" />
+            </div>
+            <div class="form-group">
+              <label>${tr('Image Type:', 'نوع الصورة:')}</label>
+              <select id="imageTypeSelect" class="form-input">
+                <option value="Periapical X-Ray">${tr('Periapical X-Ray', 'أشعة سنية صغيرة')}</option>
+                <option value="Bitewing X-Ray">${tr('Bitewing X-Ray', 'أشعة أسطح إطباقية')}</option>
+                <option value="Panoramic OPG">${tr('Panoramic OPG', 'أشعة بانورامية OPG')}</option>
+                <option value="Intraoral Photo">${tr('Intraoral Camera Photo', 'صورة كاميرا داخل الفم')}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>${tr('Select Image / Mock RVG Path:', 'اختر الصورة / مسار أشعة RVG:')}</label>
+              <select id="imagePathSelect" class="form-input">
+                <option value="/images/mock_xray1.jpg">📸 ${tr('Healthy Molar X-Ray', 'أشعة سن طاحن سليم')}</option>
+                <option value="/images/mock_xray2.jpg">📸 ${tr('Caries Root X-Ray', 'أشعة تسوس جذر سن')}</option>
+                <option value="/images/mock_intraoral.jpg">📸 ${tr('Intraoral Filling Photo', 'صورة حشوة تجميلية داخلية')}</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="window.saveDentalImage()" style="margin-top:16px;width:100%">💾 ${tr('Link Dental Image', 'ربط وحفظ الصورة')}</button>
+        </div>
+
+        <div class="card">
+          <h3>🖼️ ${tr('Linked Dental Images Gallery', 'معرض الأشعة والصور المرتبطة')}</h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+            ${dentalImages.length ? dentalImages.map(img => `
+              <div style="border:1px solid var(--outline);border-radius:8px;padding:8px;text-align:center;background:#fff">
+                <div style="font-weight:bold;margin-bottom:4px">Tooth# ${img.tooth_number} (${img.image_type})</div>
+                <div style="width:100%;height:100px;background:#e2e8f0;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:12px;color:#64748b;font-weight:bold">
+                  💀 [Dental RVG Image: ${img.image_path.split('/').pop()}]
+                </div>
+                <div style="font-size:10px;margin-top:4px;color:var(--text-secondary)">${new Date(img.created_at).toLocaleDateString(isArabic ? 'ar-SA' : 'en-US')}</div>
+              </div>
+            `).join('') : `<div class="empty-state" style="grid-column: span 2"><p>${tr('No dental images linked yet', 'لا توجد صور أو أشعة أسنان مرتبطة')}</p></div>`}
+          </div>
         </div>
       </div>
     `;
@@ -2266,11 +2389,12 @@ async function renderDental(el) {
       <div class="card">
         <h3>📋 ${tr('Dental Records History', 'السجل التاريخي لعلاجات الأسنان')}</h3>
         ${dentalRecords.length ? makeTable(
-          [tr('Date', 'التاريخ'), tr('Tooth#', 'رقم السن'), tr('Condition', 'التشخيص / الحالة'), tr('Treatment Done', 'الإجراء العلاجي')],
+          [tr('Date', 'التاريخ'), tr('Tooth#', 'رقم السن'), tr('Affected Surfaces', 'الأسطح المتأثرة'), tr('Condition', 'التشخيص / الحالة'), tr('Treatment Done', 'الإجراء العلاجي')],
           dentalRecords.map(r => ({
             cells: [
               new Date(r.visit_date).toLocaleDateString(isArabic ? 'ar-SA' : 'en-US') + ' ' + new Date(r.visit_date).toLocaleTimeString(isArabic ? 'ar-SA' : 'en-US', {hour:'2-digit', minute:'2-digit'}),
               r.tooth_number,
+              r.affected_surfaces || 'Occlusal',
               r.condition,
               r.treatment_done || '-'
             ]
@@ -2303,6 +2427,13 @@ window.selectTooth = function(num) {
   });
 };
 
+window.selectDentalSurface = function(surface) {
+  dentalSelectedSurface = surface;
+  const label = document.getElementById('dentalSelectedSurfaceLabel');
+  if (label) label.textContent = surface;
+  navigateTo(43);
+};
+
 window.autoSuggestDentalTreatment = function(condition) {
   const txSelect = document.getElementById('dentalTreatment');
   if (!txSelect) return;
@@ -2328,14 +2459,67 @@ window.saveDentalRecord = async function() {
       patient_id: dentalSelectedPatientId,
       tooth_number: dentalSelectedTooth,
       condition,
-      treatment_done: treatment
+      treatment_done: treatment,
+      affected_surfaces: dentalSelectedSurface
     });
-    showToast(tr('Tooth record saved successfully', 'تم حفظ سجل السن بنجاح'));
+    showToast(tr('Tooth and Surface record saved successfully', 'تم حفظ سجل السن والسطح بنجاح'));
     navigateTo(43);
   } catch (e) {
     showToast(tr('Error saving record', 'خطأ في الحفظ'), 'error');
   }
 };
+
+window.savePeriodontalRecord = async function() {
+  const tooth = document.getElementById('perioToothNumber').value;
+  const depth = document.getElementById('perioProbingDepth').value;
+  const recession = document.getElementById('perioGingivalRecession').value;
+  const bleeding = document.getElementById('perioBleeding').checked;
+  try {
+    await API.post('/api/dental/periodontal', {
+      patient_id: dentalSelectedPatientId,
+      tooth_number: tooth,
+      probing_depth: depth,
+      bleeding_on_probing: bleeding,
+      gingival_recession: recession
+    });
+    showToast(tr('Periodontal record saved', 'تم حفظ سجل اللثة بنجاح'));
+    navigateTo(43);
+  } catch (e) {
+    showToast(tr('Error saving periodontal record', 'خطأ في حفظ سجل اللثة'), 'error');
+  }
+};
+
+window.saveDentalImage = async function() {
+  const tooth = document.getElementById('imageToothNumber').value;
+  const type = document.getElementById('imageTypeSelect').value;
+  const path = document.getElementById('imagePathSelect').value;
+  try {
+    await API.post('/api/dental/images', {
+      patient_id: dentalSelectedPatientId,
+      tooth_number: tooth,
+      image_path: path,
+      image_type: type
+    });
+    showToast(tr('Dental image linked successfully', 'تم ربط صورة الأسنان بنجاح'));
+    navigateTo(43);
+  } catch (e) {
+    showToast(tr('Error linking image', 'خطأ في ربط الصورة'), 'error');
+  }
+};
+
+function getSurfaceColor(surface) {
+  if (!dentalSelectedTooth || !window.dentalToothStatusMap) return '#ffffff';
+  const state = window.dentalToothStatusMap[dentalSelectedTooth];
+  if (!state) return '#ffffff';
+  const hasSurface = state.surfaces && state.surfaces.includes(surface);
+  if (hasSurface || surface === 'Occlusal') {
+    if (state.condition === 'Caries') return '#fecaca';
+    else if (state.condition === 'Restored') return '#bfdbfe';
+    else if (state.condition === 'Pulpal Pathology') return '#e9d5ff';
+    else if (state.condition === 'Missing') return '#e5e7eb';
+  }
+  return '#ffffff';
+}
 
 function renderOdontogramSVG(toothStatusMap, mode = 'adult') {
   let upperTeeth, lowerTeeth;
@@ -2380,6 +2564,7 @@ function renderOdontogramSVG(toothStatusMap, mode = 'adult') {
     </div>
   `;
 }
+
 
 
 // ===== PAGE LOADER =====
@@ -14618,8 +14803,210 @@ async function renderAuditLog(el) {
   );
 }
 
-function renderSpecialties(el) {
-  el.innerHTML = `<div class="page-title">🔬 ${tr('Specialties','التخصصات')}</div><div class="card" style="padding:20px"><p>${tr('Coming soon...', 'قريباً...')}</p></div>`;
+let specialtiesTab = 'cardiology';
+let specialtiesSelectedPatientId = null;
+
+async function renderSpecialties(el) {
+  const [patients, cathReports, patientRegimens] = await Promise.all([
+    API.get('/api/patients').catch(() => []),
+    specialtiesSelectedPatientId ? API.get('/api/cardiology/cath-reports/' + specialtiesSelectedPatientId).catch(() => []) : Promise.resolve([]),
+    specialtiesSelectedPatientId ? API.get('/api/oncology/patient-regimens/' + specialtiesSelectedPatientId).catch(() => []) : Promise.resolve([])
+  ]);
+
+  if (!specialtiesSelectedPatientId && patients.length > 0) {
+    specialtiesSelectedPatientId = patients[0].id;
+  }
+
+  const selectedPatient = patients.find(p => parseInt(p.id, 10) === parseInt(specialtiesSelectedPatientId, 10));
+
+  el.innerHTML = `
+    <div class="page-title">🔬 ${tr('Specialized Medical Services (HIS/EMR Expansion)', 'الخدمات الطبية المتخصصة')}</div>
+    
+    <div class="card mb-16">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <label style="font-weight:bold">${tr('Select Patient File:', 'اختر ملف المريض:')}</label>
+        <select id="specPatientSelect" class="form-input" style="max-width:300px" onchange="window.selectSpecPatient(this.value)">
+          ${patients.map(p => `<option value="${safeId(p.id)}" ${parseInt(p.id, 10) === parseInt(specialtiesSelectedPatientId, 10) ? 'selected' : ''}>${escapeHTML(p.file_number)} - ${escapeHTML(isArabic ? p.name_ar : p.name_en)}</option>`).join('')}
+        </select>
+        ${selectedPatient ? `<div class="badge badge-info">${tr('MRN: ', 'رقم الملف: ')}${selectedPatient.file_number}</div>` : ''}
+      </div>
+    </div>
+
+    <div class="tab-bar">
+      <button class="tab-btn ${specialtiesTab === 'cardiology' ? 'active' : ''}" onclick="specialtiesTab='cardiology';navigateTo(44)">❤️ ${tr('Cardiology Cath Lab', 'مختبر قسطرة القلب')}</button>
+      <button class="tab-btn ${specialtiesTab === 'oncology' ? 'active' : ''}" onclick="specialtiesTab='oncology';navigateTo(44)">🎗️ ${tr('Oncology Chemotherapy Planner', 'مخطط الأورام والعلاج الكيميائي')}</button>
+    </div>
+
+    <div id="specTabContent"></div>
+  `;
+
+  const content = document.getElementById('specTabContent');
+
+  if (specialtiesTab === 'cardiology') {
+    const latestReport = cathReports[0] || { blockage_lad: 0, blockage_lcx: 0, blockage_rca: 0, findings: '' };
+    content.innerHTML = `
+      <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:20px;align-items:start">
+        <div class="card">
+          <h3>❤️ ${tr('Coronary Artery Blockage Simulator', 'محاكي انسداد الشرايين التاجية')}</h3>
+          
+          <div style="margin:20px 0;display:flex;flex-direction:column;align-items:center;gap:16px">
+            <!-- Coronary Tree SVG Map -->
+            <svg width="220" height="220" viewBox="0 0 100 100" style="background:#0f172a;border-radius:12px;padding:10px">
+              <!-- Aorta (Main Root) -->
+              <path d="M50,10 C50,25 50,30 50,35" stroke="#ef4444" stroke-width="8" fill="none" />
+              <text x="50" y="8" font-size="4" fill="#fff" text-anchor="middle">Aorta</text>
+              
+              <!-- LAD (Left Anterior Descending) -->
+              <path d="M50,35 C35,45 25,60 20,85" stroke="${getCathColor(latestReport.blockage_lad)}" stroke-width="4" fill="none" id="svg_lad" />
+              <text x="18" y="92" font-size="4" fill="#94a3b8" text-anchor="middle">LAD (${latestReport.blockage_lad}%)</text>
+              
+              <!-- LCx (Left Circumflex) -->
+              <path d="M50,35 C65,45 75,55 80,75" stroke="${getCathColor(latestReport.blockage_lcx)}" stroke-width="4" fill="none" id="svg_lcx" />
+              <text x="82" y="82" font-size="4" fill="#94a3b8" text-anchor="middle">LCx (${latestReport.blockage_lcx}%)</text>
+              
+              <!-- RCA (Right Coronary Artery) -->
+              <path d="M50,30 C30,30 40,55 50,85" stroke="${getCathColor(latestReport.blockage_rca)}" stroke-width="4" fill="none" id="svg_rca" />
+              <text x="50" y="92" font-size="4" fill="#94a3b8" text-anchor="middle">RCA (${latestReport.blockage_rca}%)</text>
+            </svg>
+
+            <!-- Sliders to Simulate Blockages -->
+            <div style="width:100%;display:flex;flex-direction:column;gap:12px">
+              <div class="form-group">
+                <label>LAD Blockage (Left Anterior Descending): <span id="lad_label" font-weight="bold">${latestReport.blockage_lad}%</span></label>
+                <input type="range" id="slider_lad" class="form-input" min="0" max="100" value="${latestReport.blockage_lad}" oninput="document.getElementById('lad_label').textContent=this.value+'%'" />
+              </div>
+              <div class="form-group">
+                <label>LCx Blockage (Left Circumflex): <span id="lcx_label" font-weight="bold">${latestReport.blockage_lcx}%</span></label>
+                <input type="range" id="slider_lcx" class="form-input" min="0" max="100" value="${latestReport.blockage_lcx}" oninput="document.getElementById('lcx_label').textContent=this.value+'%'" />
+              </div>
+              <div class="form-group">
+                <label>RCA Blockage (Right Coronary Artery): <span id="rca_label" font-weight="bold">${latestReport.blockage_rca}%</span></label>
+                <input type="range" id="slider_rca" class="form-input" min="0" max="100" value="${latestReport.blockage_rca}" oninput="document.getElementById('rca_label').textContent=this.value+'%'" />
+              </div>
+              <div class="form-group">
+                <label>${tr('Clinical Findings & Recommendation:', 'النتائج التخطيطية والتوصية العلاجية:')}</label>
+                <textarea id="cathFindings" class="form-input" rows="2" placeholder="${tr('Enter stenosis details and recommendations...', 'أدخل تفاصيل التضيق والتوصية العلاجية...')}">${latestReport.findings}</textarea>
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="window.saveCathReport()" style="width:100%">💾 ${tr('Save Cath Lab Report', 'حفظ تقرير القسطرة وتحديث المخطط')}</button>
+        </div>
+
+        <div class="card">
+          <h3>📋 ${tr('Cath Lab Report History', 'السجل التاريخي لتقارير القسطرة')}</h3>
+          ${cathReports.length ? makeTable(
+            [tr('Date', 'التاريخ'), 'LAD', 'LCx', 'RCA', tr('Findings', 'التشخيص')],
+            cathReports.map(r => ({
+              cells: [
+                new Date(r.created_at).toLocaleDateString(isArabic ? 'ar-SA' : 'en-US'),
+                r.blockage_lad + '%',
+                r.blockage_lcx + '%',
+                r.blockage_rca + '%',
+                r.findings || '-'
+              ]
+            }))
+          ) : `<div class="empty-state"><p>${tr('No previous cath lab reports recorded', 'لا توجد تقارير قسطرة سابقة')}</p></div>`}
+        </div>
+      </div>
+    `;
+  } else {
+    content.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+        <div class="card">
+          <h3>🎗️ ${tr('Schedule Chemotherapy Protocol', 'جدولة بروتوكول العلاج الكيميائي')}</h3>
+          <div class="form-grid" style="grid-template-columns:1fr;gap:12px;margin-top:12px">
+            <div class="form-group">
+              <label>${tr('Select Regimen Template:', 'اختر قالب البروتوكول:')}</label>
+              <select id="oncoRegimenSelect" class="form-input">
+                <option value="FOLFOX (Colorectal Cancer)">FOLFOX (Oxaliplatin, Leucovorin, 5-Fluorouracil)</option>
+                <option value="AC-T (Breast Cancer)">AC-T (Doxorubicin, Cyclophosphamide, Paclitaxel)</option>
+                <option value="FEC (Breast Cancer)">FEC (Fluorouracil, Epirubicin, Cyclophosphamide)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>${tr('Target Cycles count:', 'عدد الدورات المستهدفة:')}</label>
+              <input type="number" id="oncoCyclesCount" class="form-input" min="1" max="12" value="6" />
+            </div>
+            <div class="form-group">
+              <label>${tr('Protocol Start Date:', 'تاريخ بدء البروتوكول:')}</label>
+              <input type="date" id="oncoStartDate" class="form-input" value="${new Date().toISOString().split('T')[0]}" />
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="window.scheduleChemoProtocol()" style="margin-top:16px;width:100%">💾 ${tr('Generate & Schedule Regimen', 'توليد وجدولة بروتوكول العلاج الكيماوي')}</button>
+        </div>
+
+        <div class="card">
+          <h3>📋 ${tr('Scheduled Chemotherapy Cycles', 'دورات العلاج الكيميائي المجدولة للمريض')}</h3>
+          ${patientRegimens.length ? makeTable(
+            [tr('Date', 'التاريخ'), tr('Protocol Name', 'اسم البروتوكول'), tr('Cycle#', 'رقم الدورة'), tr('Status', 'الحالة')],
+            patientRegimens.map(r => ({
+              cells: [
+                new Date(r.start_date).toLocaleDateString(isArabic ? 'ar-SA' : 'en-US'),
+                r.regimen_name,
+                r.cycle_number + ' / 6',
+                r.status === 'Completed' ? '🟢 Completed / مكتمل' : '🟡 Scheduled / مجدول'
+              ]
+            }))
+          ) : `<div class="empty-state"><p>${tr('No chemotherapy protocols scheduled', 'لا توجد بروتوكولات علاج كيماوي مجدولة لهذا المريض')}</p></div>`}
+        </div>
+      </div>
+    `;
+  }
+}
+
+window.selectSpecPatient = function(val) {
+  specialtiesSelectedPatientId = val;
+  navigateTo(44);
+};
+
+window.saveCathReport = async function() {
+  const lad = document.getElementById('slider_lad').value;
+  const lcx = document.getElementById('slider_lcx').value;
+  const rca = document.getElementById('slider_rca').value;
+  const findings = document.getElementById('cathFindings').value;
+  try {
+    await API.post('/api/cardiology/cath-reports', {
+      patient_id: specialtiesSelectedPatientId,
+      blockage_lad: lad,
+      blockage_lcx: lcx,
+      blockage_rca: rca,
+      findings
+    });
+    showToast(tr('Cath report saved successfully', 'تم حفظ تقرير القسطرة بنجاح'));
+    navigateTo(44);
+  } catch (e) {
+    showToast(tr('Error saving report', 'خطأ في الحفظ'), 'error');
+  }
+};
+
+window.scheduleChemoProtocol = async function() {
+  const name = document.getElementById('oncoRegimenSelect').value;
+  const cycles = parseInt(document.getElementById('oncoCyclesCount').value, 10);
+  const start = document.getElementById('oncoStartDate').value;
+  try {
+    for (let i = 1; i <= cycles; i++) {
+      const cycleDate = new Date(start);
+      cycleDate.setDate(cycleDate.getDate() + (i - 1) * 14); // 2-week cycle interval
+      await API.post('/api/oncology/patient-regimens', {
+        patient_id: specialtiesSelectedPatientId,
+        regimen_name: name,
+        cycle_number: i,
+        status: i === 1 ? 'Completed' : 'Scheduled',
+        start_date: cycleDate.toISOString().split('T')[0]
+      });
+    }
+    showToast(tr('Chemotherapy protocol generated and scheduled', 'تم توليد وجدولة بروتوكول العلاج بنجاح'));
+    navigateTo(44);
+  } catch (e) {
+    showToast(tr('Error scheduling chemotherapy', 'خطأ في جدولة العلاج الكيماوي'), 'error');
+  }
+};
+
+function getCathColor(blockage) {
+  const val = parseInt(blockage, 10);
+  if (val >= 70) return '#ef4444'; // Red (Severe blockage)
+  if (val >= 40) return '#eab308'; // Yellow (Moderate blockage)
+  return '#22c55e'; // Green (Healthy / Mild)
 }
 
 // ===== QUALITY =====

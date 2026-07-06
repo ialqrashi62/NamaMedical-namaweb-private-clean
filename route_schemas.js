@@ -50,7 +50,7 @@ const patientCreate = {
     name_en:     { type: 'str', required: false, max: 200 },
     national_id: { type: 'str', required: false, max: 30 },   // lenient: iqama/passport allowed
     phone:       { type: 'phone', required: false },
-    gender:      { type: 'enumOf', allowed: ['Male', 'Female', 'male', 'female', 'M', 'F', ''], required: false },
+    gender:      { type: 'enumOf', allowed: ['Male', 'Female', 'male', 'female', 'M', 'F', 'ذكر', 'أنثى', ''], required: false },
     dob:         { type: 'str', required: false, max: 30 }
 };
 

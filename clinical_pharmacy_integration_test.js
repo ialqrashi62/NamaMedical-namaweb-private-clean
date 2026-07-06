@@ -14,7 +14,7 @@ const { pool } = require('./db_postgres');
 
 const TEST_PORT = 3014;
 const TEST_USERNAME = 'clinical_pharmacist';
-const TEST_PASSWORD = 'PHARM_PASSWORD_123';
+const TEST_PASSWORD = 'PHARM_PASS_123';
 
 let server;
 
