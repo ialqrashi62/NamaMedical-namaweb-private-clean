@@ -33,10 +33,10 @@ let facilityType = 'general_hospital';
 
 const FACILITY_ALLOWED = {
   medical_city: null, // all allowed
-  general_hospital: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 30, 33, 34, 42, 43],
-  specialized_hospital: [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 13, 14, 15, 17, 18, 20, 34, 42],
-  tertiary_hospital: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 30, 33, 34, 42, 43],
-  polyclinic: [0, 1, 2, 3, 4, 6, 8, 9, 13, 14, 15, 20, 34, 42, 43],
+  general_hospital: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 30, 33, 34, 42, 43, 45, 46],
+  specialized_hospital: [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 13, 14, 15, 17, 18, 20, 34, 42, 45, 46],
+  tertiary_hospital: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 30, 33, 34, 42, 43, 45, 46],
+  polyclinic: [0, 1, 2, 3, 4, 6, 8, 9, 13, 14, 15, 20, 34, 42, 43, 45, 46],
   phc: [0, 1, 2, 3, 4, 6, 14, 15, 33, 34],
   specialty_center: [0, 1, 2, 3, 4, 6, 8, 14, 15, 20, 34, 43],
   diagnostic_center: [3, 4, 14, 15],
@@ -99,6 +99,12 @@ const NAV_ITEMS = [
   { icon: '🤰', en: 'OB/GYN', ar: 'النساء والتوليد' },
   { icon: '⚙️', en: 'Settings', ar: 'الإعدادات' },
   { icon: '🦷', en: 'Dental', ar: 'الأسنان' },
+  // 44: Specialties — placeholder page (renderSpecialties); kept hidden from the sidebar on purpose.
+  { icon: '🔬', en: 'Specialties', ar: 'التخصصات الدقيقة', hidden: true },
+  // 45: OVR / Incident Reports — patient-safety governance (renderOVR). Surfaced for safety/quality roles.
+  { icon: '📋', en: 'Incident Reports (OVR)', ar: 'بلاغات الحوادث (OVR)' },
+  // 46: Audit Trail viewer — compliance (renderAuditLog). Read-only; grant to auditor/compliance/admin only.
+  { icon: '🔐', en: 'Audit Trail', ar: 'سجل التدقيق' },
 ];
 
 // ===== INIT =====
@@ -280,6 +286,7 @@ function buildNav() {
   nav.innerHTML = allIndices.map(i => {
     const item = NAV_ITEMS[i];
     if (!item) return '';
+    if (item.hidden) return ''; // placeholder/unlisted pages (e.g. Specialties) stay out of the sidebar
     const hasPerm = isAdmin || i === 0 || userPerms.includes(i.toString());
     if (!hasPerm) return '';
     // Filter by facility type
@@ -2379,7 +2386,7 @@ function renderOdontogramSVG(toothStatusMap, mode = 'adult') {
 async function loadPage(page) {
   const el = document.getElementById('pageContent');
   el.style.animation = 'none'; el.offsetHeight; el.style.animation = '';
-  const pages = [renderDashboard, renderReception, renderAppointments, renderDoctor, renderLab, renderRadiology, renderPharmacy, renderHR, renderFinance, renderInsurance, renderInventory, renderNursing, renderWaitingQueue, renderPatientAccounts, renderReports, renderMessaging, renderCatalog, renderDeptRequests, renderSurgery, renderBloodBank, renderConsentForms, renderEmergency, renderInpatient, renderICU, renderCSSD, renderDietary, renderInfectionControl, renderQuality, renderMaintenance, renderTransport, renderMedicalRecords, renderClinicalPharmacy, renderRehabilitation, renderPatientPortal, renderZATCA, renderTelemedicine, renderPathology, renderSocialWork, renderMortuary, renderCME, renderCosmeticSurgery, renderOBGYN, renderSettings, renderDental];
+  const pages = [renderDashboard, renderReception, renderAppointments, renderDoctor, renderLab, renderRadiology, renderPharmacy, renderHR, renderFinance, renderInsurance, renderInventory, renderNursing, renderWaitingQueue, renderPatientAccounts, renderReports, renderMessaging, renderCatalog, renderDeptRequests, renderSurgery, renderBloodBank, renderConsentForms, renderEmergency, renderInpatient, renderICU, renderCSSD, renderDietary, renderInfectionControl, renderQuality, renderMaintenance, renderTransport, renderMedicalRecords, renderClinicalPharmacy, renderRehabilitation, renderPatientPortal, renderZATCA, renderTelemedicine, renderPathology, renderSocialWork, renderMortuary, renderCME, renderCosmeticSurgery, renderOBGYN, renderSettings, renderDental, renderSpecialties, renderOVR, renderAuditLog];
   if (pages[page]) await pages[page](el);
   else if (NAV_ITEMS[page]) renderDepartmentWorkspace(el, page);
   else el.innerHTML = `<div class="page-title">${NAV_ITEMS[page]?.icon} ${tr(NAV_ITEMS[page]?.en, NAV_ITEMS[page]?.ar)}</div><div class="card"><p>${tr('Coming soon...', 'قريباً...')}</p></div>`;
@@ -5564,13 +5571,16 @@ async function renderDoctor(el) {
   let drugs = [];
   let allServices = [];
   let currentUser = {};
+  let opdQueue = [];
   try {
-    [patients, records, drugs, allServices, currentUser] = await Promise.all([
+    currentUser = await API.get('/api/auth/me');
+    const docName = (currentUser.user && (currentUser.user.display_name || currentUser.user.username)) || '';
+    [patients, records, drugs, allServices, opdQueue] = await Promise.all([
       API.get('/api/patients'),
       API.get('/api/medical/records'),
       API.get('/api/pharmacy/drugs'),
       API.get('/api/medical/services'),
-      API.get('/api/auth/me')
+      API.get(`/api/opd/doctor/queue?doctor_name=${encodeURIComponent(docName)}`).catch(() => [])
     ]);
   } catch (e) {
     el.innerHTML = `
@@ -5597,7 +5607,46 @@ async function renderDoctor(el) {
     <div class="doctor-workspace-grid">
       <div class="doctor-main-col">
         <div class="card glass-card-premium mb-16">
-          <div class="card-title">📝 ${tr('Select Patient', 'اختيار المريض')}</div>
+          <div class="card-title">📅 ${tr('OPD Appointments Queue', 'قائمة مواعيد العيادات الخارجية')}</div>
+          <div style="max-height:220px;overflow-y:auto;margin-bottom:12px">
+            ${opdQueue.length === 0 ? `<div style="text-align:center;padding:12px;color:var(--text-muted)">${tr('No appointments today', 'لا توجد مواعيد اليوم')}</div>` : `
+              <table class="table" style="width:100%;font-size:12px">
+                <thead>
+                  <tr>
+                    <th>${tr('Time', 'الوقت')}</th>
+                    <th>${tr('Patient', 'المريض')}</th>
+                    <th>${tr('Status', 'الحالة')}</th>
+                    <th>${tr('Vitals', 'العلامات')}</th>
+                    <th>${tr('Action', 'الإجراء')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${opdQueue.map(a => {
+                    const v = a.vitals;
+                    const vitalsText = v ? `T:${v.temp}°C | BP:${v.bp} | P:${v.pulse}` : tr('No vitals', 'لا توجد علامات');
+                    const badgeColor = a.status === 'Checked-In' ? '#f59e0b' : a.status === 'In-Consultation' ? '#3b82f6' : '#10b981';
+                    return `
+                      <tr>
+                        <td><strong>${escapeHTML(a.appt_time)}</strong></td>
+                        <td>${escapeHTML(isArabic ? (a.name_ar || a.name_en) : (a.name_en || a.name_ar))}</td>
+                        <td><span class="badge" style="background:${badgeColor};color:#fff">${escapeHTML(a.status)}</span></td>
+                        <td style="font-size:11px;color:var(--text-muted)">${escapeHTML(vitalsText)}</td>
+                        <td>
+                          ${a.status === 'Checked-In' ? `
+                            <button class="btn btn-xs btn-primary" onclick="window.startOpdEncounter(${a.id}, ${a.patient_id})">🩺 ${tr('Start', 'ابدأ')}</button>
+                          ` : `
+                            <button class="btn btn-xs btn-secondary" onclick="window.selectOpdPatient(${a.patient_id})">📂 ${tr('Open', 'فتح')}</button>
+                          `}
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            `}
+          </div>
+          <hr style="border:0;border-top:1px solid var(--border);margin:12px 0">
+          <div class="card-title">📝 ${tr('All Patients Search', 'البحث في كافة المرضى')}</div>
           <select class="form-input w-full" id="drPatient" onchange="loadPatientInfo()">
             <option value="">${tr('-- Select --', '-- اختر مريض --')}</option>
             ${patients.map(p => `<option value="${safeId(p.id)}">${escapeHTML(p.file_number)} - ${escapeHTML(isArabic ? (p.name_ar || p.name_en) : (p.name_en || p.name_ar))} (${statusText(p.status)})</option>`).join('')}
@@ -6250,6 +6299,27 @@ window.drawLabTrend = function(canvasId, points) {
     ctx.textBaseline = 'bottom';
     ctx.fillText(`${p.value}`, x, y - 6);
   });
+};
+
+window.startOpdEncounter = async (apptId, patientId) => {
+  try {
+    await API.post('/api/opd/encounter/start', { appointment_id: apptId });
+    showToast(tr('Consultation started', 'تم بدء الجلسة الطبية'));
+    const drP = document.getElementById('drPatient');
+    if (drP) {
+      drP.value = patientId;
+      // trigger change manually to load patient info
+      drP.dispatchEvent(new Event('change'));
+    }
+  } catch(e) { showToast(tr('Error starting encounter', 'خطأ في بدء الكشف'), 'error'); }
+};
+
+window.selectOpdPatient = (patientId) => {
+  const drP = document.getElementById('drPatient');
+  if (drP) {
+    drP.value = patientId;
+    drP.dispatchEvent(new Event('change'));
+  }
 };
 
 window.viewPatientResults = async (pid) => {
@@ -14311,77 +14381,246 @@ window.addDietOrder = async function () {
 };
 
 // ===== INFECTION CONTROL =====
-let icTab = 'surveillance';
 async function renderInfectionControl(el) {
   const content = el;
-
   const reports = await API.get('/api/infection-control/reports').catch(() => []);
   const active = reports.filter(r => r.status === 'active').length;
-  const resolved = reports.filter(r => r.status === 'resolved').length;
-
-  // Group by infection type
   const byType = {};
   reports.forEach(r => { const t = r.infection_type || 'Other'; byType[t] = (byType[t] || 0) + 1; });
+  const hai = { CLABSI: 0, CAUTI: 0, VAP: 0, SSI: 0, CDIFF: 0 };
+  reports.forEach(r => { if (r.hai_category && hai[r.hai_category] !== undefined) hai[r.hai_category]++; });
+  if (!window.icTab) window.icTab = 'dashboard';
 
   content.innerHTML = `
-    <h2>${tr('Infection Control', 'مكافحة العدوى')}</h2>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px">
-      <div class="card" style="padding:16px;text-align:center;background:#fce4ec"><h3 style="margin:0;color:#c62828">${reports.length}</h3><p style="margin:4px 0 0;font-size:12px">${tr('Total Reports', 'إجمالي البلاغات')}</p></div>
-      <div class="card" style="padding:16px;text-align:center;background:#fff3e0"><h3 style="margin:0;color:#e65100">${active}</h3><p style="margin:4px 0 0;font-size:12px">${tr('Active Cases', 'حالات نشطة')}</p></div>
-      <div class="card" style="padding:16px;text-align:center;background:#e8f5e9"><h3 style="margin:0;color:#2e7d32">${resolved}</h3><p style="margin:4px 0 0;font-size:12px">${tr('Resolved', 'محلولة')}</p></div>
+    <div class="page-title">🦠 ${tr('Infection Control & HAI Surveillance','مكافحة العدوى وترصد العدوى المرتبطة بالرعاية')}</div>
+    <div style="display:flex;gap:8px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:12px;flex-wrap:wrap">
+      <button class="btn ${window.icTab==='dashboard'?'btn-primary':'btn-secondary'}" onclick="window.icTab='dashboard';navigateTo(26)" style="font-size:12px">📊 ${tr('HAI Dashboard','لوحة الترصد')}</button>
+      <button class="btn ${window.icTab==='report'?'btn-primary':'btn-secondary'}" onclick="window.icTab='report';navigateTo(26)" style="font-size:12px">🦠 ${tr('Report Infection','تسجيل عدوى')}</button>
+      <button class="btn ${window.icTab==='hygiene'?'btn-primary':'btn-secondary'}" onclick="window.icTab='hygiene';navigateTo(26)" style="font-size:12px">🤲 ${tr('Hand Hygiene','صحة الأيدي')}</button>
+      <button class="btn ${window.icTab==='isolation'?'btn-primary':'btn-secondary'}" onclick="window.icTab='isolation';navigateTo(26)" style="font-size:12px">🚪 ${tr('Isolation','العزل')}</button>
     </div>
-    ${Object.keys(byType).length > 0 ? '<div class="card" style="padding:16px;margin-bottom:16px"><h4 style="margin:0 0 8px">' + tr('By Infection Type', 'حسب نوع العدوى') + '</h4><div style="display:flex;gap:8px;flex-wrap:wrap">' + Object.entries(byType).map(([t, c]) => '<span style="padding:4px 12px;border-radius:16px;background:#fce4ec;font-size:12px">' + escapeHTML(t) + ': <strong>' + escapeHTML(c) + '</strong></span>').join('') + '</div></div>' : ''}
-    <div style="display:grid;grid-template-columns:1fr 2fr;gap:16px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px">
+      <div class="card" style="padding:14px;text-align:center;border-top:3px solid #ef4444"><div style="font-size:24px;font-weight:800;color:#ef4444">${reports.length}</div><div style="font-size:11px;color:var(--text-muted)">${tr('Total','إجمالي')}</div></div>
+      <div class="card" style="padding:14px;text-align:center;border-top:3px solid #f97316"><div style="font-size:24px;font-weight:800;color:#f97316">${active}</div><div style="font-size:11px;color:var(--text-muted)">${tr('Active','نشطة')}</div></div>
+      <div class="card" style="padding:14px;text-align:center;border-top:3px solid #8b5cf6"><div style="font-size:24px;font-weight:800;color:#8b5cf6">${hai.CLABSI}</div><div style="font-size:11px;color:var(--text-muted)">CLABSI</div></div>
+      <div class="card" style="padding:14px;text-align:center;border-top:3px solid #3b82f6"><div style="font-size:24px;font-weight:800;color:#3b82f6">${hai.CAUTI}</div><div style="font-size:11px;color:var(--text-muted)">CAUTI</div></div>
+      <div class="card" style="padding:14px;text-align:center;border-top:3px solid #06b6d4"><div style="font-size:24px;font-weight:800;color:#06b6d4">${hai.VAP}</div><div style="font-size:11px;color:var(--text-muted)">VAP</div></div>
+      <div class="card" style="padding:14px;text-align:center;border-top:3px solid #22c55e"><div style="font-size:24px;font-weight:800;color:#22c55e">${hai.SSI}</div><div style="font-size:11px;color:var(--text-muted)">SSI</div></div>
+    </div>
+    <div id="icTabContent"></div>`;
+
+  const icCont = document.getElementById('icTabContent');
+  if (!icCont) return;
+
+  if (window.icTab === 'dashboard') {
+    icCont.innerHTML = `
       <div class="card" style="padding:20px">
-        <h4 style="margin:0 0 12px">${tr('Report Infection', 'إبلاغ عن عدوى')}</h4>
-        <div class="form-group"><label>${tr('Patient', 'المريض')}</label><input class="form-input" id="icPatient"></div>
-        <div class="form-group"><label>${tr('Infection Type', 'نوع العدوى')}</label>
-          <select class="form-input" id="icType">
-            <option value="MRSA">MRSA</option><option value="VRE">VRE</option><option value="C.diff">C. difficile</option>
-            <option value="ESBL">ESBL</option><option value="TB">TB</option><option value="COVID-19">COVID-19</option>
-            <option value="Influenza">Influenza</option><option value="UTI">UTI</option><option value="SSI">SSI</option>
-            <option value="Other">${tr('Other', 'أخرى')}</option>
-          </select></div>
-        <div class="form-group"><label>${tr('Ward', 'الجناح')}</label><input class="form-input" id="icWard"></div>
-        <div class="form-group"><label>${tr('Isolation Type', 'نوع العزل')}</label>
-          <select class="form-input" id="icIsolation"><option value="none">${tr('None', 'بدون')}</option><option value="contact">${tr('Contact', 'تلامسي')}</option><option value="droplet">${tr('Droplet', 'رذاذي')}</option><option value="airborne">${tr('Airborne', 'هوائي')}</option><option value="protective">${tr('Protective', 'وقائي')}</option></select></div>
-        <div class="form-group"><label>${tr('Organism', 'الكائن الدقيق')}</label><input class="form-input" id="icOrganism" placeholder="e.g. MRSA, E.coli"></div>
-        <div class="form-group"><label>${tr('HAI Category', 'فئة العدوى المرتبطة بالرعاية')}</label>
-          <select class="form-input" id="icHAI">
-            <option value="">${tr('None', 'لا يوجد')}</option>
-            <option value="CLABSI">CLABSI</option><option value="CAUTI">CAUTI</option>
-            <option value="SSI">SSI</option><option value="VAP">VAP</option><option value="CDIFF">C.diff</option>
-          </select></div>
-        <div class="form-group"><label>${tr('Culture Results', 'نتائج الزراعة')}</label><textarea class="form-input" id="icCulture" rows="2"></textarea></div>
-        <div class="form-group"><label>${tr('Action Taken', 'الإجراء المتخذ')}</label><textarea class="form-input" id="icAction" rows="2"></textarea></div>
-        <button class="btn btn-primary w-full" onclick="window.reportInfection()">🦠 ${tr('Submit Report', 'تقديم البلاغ')}</button>
-      </div>
-      <div class="card" style="padding:20px">
-        <div style="display:flex;justify-content:space-between;margin-bottom:12px">
-          <h4 style="margin:0">${tr('Reports', 'البلاغات')}</h4>
-          <button class="btn btn-sm" onclick="exportToCSV(reports,'infection_control')" style="background:#e0f7fa;color:#00838f">📥</button>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <h4 style="margin:0">📋 ${tr('Infection Reports','سجل البلاغات')}</h4>
+          <button class="btn btn-sm btn-secondary" onclick="exportToCSV([],'hai_reports')">📥 ${tr('Export','تصدير')}</button>
         </div>
         <div id="icTable"></div>
       </div>
-    </div>`;
-
-  const ict = document.getElementById('icTable');
-  if (ict) {
-    createTable(ict, 'icTbl',
-      [tr('Patient', 'المريض'), tr('Type', 'النوع'), tr('Ward', 'الجناح'), tr('Isolation', 'العزل'), tr('Status', 'الحالة'), tr('Date', 'التاريخ'), tr('Actions', '')],
-      reports.map(r => ({ cells: [r.patient_name, r.infection_type, r.ward || '', r.isolation_type || '', statusBadge(r.status), r.created_at ? new Date(r.created_at).toLocaleDateString('ar-SA') : '', r.status === 'active' ? rawHtml('<button class="btn btn-sm" onclick="resolveIc(' + parseInt(r.id, 10) + ')">✅</button>') : '✅'], id: r.id }))
+      ${Object.keys(byType).length > 0 ? `<div class="card" style="padding:16px;margin-top:16px">
+        <h4 style="margin:0 0 12px">${tr('By Infection Type','حسب نوع العدوى')}</h4>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${Object.entries(byType).map(([t,c])=>`<span style="padding:6px 14px;border-radius:20px;background:#fce4ec;font-size:12px;font-weight:600">${escapeHTML(t)}: ${c}</span>`).join('')}
+        </div>
+      </div>` : ''}`;
+    const ict = document.getElementById('icTable');
+    if (ict) createTable(ict,'icTbl',
+      [tr('Patient','المريض'),tr('Type','النوع'),'HAI',tr('Ward','الجناح'),tr('Isolation','العزل'),tr('Status','الحالة'),tr('Date','التاريخ'),''],
+      reports.map(r=>({cells:[
+        r.patient_name||'',r.infection_type||'',
+        r.hai_category?rawHtml(`<span class="badge" style="background:#8b5cf6;color:#fff">${escapeHTML(r.hai_category)}</span>`):'—',
+        r.ward||'',r.isolation_type||'',statusBadge(r.status),
+        r.created_at?new Date(r.created_at).toLocaleDateString('ar-SA'):'',
+        r.status==='active'?rawHtml(`<button class="btn btn-sm" onclick="resolveIc(${parseInt(r.id,10)})">✅ ${tr('Resolve','حل')}</button>`):'✅'
+      ],id:r.id}))
     );
-  }
-  // saveIcReport removed (C1 fix): "Submit Report" now calls window.reportInfection() → hardened /api/infection/surveillance route.
-  window.resolveIc = async (id) => { try { await API.put('/api/infection-control/reports/' + id, { status: 'resolved' }); showToast('✅'); navigateTo(currentPage); } catch (e) { } };
 
+  } else if (window.icTab === 'report') {
+    icCont.innerHTML = `
+      <div class="card" style="padding:20px;max-width:600px">
+        <h4 style="margin:0 0 16px;color:var(--primary)">🦠 ${tr('Report Infection Case','تسجيل حالة عدوى')}</h4>
+        <div class="form-group"><label class="form-label">${tr('Patient Name','اسم المريض')}</label><input class="form-input" id="icPatient" required></div>
+        <div class="form-group"><label class="form-label">${tr('Infection Type','نوع العدوى')}</label>
+          <select class="form-input" id="icType">
+            <option value="MRSA">MRSA</option><option value="VRE">VRE</option><option value="C.diff">C. difficile</option>
+            <option value="ESBL">ESBL</option><option value="TB">TB</option><option value="COVID-19">COVID-19</option>
+            <option value="UTI">UTI</option><option value="SSI">SSI</option><option value="Other">${tr('Other','أخرى')}</option>
+          </select></div>
+        <div class="form-group"><label class="form-label">HAI ${tr('Category','الفئة')}</label>
+          <select class="form-input" id="icHAI">
+            <option value="">${tr('None','لا يوجد')}</option>
+            <option value="CLABSI">CLABSI</option><option value="CAUTI">CAUTI</option>
+            <option value="VAP">VAP</option><option value="SSI">SSI</option><option value="CDIFF">C.DIFF</option>
+          </select></div>
+        <div class="form-group"><label class="form-label">${tr('Ward','الجناح')}</label><input class="form-input" id="icWard"></div>
+        <div class="form-group"><label class="form-label">${tr('Isolation Type','نوع العزل')}</label>
+          <select class="form-input" id="icIsolation">
+            <option value="none">${tr('None','بدون')}</option>
+            <option value="contact">${tr('Contact','تلامسي')}</option><option value="droplet">${tr('Droplet','رذاذي')}</option>
+            <option value="airborne">${tr('Airborne','هوائي')}</option><option value="protective">${tr('Protective','وقائي')}</option>
+          </select></div>
+        <div class="form-group"><label class="form-label">${tr('Organism','الكائن الدقيق')}</label><input class="form-input" id="icOrganism" placeholder="e.g. MRSA, Klebsiella"></div>
+        <div class="form-group"><label class="form-label">${tr('Culture Results','نتائج الزراعة')}</label><textarea class="form-input" id="icCulture" rows="2"></textarea></div>
+        <div class="form-group"><label class="form-label">${tr('Action Taken','الإجراء المتخذ')}</label><textarea class="form-input" id="icAction" rows="2"></textarea></div>
+        <button class="btn btn-primary" style="width:100%" onclick="window.reportInfection()">🦠 ${tr('Submit Report','تقديم البلاغ')}</button>
+      </div>`;
+
+  } else if (window.icTab === 'hygiene') {
+    const hhData = await API.get('/api/infection/hand-hygiene').catch(() => []);
+    const hhAvg = hhData.length ? Math.round(hhData.reduce((s,h)=>s+(h.compliance_rate||(h.moments_observed?Math.round((h.moments_compliant/h.moments_observed)*100):0)),0)/hhData.length) : 0;
+    icCont.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div class="card" style="padding:20px">
+          <h4 style="margin:0 0 16px;color:var(--primary)">🤲 ${tr('Hand Hygiene Audit','تدقيق نظافة الأيدي')}</h4>
+          <div class="form-group"><label class="form-label">${tr('Department','القسم')}</label><input class="form-input" id="hhDept"></div>
+          <div class="form-group"><label class="form-label">${tr('Moments Observed','اللحظات المراقَبة')}</label><input class="form-input" id="hhObs" type="number" min="1"></div>
+          <div class="form-group"><label class="form-label">${tr('Moments Compliant','اللحظات الملتزمة')}</label><input class="form-input" id="hhComp" type="number" min="0"></div>
+          <div class="form-group"><label class="form-label">${tr('Shift','المناوبة')}</label><select class="form-input" id="hhShift"><option>Morning</option><option>Afternoon</option><option>Night</option></select></div>
+          <button class="btn btn-primary" style="width:100%" onclick="window.addHHAudit()">✋ ${tr('Record Audit','تسجيل')}</button>
+        </div>
+        <div class="card" style="padding:20px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <h4 style="margin:0">📈 ${tr('Compliance Trend','اتجاه الالتزام')}</h4>
+            <div style="font-size:24px;font-weight:800;color:${hhAvg>=80?'#22c55e':hhAvg>=60?'#f97316':'#ef4444'}">${hhAvg}%</div>
+          </div>
+          <div style="background:${hhAvg>=80?'#f0fdf4':hhAvg>=60?'#fff7ed':'#fef2f2'};padding:10px;border-radius:8px;margin-bottom:12px;font-size:12px">
+            WHO Target ≥ 80% | CBAHI Min ≥ 75%
+            ${hhAvg>=80?' ✅ Compliant':hhAvg>=75?' ⚠️ Near Target':' ❌ Below Target'}
+          </div>
+          ${hhData.length?`<table class="data-table"><thead><tr><th>${tr('Dept','القسم')}</th><th>Obs</th><th>Comp</th><th>Rate</th><th>${tr('Date','التاريخ')}</th></tr></thead>
+          <tbody>${hhData.slice(0,15).map(h=>{const r2=h.compliance_rate||(h.moments_observed?Math.round((h.moments_compliant/h.moments_observed)*100):0);return`<tr><td>${escapeHTML(h.department||'')}</td><td>${h.moments_observed||0}</td><td>${h.moments_compliant||0}</td><td style="font-weight:700;color:${r2>=80?'#22c55e':r2>=60?'#f97316':'#ef4444'}">${r2}%</td><td style="font-size:11px">${(h.created_at||'').slice(0,10)}</td></tr>`;}).join('')}</tbody></table>`
+          :`<p style="text-align:center;color:var(--text-muted)">${tr('No audits yet','لا يوجد تدقيقات بعد')}</p>`}
+        </div>
+      </div>`;
+
+  } else if (window.icTab === 'isolation') {
+    const isolated = reports.filter(r=>r.isolation_type&&r.isolation_type!=='none'&&r.status==='active');
+    const isoColors={contact:'#f97316',droplet:'#3b82f6',airborne:'#ef4444',protective:'#22c55e'};
+    icCont.innerHTML=`<div class="card" style="padding:20px">
+      <h4 style="margin:0 0 16px">🚪 ${tr('Active Isolation Rooms','غرف العزل النشطة')} (${isolated.length})</h4>
+      ${!isolated.length?`<div style="text-align:center;padding:40px;color:var(--text-muted)"><div style="font-size:48px">✅</div><p>${tr('No active isolations','لا توجد عزل نشطة')}</p></div>`
+      :`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">${isolated.map(r=>`<div style="padding:14px;border-radius:10px;border:2px solid ${isoColors[r.isolation_type]||'#999'};background:${isoColors[r.isolation_type]||'#999'}15"><div style="display:flex;justify-content:space-between;margin-bottom:6px"><strong>${escapeHTML(r.patient_name||'')}</strong><span class="badge" style="background:${isoColors[r.isolation_type]||'#999'};color:#fff;font-size:10px">${(r.isolation_type||'').toUpperCase()}</span></div><div style="font-size:12px;color:var(--text-muted)">🦠 ${escapeHTML(r.infection_type||'')}${r.hai_category?' · <strong>'+escapeHTML(r.hai_category)+'</strong>':''}</div><div style="font-size:12px;color:var(--text-muted)">🏥 ${escapeHTML(r.ward||'—')}</div><div style="font-size:11px;color:var(--text-muted)">📅 ${(r.created_at||'').slice(0,10)}</div><button class="btn btn-sm" style="width:100%;margin-top:8px" onclick="resolveIc(${parseInt(r.id,10)})">✅ ${tr('Resolve','إغلاق')}</button></div>`).join('')}</div>`}
+    </div>`;
+  }
+
+  window.resolveIc = async (id) => {
+    try { await API.put('/api/infection-control/reports/'+id,{status:'resolved'}); showToast('✅ '+tr('Case resolved','تم الإغلاق')); navigateTo(currentPage); }
+    catch(e) { showToast(tr('Error','خطأ'),'error'); }
+  };
 }
-window.reportInfection = async function () {
-  try { await API.post('/api/infection/surveillance', { patient_name: document.getElementById('icPatient').value, infection_type: document.getElementById('icType').value, organism: document.getElementById('icOrganism').value, ward: document.getElementById('icWard').value, hai_category: document.getElementById('icHAI').value, isolation_type: document.getElementById('icIsolation').value, reported_by: currentUser?.display_name }); showToast(tr('Reported!', 'تم التسجيل!')); await navigateTo(26); } catch (e) { showToast(tr('Error', 'خطأ'), 'error'); }
+window.reportInfection = async function() {
+  const p=document.getElementById('icPatient')?.value?.trim();
+  const t=document.getElementById('icType')?.value;
+  if(!p||!t) return showToast(tr('Patient name and type required','مطلوب اسم المريض والنوع'),'error');
+  try {
+    await API.post('/api/infection/surveillance',{patient_name:p,infection_type:t,organism:document.getElementById('icOrganism')?.value,ward:document.getElementById('icWard')?.value,hai_category:document.getElementById('icHAI')?.value,isolation_type:document.getElementById('icIsolation')?.value,culture_results:document.getElementById('icCulture')?.value,action_taken:document.getElementById('icAction')?.value,reported_by:currentUser?.display_name});
+    showToast(tr('Reported!','تم التسجيل!'));
+    await navigateTo(26);
+  } catch(e){showToast(tr('Error','خطأ'),'error');}
 };
-window.addHHAudit = async function () {
-  try { await API.post('/api/infection/hand-hygiene', { department: document.getElementById('hhDept').value, moments_observed: document.getElementById('hhObs').value, moments_compliant: document.getElementById('hhComp').value, auditor: currentUser?.display_name }); showToast(tr('Recorded!', 'تم التسجيل!')); await navigateTo(26); } catch (e) { showToast(tr('Error', 'خطأ'), 'error'); }
+window.addHHAudit = async function() {
+  const dept=document.getElementById('hhDept')?.value?.trim();
+  const obs=parseInt(document.getElementById('hhObs')?.value)||0;
+  const comp=parseInt(document.getElementById('hhComp')?.value)||0;
+  if(!dept||!obs) return showToast(tr('Enter department and observations','أدخل القسم وعدد اللحظات'),'error');
+  if(comp>obs) return showToast(tr('Compliant cannot exceed observed','الملتزم لا يتجاوز المراقَب'),'error');
+  try {
+    await API.post('/api/infection/hand-hygiene',{department:dept,moments_observed:obs,moments_compliant:comp,shift:document.getElementById('hhShift')?.value,auditor:currentUser?.display_name});
+    showToast(tr('Audit recorded!','تم تسجيل التدقيق!'));
+    await navigateTo(26);
+  } catch(e){showToast(tr('Error','خطأ'),'error');}
 };
+
+
+
+// ===== OVR (Occurrence Variance Reports) =====
+async function renderOVR(el) {
+  const content = el;
+  if (!window.ovrTab) window.ovrTab = 'list';
+  const ovrs = await API.get('/api/incidents/ovr').catch(() => []);
+  const openCount = ovrs.filter(r=>r.status==='open').length;
+  content.innerHTML = `
+    <div class="page-title">📋 ${tr('OVR - Occurrence Variance Reports','تقارير الانحرافات')}</div>
+    <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+      <button class="btn ${window.ovrTab==='list'?'btn-primary':'btn-secondary'}" onclick="window.ovrTab='list';navigateTo(currentPage)">📋 ${tr('Reports List','قائمة التقارير')}</button>
+      <button class="btn ${window.ovrTab==='new'?'btn-primary':'btn-secondary'}" onclick="window.ovrTab='new';navigateTo(currentPage)">➕ ${tr('New Report','تقرير جديد')}</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px">
+      <div class="card" style="padding:14px;text-align:center;border-top:3px solid #3b82f6"><div style="font-size:24px;font-weight:800;color:#3b82f6">${ovrs.length}</div><div style="font-size:11px;color:var(--text-muted)">${tr('Total OVRs','إجمالي')}</div></div>
+      <div class="card" style="padding:14px;text-align:center;border-top:3px solid #f97316"><div style="font-size:24px;font-weight:800;color:#f97316">${openCount}</div><div style="font-size:11px;color:var(--text-muted)">${tr('Open','مفتوحة')}</div></div>
+      <div class="card" style="padding:14px;text-align:center;border-top:3px solid #22c55e"><div style="font-size:24px;font-weight:800;color:#22c55e">${ovrs.length-openCount}</div><div style="font-size:11px;color:var(--text-muted)">${tr('Closed','مغلقة')}</div></div>
+    </div>
+    <div id="ovrContent"></div>`;
+  const ovrCont = document.getElementById('ovrContent');
+  if (!ovrCont) return;
+  if (window.ovrTab === 'list') {
+    ovrCont.innerHTML = `<div class="card" style="padding:20px"><div id="ovrTable"></div></div>`;
+    const ot = document.getElementById('ovrTable');
+    if (ot) createTable(ot,'ovrTbl',
+      [tr('ID','الرقم'),tr('Type','النوع'),tr('Severity','الخطورة'),tr('Status','الحالة'),tr('Reporter','المراسل'),tr('Date','التاريخ')],
+      ovrs.map(r=>({cells:[r.id,r.incident_type||'',r.severity||'',statusBadge(r.status||''),r.reporter_name||'',r.created_at?(new Date(r.created_at)).toLocaleDateString('ar-SA'):'']}))
+    );
+  } else if (window.ovrTab === 'new') {
+    ovrCont.innerHTML = `<div class="card" style="padding:20px;max-width:600px">
+      <h4 style="margin:0 0 16px">➕ ${tr('New OVR Report','تقرير انحراف جديد')}</h4>
+      <div class="form-group"><label class="form-label">${tr('Incident Type','نوع الحادثة')}</label>
+        <select class="form-input" id="ovrType"><option value="medication">${tr('Medication Error','خطأ دوائي')}</option><option value="fall">${tr('Patient Fall','سقوط مريض')}</option><option value="procedure">${tr('Procedure Error','خطأ إجرائي')}</option><option value="equipment">${tr('Equipment Failure','عطل جهاز')}</option><option value="other">${tr('Other','أخرى')}</option></select></div>
+      <div class="form-group"><label class="form-label">${tr('Severity','الخطورة')}</label>
+        <select class="form-input" id="ovrSeverity"><option value="low">Low</option><option value="moderate">Moderate</option><option value="high">High</option><option value="critical">Critical</option></select></div>
+      <div class="form-group"><label class="form-label">${tr('Description','الوصف')}</label><textarea class="form-input" id="ovrDesc" rows="3"></textarea></div>
+      <div class="form-group"><label class="form-label">${tr('Immediate Action','الإجراء الفوري')}</label><textarea class="form-input" id="ovrAction" rows="2"></textarea></div>
+      <div class="form-group"><label class="form-label">${tr('Patient Involved','مريض معني')}</label><input class="form-input" id="ovrPatient"></div>
+      <button class="btn btn-primary" style="width:100%" onclick="window.submitOVR()">📋 ${tr('Submit OVR','تقديم التقرير')}</button>
+    </div>`;
+  }
+  window.submitOVR = async () => {
+    try { await API.post('/api/incidents/ovr',{incident_type:document.getElementById('ovrType')?.value,severity:document.getElementById('ovrSeverity')?.value,description:document.getElementById('ovrDesc')?.value,immediate_action:document.getElementById('ovrAction')?.value,patient_name:document.getElementById('ovrPatient')?.value,reporter_name:currentUser?.display_name}); showToast(tr('OVR submitted','تم التقديم')); window.ovrTab='list'; navigateTo(currentPage); } catch(e){showToast(tr('Error','خطأ'),'error');}
+  };
+}
+
+// ===== AUDIT LOG =====
+async function renderAuditLog(el) {
+  const content = el;
+  const [logs, modules] = await Promise.all([
+    API.get('/api/admin/audit-trail?limit=100').catch(()=>[]),
+    API.get('/api/admin/audit-trail/modules').catch(()=>[])
+  ]);
+  const modFilter = window.auditModFilter||'';
+  const filtered = modFilter ? logs.filter(l=>l.module===modFilter) : logs;
+  content.innerHTML = `
+    <div class="page-title">🔐 ${tr('Audit Trail','سجل المراجعة')}</div>
+    <div style="display:flex;gap:8px;margin-bottom:20px;align-items:center">
+      <select class="form-input" style="max-width:200px" onchange="window.auditModFilter=this.value;navigateTo(currentPage)">
+        <option value="">${tr('All Modules','جميع الوحدات')}</option>
+        ${(Array.isArray(modules)?modules:[]).map(m=>`<option value="${escapeHTML(m)}" ${m===modFilter?'selected':''}>${escapeHTML(m)}</option>`).join('')}
+      </select>
+      <span style="color:var(--text-muted);font-size:13px">${filtered.length} ${tr('records','سجل')}</span>
+      <button class="btn btn-sm btn-secondary" style="margin-right:auto" onclick="exportToCSV(filtered,'audit_log')">📥 ${tr('Export','تصدير')}</button>
+    </div>
+    <div class="card" style="padding:20px">
+      <div id="auditTable"></div>
+    </div>`;
+  const at = document.getElementById('auditTable');
+  if (at) createTable(at,'auditTbl',
+    [tr('Time','الوقت'),tr('User','المستخدم'),tr('Module','الوحدة'),tr('Action','الحدث'),tr('Details','التفاصيل'),tr('IP','العنوان')],
+    filtered.map(l=>({cells:[
+      l.created_at?new Date(l.created_at).toLocaleString('ar-SA'):'',
+      l.display_name||l.user_id||'',
+      l.module||'',
+      l.action||'',
+      typeof l.details==='object'?JSON.stringify(l.details).slice(0,80):String(l.details||'').slice(0,80),
+      l.ip_address||''
+    ]}))
+  );
+}
+
+function renderSpecialties(el) {
+  el.innerHTML = `<div class="page-title">🔬 ${tr('Specialties','التخصصات')}</div><div class="card" style="padding:20px"><p>${tr('Coming soon...', 'قريباً...')}</p></div>`;
+}
 
 // ===== QUALITY =====
 let qTab = 'incidents';
