@@ -33,10 +33,10 @@ let facilityType = 'general_hospital';
 
 const FACILITY_ALLOWED = {
   medical_city: null, // all allowed
-  general_hospital: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 30, 33, 34, 42, 43],
-  specialized_hospital: [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 13, 14, 15, 17, 18, 20, 34, 42],
-  tertiary_hospital: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 30, 33, 34, 42, 43],
-  polyclinic: [0, 1, 2, 3, 4, 6, 8, 9, 13, 14, 15, 20, 34, 42, 43],
+  general_hospital: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 30, 33, 34, 42, 43, 45, 46],
+  specialized_hospital: [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 13, 14, 15, 17, 18, 20, 34, 42, 45, 46],
+  tertiary_hospital: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 30, 33, 34, 42, 43, 45, 46],
+  polyclinic: [0, 1, 2, 3, 4, 6, 8, 9, 13, 14, 15, 20, 34, 42, 43, 45, 46],
   phc: [0, 1, 2, 3, 4, 6, 14, 15, 33, 34],
   specialty_center: [0, 1, 2, 3, 4, 6, 8, 14, 15, 20, 34, 43],
   diagnostic_center: [3, 4, 14, 15],
@@ -99,6 +99,12 @@ const NAV_ITEMS = [
   { icon: '🤰', en: 'OB/GYN', ar: 'النساء والتوليد' },
   { icon: '⚙️', en: 'Settings', ar: 'الإعدادات' },
   { icon: '🦷', en: 'Dental', ar: 'الأسنان' },
+  // 44: Specialties — internal placeholder; kept hidden from the sidebar (alignment only).
+  { icon: '🔬', en: 'Specialties', ar: 'التخصصات الدقيقة', hidden: true },
+  // 45: Incident Reports (OVR) — uses HEAD-native /api/quality/incidents (role: quality). Not WIP.
+  { icon: '📋', en: 'Incident Reports (OVR)', ar: 'بلاغات الحوادث (OVR)' },
+  // 46: Audit Trail viewer — HEAD-native /api/admin/audit-trail (Admin-only, read-only).
+  { icon: '🔐', en: 'Audit Trail', ar: 'سجل التدقيق' },
 ];
 
 // ===== INIT =====
@@ -280,6 +286,7 @@ function buildNav() {
   nav.innerHTML = allIndices.map(i => {
     const item = NAV_ITEMS[i];
     if (!item) return '';
+    if (item.hidden) return ''; // placeholder/unlisted pages (e.g. Specialties) stay out of the sidebar
     const hasPerm = isAdmin || i === 0 || userPerms.includes(i.toString());
     if (!hasPerm) return '';
     // Filter by facility type
@@ -2376,10 +2383,104 @@ function renderOdontogramSVG(toothStatusMap, mode = 'adult') {
 
 
 // ===== PAGE LOADER =====
+// ===== INDEPENDENT OVR / AUDIT / SPECIALTIES (HOS OPTION C — built on HEAD, no WIP) =====
+// Specialties: intentional internal placeholder, hidden from the sidebar (alignment only).
+function renderSpecialties(el) {
+  el.innerHTML = `<div class="page-title">🔬 ${tr('Specialties', 'التخصصات الدقيقة')}</div>` +
+    `<div class="card" style="padding:20px"><p>${tr('Managed within the Doctor Station specialty panels.', 'تُدار ضمن لوحات التخصص في محطة الطبيب.')}</p></div>`;
+}
+
+// OVR / Incident Reports — HEAD-native backend /api/quality/incidents (role: quality). Independent of WIP.
+async function renderOVR(el) {
+  if (!window.ovrTab) window.ovrTab = 'list';
+  const rows = await API.get('/api/quality/incidents').catch(() => []);
+  const list = Array.isArray(rows) ? rows : [];
+  const openCount = list.filter(r => (r.status || r.workflow_state) === 'Open').length;
+  el.innerHTML = `
+    <div class="page-title">📋 ${tr('Incident Reports (OVR)', 'بلاغات الحوادث (OVR)')}</div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <button class="btn ${window.ovrTab === 'list' ? 'btn-primary' : 'btn-secondary'}" onclick="window.ovrTab='list';navigateTo(currentPage)">📋 ${tr('Reports', 'التقارير')}</button>
+      <button class="btn ${window.ovrTab === 'new' ? 'btn-primary' : 'btn-secondary'}" onclick="window.ovrTab='new';navigateTo(currentPage)">➕ ${tr('New Report', 'تقرير جديد')}</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px">
+      <div class="card" style="padding:14px;text-align:center;border-top:3px solid #3b82f6"><div style="font-size:22px;font-weight:800;color:#3b82f6">${list.length}</div><div style="font-size:11px">${tr('Total', 'الإجمالي')}</div></div>
+      <div class="card" style="padding:14px;text-align:center;border-top:3px solid #f97316"><div style="font-size:22px;font-weight:800;color:#f97316">${openCount}</div><div style="font-size:11px">${tr('Open', 'مفتوحة')}</div></div>
+    </div>
+    <div id="ovrBody"></div>`;
+  const body = document.getElementById('ovrBody');
+  if (!body) return;
+  if (window.ovrTab === 'new') {
+    const typeOpts = [['medication_error', tr('Medication Error', 'خطأ دوائي')], ['fall', tr('Patient Fall', 'سقوط مريض')], ['infection', tr('Infection', 'عدوى')], ['equipment', tr('Equipment', 'جهاز')], ['complaint', tr('Complaint', 'شكوى')], ['near_miss', tr('Near Miss', 'كاد يحدث')], ['other', tr('Other', 'أخرى')]];
+    const sevOpts = [['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['critical', 'Critical']];
+    const harmOpts = [['None', 'None'], ['Mild', 'Mild'], ['Moderate', 'Moderate'], ['Severe', 'Severe'], ['Death', 'Death']];
+    const opt = arr => arr.map(([v, l]) => `<option value="${escapeHTML(v)}">${escapeHTML(l)}</option>`).join('');
+    body.innerHTML = `<div class="card" style="padding:20px;max-width:620px">
+      <h4 style="margin:0 0 16px">➕ ${tr('New Incident Report', 'تقرير حادثة جديد')}</h4>
+      <div class="form-group"><label class="form-label">${tr('Incident Type', 'نوع الحادثة')}</label><select class="form-input" id="ovrType">${opt(typeOpts)}</select></div>
+      <div class="form-group"><label class="form-label">${tr('Severity', 'الخطورة')}</label><select class="form-input" id="ovrSeverity">${opt(sevOpts)}</select></div>
+      <div class="form-group"><label class="form-label">${tr('Harm Level', 'مستوى الأذى')}</label><select class="form-input" id="ovrHarm">${opt(harmOpts)}</select></div>
+      <div class="form-group"><label class="form-label">${tr('Department', 'القسم')}</label><input class="form-input" id="ovrDept"></div>
+      <div class="form-group"><label class="form-label">${tr('Location', 'الموقع')}</label><input class="form-input" id="ovrLoc"></div>
+      <div class="form-group"><label class="form-label">${tr('Patient (optional)', 'المريض (اختياري)')}</label><input class="form-input" id="ovrPatient"></div>
+      <div class="form-group"><label class="form-label">${tr('Description', 'الوصف')}</label><textarea class="form-input" id="ovrDesc" rows="3"></textarea></div>
+      <div class="form-group"><label class="form-label">${tr('Immediate Action', 'الإجراء الفوري')}</label><textarea class="form-input" id="ovrAction" rows="2"></textarea></div>
+      <button class="btn btn-primary" style="width:100%" onclick="window.submitOVR()">📋 ${tr('Submit', 'تقديم')}</button>
+    </div>`;
+  } else {
+    body.innerHTML = `<div class="card" style="padding:20px"><div id="ovrTable"></div></div>`;
+    const t = document.getElementById('ovrTable');
+    if (t) t.innerHTML = makeTable(
+      [tr('ID', 'الرقم'), tr('Type', 'النوع'), tr('Severity', 'الخطورة'), tr('Harm', 'الأذى'), tr('Dept', 'القسم'), tr('Status', 'الحالة'), tr('Date', 'التاريخ')],
+      list.map(r => ({ cells: [r.id, r.incident_type || '', r.severity || '', r.harm_level || '', r.department || '', statusBadge(r.status || r.workflow_state || ''), (r.incident_date || r.created_at || '').toString().slice(0, 10)] }))
+    );
+  }
+  window.submitOVR = async () => {
+    try {
+      await API.post('/api/quality/incidents', {
+        incident_type: document.getElementById('ovrType')?.value,
+        severity: document.getElementById('ovrSeverity')?.value,
+        harm_level: document.getElementById('ovrHarm')?.value,
+        department: document.getElementById('ovrDept')?.value || '',
+        location: document.getElementById('ovrLoc')?.value || '',
+        patient_name: document.getElementById('ovrPatient')?.value || '',
+        description: document.getElementById('ovrDesc')?.value || '',
+        immediate_action: document.getElementById('ovrAction')?.value || ''
+      });
+      showToast(tr('Incident submitted', 'تم تقديم البلاغ'));
+      window.ovrTab = 'list';
+      navigateTo(currentPage);
+    } catch (e) { showToast(e?.message || tr('Error', 'خطأ'), 'error'); }
+  };
+}
+
+// Audit Trail viewer — HEAD-native backend /api/admin/audit-trail (Admin-only, read-only).
+async function renderAuditLog(el) {
+  const logs = await API.get('/api/admin/audit-trail?limit=100').catch(() => []);
+  const list = Array.isArray(logs) ? logs : [];
+  el.innerHTML = `
+    <div class="page-title">🔐 ${tr('Audit Trail', 'سجل التدقيق')}</div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">
+      <span style="color:var(--text-muted);font-size:13px">${list.length} ${tr('records', 'سجل')}</span>
+    </div>
+    <div class="card" style="padding:20px"><div id="auditTable"></div></div>`;
+  const t = document.getElementById('auditTable');
+  if (t) t.innerHTML = makeTable(
+    [tr('Time', 'الوقت'), tr('User', 'المستخدم'), tr('Module', 'الوحدة'), tr('Action', 'الحدث'), tr('Details', 'التفاصيل'), tr('IP', 'العنوان')],
+    list.map(l => ({ cells: [
+      l.created_at ? new Date(l.created_at).toLocaleString('ar-SA') : '',
+      l.username || l.user_id || '',
+      l.module || '',
+      l.action || '',
+      (typeof l.new_values === 'object' && l.new_values ? JSON.stringify(l.new_values) : String(l.new_values || l.details || '')).slice(0, 80),
+      l.ip_address || ''
+    ] }))
+  );
+}
+
 async function loadPage(page) {
   const el = document.getElementById('pageContent');
   el.style.animation = 'none'; el.offsetHeight; el.style.animation = '';
-  const pages = [renderDashboard, renderReception, renderAppointments, renderDoctor, renderLab, renderRadiology, renderPharmacy, renderHR, renderFinance, renderInsurance, renderInventory, renderNursing, renderWaitingQueue, renderPatientAccounts, renderReports, renderMessaging, renderCatalog, renderDeptRequests, renderSurgery, renderBloodBank, renderConsentForms, renderEmergency, renderInpatient, renderICU, renderCSSD, renderDietary, renderInfectionControl, renderQuality, renderMaintenance, renderTransport, renderMedicalRecords, renderClinicalPharmacy, renderRehabilitation, renderPatientPortal, renderZATCA, renderTelemedicine, renderPathology, renderSocialWork, renderMortuary, renderCME, renderCosmeticSurgery, renderOBGYN, renderSettings, renderDental];
+  const pages = [renderDashboard, renderReception, renderAppointments, renderDoctor, renderLab, renderRadiology, renderPharmacy, renderHR, renderFinance, renderInsurance, renderInventory, renderNursing, renderWaitingQueue, renderPatientAccounts, renderReports, renderMessaging, renderCatalog, renderDeptRequests, renderSurgery, renderBloodBank, renderConsentForms, renderEmergency, renderInpatient, renderICU, renderCSSD, renderDietary, renderInfectionControl, renderQuality, renderMaintenance, renderTransport, renderMedicalRecords, renderClinicalPharmacy, renderRehabilitation, renderPatientPortal, renderZATCA, renderTelemedicine, renderPathology, renderSocialWork, renderMortuary, renderCME, renderCosmeticSurgery, renderOBGYN, renderSettings, renderDental, renderSpecialties, renderOVR, renderAuditLog];
   if (pages[page]) await pages[page](el);
   else if (NAV_ITEMS[page]) renderDepartmentWorkspace(el, page);
   else el.innerHTML = `<div class="page-title">${NAV_ITEMS[page]?.icon} ${tr(NAV_ITEMS[page]?.en, NAV_ITEMS[page]?.ar)}</div><div class="card"><p>${tr('Coming soon...', 'قريباً...')}</p></div>`;
