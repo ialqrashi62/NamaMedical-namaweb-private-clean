@@ -33,7 +33,8 @@ const pool = new Pool({
     database: process.env.DB_NAME || 'nama_medical_web',
     user: process.env.DB_USER || 'postgres',
     password: process.env.DB_PASSWORD || (process.env.NODE_ENV === 'production' ? (() => { throw new Error('DB_PASSWORD is required in production'); })() : 'postgres'),
-    max: parseInt(process.env.DB_MAX_CONNECTIONS) || 20
+    max: parseInt(process.env.DB_MAX_CONNECTIONS) || 20,
+    idleTimeoutMillis: process.env.NODE_ENV === 'production' ? 30000 : 1000
 });
 
 // ===== TENANT CONTEXT WIRING FOR ROW LEVEL SECURITY (ported from security line 10ded01) =====

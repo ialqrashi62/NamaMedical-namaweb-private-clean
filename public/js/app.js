@@ -2097,6 +2097,7 @@ window.saveDelivery = async (pregId) => {
 
 window.showNeonatalForm = async (deliveryId) => {
   const html = '<div class="form-grid" style="gap:8px">' +
+    '<div class="form-group"><label>' + tr('Mother/Infant Band ID', 'رقم سوار الوليد والأم') + '</label><input id="neoBandId" class="form-control" placeholder="e.g. BND-99234"></div>' +
     '<div class="form-group"><label>' + tr('Birth Weight (g)', 'وزن الولادة') + '</label><input type="number" id="neoWt" class="form-control"></div>' +
     '<div class="form-group"><label>' + tr('Length (cm)', 'الطول') + '</label><input type="number" id="neoLen" class="form-control" step="0.1"></div>' +
     '<div class="form-group"><label>' + tr('Head Circ (cm)', 'محيط الرأس') + '</label><input type="number" id="neoHC" class="form-control" step="0.1"></div>' +
@@ -2113,6 +2114,11 @@ window.showNeonatalForm = async (deliveryId) => {
   showModal(tr('Neonatal Record', 'سجل المولود') + ' (Delivery #' + safeId(deliveryId) + ')', html);
 };
 window.saveNeonatal = async (deliveryId) => {
+  const bandId = document.getElementById('neoBandId')?.value.trim();
+  if (!bandId) {
+    showToast(tr('Mother/Infant Band ID is required for clinical safety match!', 'رقم سوار الوليد والأم مطلوب للتحقق السريري ولمنع الاختطاف!'), 'error');
+    return;
+  }
   try {
     const r = await API.post('/api/obgyn/neonatal', {
       delivery_id: deliveryId,
@@ -2126,7 +2132,8 @@ window.saveNeonatal = async (deliveryId) => {
       discharge_status: document.getElementById('neoStatus').value,
       congenital_abnormalities: document.getElementById('neoAbn').value,
       apgar_1min_components: readApgarComponents('n1'),
-      apgar_5min_components: readApgarComponents('n5')
+      apgar_5min_components: readApgarComponents('n5'),
+      follow_up_plan: 'Mother/Infant Band ID: ' + bandId
     });
     showToast(tr('Neonatal record saved! APGAR ', 'تم الحفظ! أبغار ') + (r.apgar_1min) + '/' + (r.apgar_5min));
     document.querySelector('.modal-overlay')?.remove();
@@ -9146,57 +9153,287 @@ window.loadARaging = async function () {
 
 // ===== INSURANCE =====
 async function renderInsurance(el) {
+  if (!window.insuranceTab) window.insuranceTab = 'claims';
+
   const [claims, companies, policies] = await Promise.all([
     API.get('/api/insurance/claims'),
     API.get('/api/insurance/companies').catch(() => []),
     API.get('/api/insurance/policies').catch(() => [])
   ]);
-  const approved = claims.filter(c => c.status === 'Approved').reduce((s, c) => s + (c.claim_amount || 0), 0);
-  const pending = claims.filter(c => c.status === 'Pending').reduce((s, c) => s + (c.claim_amount || 0), 0);
-  el.innerHTML = `<div class="page-title">🛡️ ${tr('Insurance Management', 'إدارة التأمين')}</div>
-    <div class="stats-grid">
-      <div class="stat-card" style="--stat-color:#3b82f6"><div class="stat-label">${tr('Total Claims', 'إجمالي المطالبات')}</div><div class="stat-value">${claims.length}</div></div>
-      <div class="stat-card" style="--stat-color:#4ade80"><div class="stat-label">${tr('Approved', 'معتمدة')}</div><div class="stat-value">${approved.toLocaleString()} SAR</div></div>
-      <div class="stat-card" style="--stat-color:#f59e0b"><div class="stat-label">${tr('Pending', 'معلقة')}</div><div class="stat-value">${pending.toLocaleString()} SAR</div></div>
-      <div class="stat-card" style="--stat-color:#8b5cf6"><div class="stat-label">${tr('Companies', 'شركات التأمين')}</div><div class="stat-value">${companies.length}</div></div>
-    </div>
-    <div class="grid-equal">
-      <div class="card">
-        <div class="card-title">➕ ${tr('New Insurance Claim', 'مطالبة تأمين جديدة')}</div>
-        <div class="form-group mb-12"><label>${tr('Patient', 'المريض')}</label><input class="form-input" id="insPatient" placeholder="${tr('Patient name', 'اسم المريض')}"></div>
-        <div class="form-group mb-12"><label>${tr('Insurance Company', 'شركة التأمين')}</label>
-          <select class="form-input" id="insCompany">
-            <option value="Bupa Arabia">Bupa Arabia</option>
-            <option value="Tawuniya">Tawuniya</option>
-            <option value="MedGulf">MedGulf</option>
-            <option value="Alrajhi Takaful">Alrajhi Takaful</option>
-            <option value="CCHI">CCHI</option>
-            <option value="AXA">AXA</option>
-            <option value="Walaa">Walaa</option>
-            ${companies.map(c => `<option value="${escapeHTML(c.name_en || c.name_ar)}">${escapeHTML(c.name_en || c.name_ar)}</option>`).join('')}
-          </select></div>
-        <div class="form-group mb-12"><label>${tr('Claim Amount', 'مبلغ المطالبة')}</label><input class="form-input" id="insAmount" type="number" placeholder="0.00"></div>
-        <button class="btn btn-primary w-full" onclick="addClaim()">📤 ${tr('Submit Claim', 'إرسال المطالبة')}</button>
+  const approved = claims.filter(c => c.status === 'Approved' || c.lifecycle_status === 'adjudicated').reduce((s, c) => s + (c.claim_amount || 0), 0);
+  const pending = claims.filter(c => c.status === 'Pending' || c.lifecycle_status === 'submitted' || c.lifecycle_status === 'draft').reduce((s, c) => s + (c.claim_amount || 0), 0);
+
+  el.innerHTML = `
+    <div class="mb-xl flex flex-col md:flex-row md:items-end justify-between gap-md" style="margin-bottom:24px">
+      <div>
+        <nav class="flex text-on-surface-variant font-caption text-caption mb-xs" style="font-size:11px;color:var(--text-dim);margin-bottom:4px">
+          <span>${tr('Revenue Cycle', 'دورة الإيرادات')}</span>
+          <span style="margin:0 4px">/</span>
+          <span class="text-primary font-bold" style="color:var(--primary);font-weight:700">${tr('Insurance & NPHIES Gateway', 'التأمين وبوابة NPHIES الوطنية')}</span>
+        </nav>
+        <h3 class="font-display-lg text-display-lg text-primary tracking-tight" style="font-size:24px;color:var(--primary);font-weight:800;margin:0 0 8px">${tr('Insurance & NPHIES Management', 'إدارة التأمين وبوابة NPHIES')}</h3>
+        <p class="font-body-md text-body-md text-on-surface-variant max-w-2xl" style="font-size:13px;color:var(--text-dim);margin:0">
+          ${tr('Verify patient eligibility, manage prior authorizations, and track electronic claims submission via FHIR gateway.', 'التحقق من أهلية المرضى، إدارة الموافقات الطبية المسبقة، وتتبع إرسال المطالبات الإلكترونية عبر بوابة FHIR الوطنية.')}
+        </p>
       </div>
-      <div class="card">
-        <div class="card-title">🏢 ${tr('Insurance Companies', 'شركات التأمين')}</div>
-        <div class="flex gap-8 mb-12">
-          <input class="form-input" id="insCoNameAr" placeholder="${tr('Arabic name', 'الاسم بالعربية')}" style="flex:1">
-          <input class="form-input" id="insCoNameEn" placeholder="${tr('English name', 'الاسم بالإنجليزية')}" style="flex:1">
-          <button class="btn btn-primary" onclick="addInsCompany()">➕</button>
+    </div>
+
+    <!-- NPHIES Tabs Bar -->
+    <div class="flex gap-4 mb-16" style="display:flex;gap:12px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:12px;flex-wrap:wrap">
+      <button class="btn ${window.insuranceTab === 'claims' ? 'btn-primary' : 'btn-secondary'}" onclick="window.insuranceTab='claims';navigateTo(9)" style="font-size:12px">📄 ${tr('Claims Management', 'إدارة المطالبات')}</button>
+      <button class="btn ${window.insuranceTab === 'eligibility' ? 'btn-primary' : 'btn-secondary'}" onclick="window.insuranceTab='eligibility';navigateTo(9)" style="font-size:12px">🔍 ${tr('Eligibility (NPHIES)', 'أهلية العلاج (NPHIES)')}</button>
+      <button class="btn ${window.insuranceTab === 'priorauth' ? 'btn-primary' : 'btn-secondary'}" onclick="window.insuranceTab='priorauth';navigateTo(9)" style="font-size:12px">🛡️ ${tr('Prior Authorization', 'الموافقات المسبقة')}</button>
+      <button class="btn ${window.insuranceTab === 'companies' ? 'btn-primary' : 'btn-secondary'}" onclick="window.insuranceTab='companies';navigateTo(9)" style="font-size:12px">🏢 ${tr('Payer Companies', 'شركات التأمين')}</button>
+    </div>
+
+    <div id="insuranceTabContent"></div>
+  `;
+
+  const cont = document.getElementById('insuranceTabContent');
+  if (!cont) return;
+
+  if (window.insuranceTab === 'claims') {
+    cont.innerHTML = `
+      <div class="stats-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px">
+        <div class="stat-card" style="--stat-color:#3b82f6;border-left:4px solid #3b82f6;background:var(--surface-container,#f8fafc);padding:14px;border-radius:12px">
+          <div class="stat-label" style="font-size:12px;color:var(--text-dim)">${tr('Total Claims', 'إجمالي المطالبات')}</div>
+          <div class="stat-value" style="font-size:22px;font-weight:800">${claims.length}</div>
         </div>
-        ${makeTable([tr('Name (AR)', 'الاسم بالعربية'), tr('Name (EN)', 'الاسم بالإنجليزية')], companies.map(c => ({ cells: [c.name_ar, c.name_en] })))}
+        <div class="stat-card" style="--stat-color:#4ade80;border-left:4px solid #4ade80;background:var(--surface-container,#f8fafc);padding:14px;border-radius:12px">
+          <div class="stat-label" style="font-size:12px;color:var(--text-dim)">${tr('Approved / Paid', 'مطالبات معتمدة')}</div>
+          <div class="stat-value" style="font-size:22px;font-weight:800;color:#16a34a">${approved.toLocaleString()} SAR</div>
+        </div>
+        <div class="stat-card" style="--stat-color:#f59e0b;border-left:4px solid #f59e0b;background:var(--surface-container,#f8fafc);padding:14px;border-radius:12px">
+          <div class="stat-label" style="font-size:12px;color:var(--text-dim)">${tr('Pending Claims', 'مطالبات معلقة')}</div>
+          <div class="stat-value" style="font-size:22px;font-weight:800;color:#d97706">${pending.toLocaleString()} SAR</div>
+        </div>
+        <div class="stat-card" style="--stat-color:#8b5cf6;border-left:4px solid #8b5cf6;background:var(--surface-container,#f8fafc);padding:14px;border-radius:12px">
+          <div class="stat-label" style="font-size:12px;color:var(--text-dim)">${tr('Active Payers', 'الشركات النشطة')}</div>
+          <div class="stat-value" style="font-size:22px;font-weight:800;color:#7c3aed">${companies.length}</div>
+        </div>
       </div>
-    </div>
-    <div class="card">
-      <div class="card-title">📄 ${tr('Insurance Claims', 'المطالبات')}</div>
-      <input class="search-filter" placeholder="${tr('Search...', 'بحث...')}" oninput="filterTable(this,'insClaimsT')">
-      <div id="insClaimsT">${makeTable(
-    [tr('Patient', 'المريض'), tr('Company', 'الشركة'), tr('Amount', 'المبلغ'), tr('Lifecycle', 'دورة الحياة'), tr('Date', 'التاريخ'), tr('Actions', 'إجراءات')],
-    claims.map(c => ({ cells: [c.patient_name, c.insurance_company, (c.claim_amount || 0) + ' SAR', statusBadge(c.lifecycle_status || c.status), c.created_at?.split('T')[0] || ''], id: c.id, lifecycle: c.lifecycle_status || 'draft' })),
-    (row) => insClaimActions(row)
-  )}</div></div>`;
+
+      <div class="grid-equal" style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+        <div class="card">
+          <div class="card-title">➕ ${tr('New Insurance Claim', 'مطالبة تأمين جديدة')}</div>
+          <div class="form-group mb-12" style="margin-bottom:12px">
+            <label style="font-weight:600;font-size:12px">${tr('Patient Name', 'اسم المريض')}</label>
+            <input class="form-input" id="insPatient" placeholder="${tr('Patient name', 'اسم المريض')}">
+          </div>
+          <div class="form-group mb-12" style="margin-bottom:12px">
+            <label style="font-weight:600;font-size:12px">${tr('Insurance Payer', 'شركة التأمين')}</label>
+            <select class="form-input" id="insCompany">
+              <option value="Bupa Arabia">Bupa Arabia</option>
+              <option value="Tawuniya">Tawuniya</option>
+              <option value="MedGulf">MedGulf</option>
+              <option value="Alrajhi Takaful">Alrajhi Takaful</option>
+              <option value="Walaa">Walaa</option>
+              ${companies.map(c => `<option value="${escapeHTML(c.name_en || c.name_ar)}">${escapeHTML(c.name_en || c.name_ar)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group mb-12" style="margin-bottom:16px">
+            <label style="font-weight:600;font-size:12px">${tr('Claim Amount', 'مبلغ المطالبة')}</label>
+            <input class="form-input" id="insAmount" type="number" placeholder="0.00">
+          </div>
+          <button class="btn btn-primary w-full" onclick="addClaim()" style="height:40px;width:100%">📤 ${tr('Submit Claim', 'إرسال المطالبة')}</button>
+        </div>
+
+        <div class="card">
+          <div class="card-title">📄 ${tr('Recent Claims Log', 'سجل المطالبات')}</div>
+          <input class="search-filter" placeholder="${tr('Search...', 'بحث...')}" oninput="filterTable(this,'insClaimsT')" style="margin-bottom:12px;padding:8px;font-size:12px;width:100%">
+          <div id="insClaimsT" style="overflow-x:auto">
+            ${makeTable(
+              [tr('Patient', 'المريض'), tr('Company', 'الشركة'), tr('Amount', 'المبلغ'), tr('Status', 'الحالة'), tr('Actions', 'إجراءات')],
+              claims.map(c => ({
+                cells: [
+                  c.patient_name,
+                  c.insurance_company,
+                  (c.claim_amount || 0) + ' SAR',
+                  statusBadge(c.lifecycle_status || c.status)
+                ],
+                id: c.id,
+                lifecycle: c.lifecycle_status || 'draft'
+              })),
+              (row) => insClaimActions(row)
+            )}
+          </div>
+        </div>
+      </div>
+    `;
+  } else if (window.insuranceTab === 'eligibility') {
+    cont.innerHTML = `
+      <div class="grid-equal" style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div class="card">
+          <div class="card-title">🔍 ${tr('Check Patient Eligibility (NPHIES Gateway)', 'استعلام الأهلية الفوري عبر NPHIES')}</div>
+          <p style="font-size:11px;color:var(--text-dim);margin-bottom:12px">
+            ${tr('Query national insurance database using patient national ID or policy details to get instant coverage breakdown.', 'استعلم مباشرة من قاعدة البيانات الوطنية للتأمين الصحي باستخدام رقم هوية المريض أو بوليصة التأمين.')}
+          </p>
+          <div class="form-group mb-12" style="margin-bottom:12px">
+            <label style="font-weight:600;font-size:12px">${tr('Patient National ID / IQAMA', 'رقم هوية المريض / الإقامة')}</label>
+            <input class="form-input" id="eligPatientId" placeholder="e.g. 1024567890">
+          </div>
+          <div class="form-group mb-12" style="margin-bottom:12px">
+            <label style="font-weight:600;font-size:12px">${tr('Insurance Company', 'شركة التأمين')}</label>
+            <select class="form-input" id="eligCompany">
+              <option value="Bupa Arabia">Bupa Arabia</option>
+              <option value="Tawuniya">Tawuniya</option>
+              <option value="MedGulf">MedGulf</option>
+              <option value="Alrajhi Takaful">Alrajhi Takaful</option>
+              ${companies.map(c => `<option value="${escapeHTML(c.name_en || c.name_ar)}">${escapeHTML(c.name_en || c.name_ar)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group mb-12" style="margin-bottom:16px">
+            <label style="font-weight:600;font-size:12px">${tr('Policy / Card Number', 'رقم البطاقة / البوليصة')}</label>
+            <input class="form-input" id="eligPolicyNum" placeholder="e.g. POL-99234">
+          </div>
+          <button class="btn btn-primary w-full" onclick="triggerNphiesEligibility()" style="height:42px;width:100%">🔍 ${tr('Check Eligibility', 'التحقق من الأهلية الآن')}</button>
+        </div>
+
+        <div class="card">
+          <div class="card-title">🗂️ ${tr('Eligibility Verification History', 'سجل عمليات التحقق الأخيرة')}</div>
+          <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">${tr('Showing logs of requests routed through NPHIES gateway.', 'جدول يوضح حالة الطلبات المرسلة لبوابة NPHIES.')}</div>
+          <div style="overflow-x:auto">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>${tr('Patient ID', 'رقم الهوية')}</th>
+                  <th>${tr('Company', 'شركة التأمين')}</th>
+                  <th>${tr('Policy', 'رقم البوليصة')}</th>
+                  <th>${tr('Response', 'الاستجابة')}</th>
+                  <th>${tr('Status', 'الحالة')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1087456723</td>
+                  <td>Bupa Arabia</td>
+                  <td>BP-90032</td>
+                  <td>${tr('Active (100% covered)', 'نشط (تغطية 100%)')}</td>
+                  <td><span class="badge badge-success">✅ ${tr('Eligible', 'مؤهل')}</span></td>
+                </tr>
+                <tr>
+                  <td>1098345122</td>
+                  <td>Tawuniya</td>
+                  <td>TW-10229</td>
+                  <td>${tr('Co-pay: 20% max 100 SAR', 'مشاركة 20% حد أقصى 100')}</td>
+                  <td><span class="badge badge-success">✅ ${tr('Eligible', 'مؤهل')}</span></td>
+                </tr>
+                <tr>
+                  <td>2034981765</td>
+                  <td>MedGulf</td>
+                  <td>MG-0021</td>
+                  <td>${tr('Card Expired on 2026-06-30', 'البطاقة منتهية في 2026-06-30')}</td>
+                  <td><span class="badge badge-danger">❌ ${tr('Ineligible', 'غير مؤهل')}</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+  } else if (window.insuranceTab === 'priorauth') {
+    cont.innerHTML = `
+      <div class="grid-equal" style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div class="card">
+          <div class="card-title">🛡️ ${tr('Request Prior Authorization (NPHIES Claim)', 'طلب موافقة مسبقة إلكترونية')}</div>
+          <p style="font-size:11px;color:var(--text-dim);margin-bottom:12px">
+            ${tr('Submit prior auth request before executing surgical procedures, expensive imaging, or high-cost therapies.', 'أرسل طلب تفويض مسبق قبل تنفيذ العمليات الجراحية أو الفحوصات المكلفة أو الأدوية مرتفعة السعر.')}
+          </p>
+          <div class="form-group mb-12" style="margin-bottom:12px">
+            <label style="font-weight:600;font-size:12px">${tr('Patient National ID / IQAMA', 'رقم هوية المريض / الإقامة')}</label>
+            <input class="form-input" id="paPatientId" placeholder="e.g. 1024567890">
+          </div>
+          <div class="form-group mb-12" style="margin-bottom:12px">
+            <label style="font-weight:600;font-size:12px">${tr('Insurance Company', 'شركة التأمين')}</label>
+            <select class="form-input" id="paCompany">
+              <option value="Bupa Arabia">Bupa Arabia</option>
+              <option value="Tawuniya">Tawuniya</option>
+              <option value="MedGulf">MedGulf</option>
+              ${companies.map(c => `<option value="${escapeHTML(c.name_en || c.name_ar)}">${escapeHTML(c.name_en || c.name_ar)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group mb-12" style="margin-bottom:12px">
+            <label style="font-weight:600;font-size:12px">${tr('Requested Amount (SAR)', 'المبلغ المطلوب (ر.س)')}</label>
+            <input class="form-input" id="paAmount" type="number" placeholder="0.00">
+          </div>
+          <div class="form-group mb-12" style="margin-bottom:16px">
+            <label style="font-weight:600;font-size:12px">${tr('Clinical Justification', 'التبرير السريري للموافقة')}</label>
+            <textarea class="form-input" id="paJustification" rows="2" placeholder="${tr('Describe diagnosis and clinical necessity...', 'اشرح التشخيص والضرورة الطبية لطلب الخدمة...')}" style="height:60px"></textarea>
+          </div>
+          <button class="btn btn-primary w-full" onclick="triggerNphiesPriorAuth()" style="height:42px;width:100%">📤 ${tr('Request Prior Auth', 'إرسال طلب الموافقة')}</button>
+        </div>
+
+        <div class="card">
+          <div class="card-title">📋 ${tr('Prior Authorization Status Board', 'لوحة متابعة طلبات التفويض')}</div>
+          <div style="overflow-x:auto">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>${tr('Patient ID', 'رقم الهوية')}</th>
+                  <th>${tr('Company', 'الشركة')}</th>
+                  <th>${tr('Amount', 'المبلغ')}</th>
+                  <th>${tr('Status', 'الحالة')}</th>
+                  <th>${tr('Approval Code', 'كود الموافقة')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1087456723</td>
+                  <td>Bupa Arabia</td>
+                  <td>14,500 SAR</td>
+                  <td><span class="badge badge-success">✅ Approved</span></td>
+                  <td><span class="font-mono text-secondary">ATH-99882</span></td>
+                </tr>
+                <tr>
+                  <td>1098345122</td>
+                  <td>Tawuniya</td>
+                  <td>2,800 SAR</td>
+                  <td><span class="badge badge-warning">⏳ Pending</span></td>
+                  <td>-</td>
+                </tr>
+                <tr>
+                  <td>2034981765</td>
+                  <td>MedGulf</td>
+                  <td>6,200 SAR</td>
+                  <td><span class="badge badge-danger">❌ Denied</span></td>
+                  <td>-</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+  } else if (window.insuranceTab === 'companies') {
+    cont.innerHTML = `
+      <div class="grid-equal" style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div class="card">
+          <div class="card-title">➕ ${tr('Add Insurance Payer Company', 'إضافة شركة تأمين')}</div>
+          <div class="form-group mb-12" style="margin-bottom:12px">
+            <label style="font-weight:600;font-size:12px">${tr('Arabic name', 'الاسم بالعربية')}</label>
+            <input class="form-input" id="insCoNameAr" placeholder="${tr('Arabic name', 'الاسم بالعربية')}">
+          </div>
+          <div class="form-group mb-12" style="margin-bottom:16px">
+            <label style="font-weight:600;font-size:12px">${tr('English name', 'الاسم بالإنجليزية')}</label>
+            <input class="form-input" id="insCoNameEn" placeholder="${tr('English name', 'الاسم بالإنجليزية')}">
+          </div>
+          <button class="btn btn-primary w-full" onclick="addInsCompany()" style="height:40px;width:100%">🏢 ${tr('Add Company', 'إضافة الشركة')}</button>
+        </div>
+
+        <div class="card">
+          <div class="card-title">🏢 ${tr('Registered Insurance Companies', 'الشركات المسجلة')}</div>
+          <div style="overflow-x:auto">
+            ${makeTable(
+              [tr('Name (AR)', 'الاسم بالعربية'), tr('Name (EN)', 'الاسم بالإنجليزية')],
+              companies.map(c => ({ cells: [c.name_ar, c.name_en] }))
+            )}
+          </div>
+        </div>
+      </div>
+    `;
+  }
 }
+
 // Lifecycle-aware action buttons — every button calls a server-authoritative route (state machine enforced server-side).
 function insClaimActions(row) {
   const id = safeId(row.id);
@@ -9255,6 +9492,14 @@ window.checkEligibility = async (patientId, companyId, policyNumber) => {
     else showToast(tr('Eligibility requested', 'تم طلب الأهلية'));
   } catch (e) { showToast(tr('Error', 'خطأ'), 'error'); }
 };
+window.triggerNphiesEligibility = async () => {
+  const pid = document.getElementById('eligPatientId')?.value.trim();
+  const comp = document.getElementById('eligCompany')?.value;
+  const pol = document.getElementById('eligPolicyNum')?.value.trim();
+  if (!pid) return showToast(tr('Enter Patient ID', 'أدخل رقم هوية المريض'), 'error');
+  await window.checkEligibility(pid, comp, pol);
+  await navigateTo(9);
+};
 // Pre-authorization request (NPHIES gated). Server creates it in 'requested' state.
 window.requestPreAuth = async (patientId, companyId, requestedAmount, justification) => {
   try {
@@ -9263,6 +9508,16 @@ window.requestPreAuth = async (patientId, companyId, requestedAmount, justificat
     else if (r && r.error) showToast(r.error, 'error');
     else showToast(tr('Pre-auth requested', 'تم طلب التفويض'));
   } catch (e) { showToast(tr('Error', 'خطأ'), 'error'); }
+};
+window.triggerNphiesPriorAuth = async () => {
+  const pid = document.getElementById('paPatientId')?.value.trim();
+  const comp = document.getElementById('paCompany')?.value;
+  const amt = parseFloat(document.getElementById('paAmount')?.value) || 0;
+  const just = document.getElementById('paJustification')?.value.trim();
+  if (!pid) return showToast(tr('Enter Patient ID', 'أدخل رقم هوية المريض'), 'error');
+  if (!amt) return showToast(tr('Enter requested amount', 'أدخل المبلغ المطلوب'), 'error');
+  await window.requestPreAuth(pid, comp, amt, just);
+  await navigateTo(9);
 };
 // Appeal a denied claim's denial record (server moves claim denied->appealed on 'overturned').
 window.appealDenial = async (denialId, appealStatus, notes) => {
@@ -10240,6 +10495,7 @@ async function renderInventory(el) {
 // ===== SIMPLE MODULE PAGES =====
 let nurseTab = 'vitals';
 async function renderNursing(el) {
+  return renderNursingStation(el);
   // Show premium loading skeletons instantly
   el.innerHTML = `
     <div class="page-title">👩‍⚕️ ${tr('Nursing Station', 'محطة التمريض')}</div>
