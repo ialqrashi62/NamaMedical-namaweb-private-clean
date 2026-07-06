@@ -3183,6 +3183,51 @@ UPDATE maintenance_equipment SET tenant_id = 1 WHERE tenant_id IS NULL;
             console.log('  ✅ Phase F tables created (nursing_risk_assessments, surgery_count_sheets, neonatal_apgar_scores, notifications) with FORCE RLS enabled.');
         } catch (e) { console.error('Phase F tables migration error:', e.message); }
 
+        // ===== Phase 3: Calibrations & Medical Waste =====
+        try {
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS device_calibrations (
+                    id SERIAL PRIMARY KEY,
+                    device_name TEXT DEFAULT '',
+                    serial_number TEXT DEFAULT '',
+                    calibration_date TEXT DEFAULT '',
+                    next_calibration_date TEXT DEFAULT '',
+                    calibrated_by TEXT DEFAULT '',
+                    status TEXT DEFAULT 'Calibrated',
+                    notes TEXT DEFAULT '',
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_calibrations_tenant ON device_calibrations(tenant_id);
+
+                CREATE TABLE IF NOT EXISTS medical_waste_logs (
+                    id SERIAL PRIMARY KEY,
+                    waste_type TEXT DEFAULT '',
+                    weight_kg REAL DEFAULT 0,
+                    disposal_company TEXT DEFAULT '',
+                    truck_number TEXT DEFAULT '',
+                    logged_by TEXT DEFAULT '',
+                    logged_at TIMESTAMPTZ DEFAULT NOW(),
+                    notes TEXT DEFAULT '',
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    facility_id INTEGER
+                );
+                CREATE INDEX IF NOT EXISTS idx_waste_tenant ON medical_waste_logs(tenant_id);
+
+                ALTER TABLE device_calibrations ENABLE ROW LEVEL SECURITY;
+                ALTER TABLE device_calibrations FORCE ROW LEVEL SECURITY;
+
+                ALTER TABLE medical_waste_logs ENABLE ROW LEVEL SECURITY;
+                ALTER TABLE medical_waste_logs FORCE ROW LEVEL SECURITY;
+            `);
+
+            try { await client.query("CREATE POLICY tenant_sec_calibrations ON device_calibrations FOR ALL USING (tenant_id = current_setting('app.tenant_id')::integer)"); } catch (e) {}
+            try { await client.query("CREATE POLICY tenant_sec_waste ON medical_waste_logs FOR ALL USING (tenant_id = current_setting('app.tenant_id')::integer)"); } catch (e) {}
+
+            console.log('  ✅ Phase 3 tables created (device_calibrations, medical_waste_logs) with FORCE RLS.');
+        } catch (e) { console.error('Phase 3 tables migration error:', e.message); }
+
         console.log('  ✅ PostgreSQL tables created');
     } finally {
         client.release();
