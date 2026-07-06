@@ -13270,7 +13270,7 @@ app.post('/api/clinical-pharmacy/reviews', requireAuth, requireTenantScope, asyn
     try {
         const { patient_id, patient_name, prescription_id, review_type, findings, recommendations, interventions, severity } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
-        const result = await pool.query('INSERT INTO clinical_pharmacy_reviews (patient_id, patient_name, prescription_id, review_type, pharmacist, findings, recommendations, interventions, severity, tenant_id, branch_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *',
+        const result = await pool.query('INSERT INTO clinical_pharmacy_reviews (patient_id, patient_name, prescription_id, review_type, pharmacist, findings, recommendations, interventions, severity, tenant_id, facility_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *',
             [patient_id, patient_name || '', prescription_id || 0, review_type || 'Medication Review', req.session.user.name, findings || '', recommendations || '', interventions || '', severity || 'Low', tenantId || null, facilityId || null]);
         logAudit(req.session.user.id, req.session.user.name, 'CLINICAL_REVIEW', 'Clinical Pharmacy', `Review for patient ${patient_name}`, req.ip);
         res.json(result.rows[0]);
@@ -13288,8 +13288,7 @@ app.put('/api/clinical-pharmacy/reviews/:id', requireAuth, requireTenantScope, a
 });
 app.get('/api/clinical-pharmacy/interactions', requireAuth, requireTenantScope, async (req, res) => {
     try {
-        const { tenantId } = getRequestTenantContext(req);
-        res.json((await pool.query('SELECT * FROM drug_interactions WHERE tenant_id=$1 ORDER BY severity DESC', [tenantId])).rows);
+        res.json((await pool.query('SELECT * FROM drug_interactions ORDER BY severity DESC')).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 app.get('/api/clinical-pharmacy/education', requireAuth, requireTenantScope, async (req, res) => {
@@ -13302,7 +13301,7 @@ app.post('/api/clinical-pharmacy/education', requireAuth, requireTenantScope, as
     try {
         const { patient_id, patient_name, medication, instructions, side_effects, precautions } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
-        const result = await pool.query('INSERT INTO patient_drug_education (patient_id, patient_name, medication, instructions, side_effects, precautions, educated_by, tenant_id, branch_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',
+        const result = await pool.query('INSERT INTO patient_drug_education (patient_id, patient_name, medication, instructions, side_effects, precautions, educated_by, tenant_id, facility_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',
             [patient_id, patient_name || '', medication || '', instructions || '', side_effects || '', precautions || '', req.session.user.name, tenantId || null, facilityId || null]);
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }

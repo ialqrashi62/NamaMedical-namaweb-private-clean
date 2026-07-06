@@ -15694,79 +15694,363 @@ window.updateMRRequest = async function (id, status) {
 };
 
 // ===== CLINICAL PHARMACY =====
-let cpTab = 'reviews';
+let cpTab = 'prescriptions'; // default to prescriptions list
 async function renderClinicalPharmacy(el) {
   const content = el;
 
-  const prescriptions = await API.get('/api/pharmacy/prescriptions').catch(() => []);
-  const pending = prescriptions.filter(p => p.status === 'pending').length;
-
-  const interactions = [
-    { drug1: 'Warfarin', drug2: 'Aspirin', severity: 'high', effect: tr('Increased bleeding risk', 'زيادة خطر النزيف') },
-    { drug1: 'ACE Inhibitors', drug2: 'Potassium', severity: 'high', effect: tr('Hyperkalemia risk', 'خطر فرط البوتاسيوم') },
-    { drug1: 'Metformin', drug2: 'Contrast Dye', severity: 'moderate', effect: tr('Lactic acidosis risk', 'خطر الحموضة اللبنية') },
-    { drug1: 'SSRIs', drug2: 'MAOIs', severity: 'high', effect: tr('Serotonin syndrome', 'متلازمة السيروتونين') },
-    { drug1: 'Statins', drug2: 'Macrolides', severity: 'moderate', effect: tr('Rhabdomyolysis risk', 'خطر انحلال العضلات') },
-    { drug1: 'NSAIDs', drug2: 'Anticoagulants', severity: 'high', effect: tr('GI bleeding', 'نزيف هضمي') },
-    { drug1: 'Digoxin', drug2: 'Amiodarone', severity: 'high', effect: tr('Digoxin toxicity', 'سمية الديجوكسين') },
-    { drug1: 'Ciprofloxacin', drug2: 'Theophylline', severity: 'moderate', effect: tr('Theophylline toxicity', 'سمية الثيوفيلين') },
-  ];
-
+  // Show premium loading skeletons instantly
   content.innerHTML = `
-    <h2>${tr('Clinical Pharmacy', 'الصيدلة الإكلينيكية')}</h2>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
-      <div class="card" style="padding:16px;text-align:center;background:#e3f2fd"><h3 style="margin:0;color:#1565c0">${prescriptions.length}</h3><p style="margin:4px 0 0;font-size:12px">${tr('Total Prescriptions', 'إجمالي الوصفات')}</p></div>
-      <div class="card" style="padding:16px;text-align:center;background:#fff3e0"><h3 style="margin:0;color:#e65100">${pending}</h3><p style="margin:4px 0 0;font-size:12px">${tr('Pending Review', 'بانتظار المراجعة')}</p></div>
-      <div class="card" style="padding:16px;text-align:center;background:#fce4ec"><h3 style="margin:0;color:#c62828">${interactions.length}</h3><p style="margin:4px 0 0;font-size:12px">${tr('Known Interactions', 'تداخلات معروفة')}</p></div>
+    <div class="page-title">💊 ${tr('Clinical Pharmacy', 'الصيدلة الإكلينيكية')}</div>
+    <div class="tab-bar">
+      <button class="tab-btn active">💊 ${tr('Prescriptions Review', 'مراجعة الوصفات')}</button>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-      <div class="card" style="padding:20px">
-        <h4 style="margin:0 0 12px">🔍 ${tr('Drug Interaction Checker', 'فحص تداخل الأدوية')}</h4>
-        <div class="form-group"><label>${tr('Drug 1', 'الدواء 1')}</label><input class="form-input" id="cpDrug1" placeholder="${tr('e.g. Warfarin', 'مثال: وارفارين')}"></div>
-        <div class="form-group"><label>${tr('Drug 2', 'الدواء 2')}</label><input class="form-input" id="cpDrug2" placeholder="${tr('e.g. Aspirin', 'مثال: أسبرين')}"></div>
-        <button class="btn btn-primary w-full" onclick="checkInteraction()">🔍 ${tr('Check Interaction', 'فحص التداخل')}</button>
-        <div id="cpResult" style="margin-top:12px"></div>
+    <div class="split-layout">
+      <div class="card glass-card-premium">
+        <div class="skeleton-bar title mb-16"></div>
+        <div class="skeleton-bar mb-12"></div>
       </div>
-      <div class="card" style="padding:20px">
-        <h4 style="margin:0 0 12px">⚠️ ${tr('Known Drug Interactions', 'التداخلات الدوائية المعروفة')}</h4>
-        <div style="max-height:300px;overflow-y:auto">${interactions.map(i => '<div style="padding:8px;margin:4px 0;border-radius:8px;background:' + (i.severity === 'high' ? '#fce4ec' : '#fff3e0') + '"><strong>' + escapeHTML(i.drug1) + ' + ' + escapeHTML(i.drug2) + '</strong><br><span style="font-size:12px;color:#666">' + escapeHTML(i.effect) + '</span><span style="float:left;font-size:11px;padding:2px 6px;border-radius:4px;background:' + (i.severity === 'high' ? '#c62828' : '#e65100') + ';color:#fff">' + escapeHTML(i.severity) + '</span></div>').join('')}</div>
+      <div class="card glass-card-premium">
+        <div class="skeleton-bar title mb-16"></div>
+        <div class="skeleton-bar mb-12"></div>
       </div>
     </div>
-    <div class="card" style="padding:20px;margin-top:16px">
-      <h4 style="margin:0 0 12px">${tr('Recent Prescriptions for Review', 'وصفات بانتظار المراجعة')}</h4>
-      <div id="cpTable"></div>
-    </div>`;
+  `;
 
-  const cpt = document.getElementById('cpTable');
-  if (cpt && prescriptions.length) {
-    createTable(cpt, 'cpTbl',
-      [tr('Patient', 'المريض'), tr('Medication', 'الدواء'), tr('Dosage', 'الجرعة'), tr('Doctor', 'الطبيب'), tr('Status', 'الحالة'), tr('Date', 'التاريخ')],
-      prescriptions.slice(0, 20).map(p => ({ cells: [p.patient_name || '', p.medication || p.drug_name || '', p.dosage || '', p.doctor || '', statusBadge(p.status), p.created_at ? new Date(p.created_at).toLocaleDateString('ar-SA') : ''], id: p.id }))
-    );
+  let prescriptions = [];
+  let reviews = [];
+  let interactions = [];
+  let educationLogs = [];
+  let patients = [];
+
+  try {
+    [prescriptions, reviews, interactions, educationLogs, patients] = await Promise.all([
+      API.get('/api/pharmacy/prescriptions').catch(() => []),
+      API.get('/api/clinical-pharmacy/reviews').catch(() => []),
+      API.get('/api/clinical-pharmacy/interactions').catch(() => []),
+      API.get('/api/clinical-pharmacy/education').catch(() => []),
+      API.get('/api/patients').catch(() => [])
+    ]);
+  } catch (e) {
+    content.innerHTML = `
+      <div class="page-title">💊 ${tr('Clinical Pharmacy', 'الصيدلة الإكلينيكية')}</div>
+      <div class="error-card-premium">
+        <h3>${tr('Failed to load clinical pharmacy data', 'فشل في تحميل بيانات الصيدلية الإكلينيكية')}</h3>
+        <p>${escapeHTML(e.message || e)}</p>
+        <button class="btn btn-primary" onclick="navigateTo(31)">🔄 ${tr('Retry', 'إعادة المحاولة')}</button>
+      </div>
+    `;
+    return;
   }
 
-  window.checkInteraction = () => {
-    const d1 = (document.getElementById('cpDrug1')?.value || '').toLowerCase();
-    const d2 = (document.getElementById('cpDrug2')?.value || '').toLowerCase();
-    const res = document.getElementById('cpResult');
-    if (!d1 || !d2) { res.innerHTML = '<p style="color:#666">' + tr('Enter both drugs', 'أدخل الدوائين') + '</p>'; return; }
-    const found = interactions.find(i => (i.drug1.toLowerCase().includes(d1) && i.drug2.toLowerCase().includes(d2)) || (i.drug1.toLowerCase().includes(d2) && i.drug2.toLowerCase().includes(d1)));
-    if (found) { res.innerHTML = '<div style="padding:12px;background:#fce4ec;border-radius:8px;border-left:4px solid #c62828"><strong>⚠️ ' + tr('INTERACTION FOUND', 'تم اكتشاف تداخل') + '</strong><br>' + escapeHTML(found.effect) + '<br><span style="color:#c62828;font-weight:bold">' + tr('Severity', 'الخطورة') + ': ' + escapeHTML(found.severity.toUpperCase()) + '</span></div>'; }
-    else { res.innerHTML = '<div style="padding:12px;background:#e8f5e9;border-radius:8px;border-left:4px solid #2e7d32"><strong>✅ ' + tr('No known interaction', 'لا يوجد تداخل معروف') + '</strong></div>'; }
+  const pendingCount = prescriptions.filter(p => p.status === 'pending' || p.status === 'Pending').length;
+  const activeReviewsCount = reviews.filter(r => r.status === 'Open').length;
+
+  content.innerHTML = `
+    <div class="page-title">💊 ${tr('Clinical Pharmacy', 'الصيدلة الإكلينيكية')}</div>
+    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr); margin-bottom:16px;">
+      <div class="stat-card" style="--stat-color:#3b82f6"><span class="stat-icon">💊</span><div class="stat-label">${tr('Total Prescriptions', 'إجمالي الوصفات')}</div><div class="stat-value">${prescriptions.length}</div></div>
+      <div class="stat-card" style="--stat-color:#f59e0b"><span class="stat-icon">⏳</span><div class="stat-label">${tr('Pending Review', 'بانتظار المراجعة')}</div><div class="stat-value">${pendingCount}</div></div>
+      <div class="stat-card" style="--stat-color:#ef4444"><span class="stat-icon">⚠️</span><div class="stat-label">${tr('Active Reviews', 'المراجعات النشطة')}</div><div class="stat-value">${activeReviewsCount}</div></div>
+      <div class="stat-card" style="--stat-color:#10b981"><span class="stat-icon">📚</span><div class="stat-label">${tr('Patient Educations', 'تثقيف المرضى')}</div><div class="stat-value">${educationLogs.length}</div></div>
+    </div>
+    <div class="tab-bar">
+      <button class="tab-btn ${cpTab === 'prescriptions' ? 'active' : ''}" onclick="cpTab='prescriptions';navigateTo(31)">💊 ${tr('Prescriptions Review', 'مراجعة الوصفات')}</button>
+      <button class="tab-btn ${cpTab === 'checker' ? 'active' : ''}" onclick="cpTab='checker';navigateTo(31)">🔍 ${tr('Interaction Checker', 'فحص التداخلات')}</button>
+      <button class="tab-btn ${cpTab === 'reviews' ? 'active' : ''}" onclick="cpTab='reviews';navigateTo(31)">📋 ${tr('Review Ledger', 'سجل المراجعات')}</button>
+      <button class="tab-btn ${cpTab === 'education' ? 'active' : ''}" onclick="cpTab='education';navigateTo(31)">📚 ${tr('Patient Education', 'تثقيف المرضى')}</button>
+    </div>
+    <div class="card glass-card-premium" id="cpTabContent"></div>
+  `;
+
+  const tabContainer = document.getElementById('cpTabContent');
+
+  if (cpTab === 'prescriptions') {
+    tabContainer.innerHTML = `
+      <h3>💊 ${tr('Prescriptions Queue for Clinical Review', 'طابور الوصفات للمراجعة الإكلينيكية')}</h3>
+      <div id="rxReviewTableContainer"></div>
+    `;
+    const tblContainer = document.getElementById('rxReviewTableContainer');
+    if (prescriptions.length) {
+      createTable(tblContainer, 'rxReviewTbl',
+        [tr('Patient ID', 'رقم المريض'), tr('Patient', 'المريض'), tr('Medication', 'الدواء'), tr('Dosage', 'الجرعة'), tr('Frequency', 'التكرار'), tr('Status', 'الحالة'), tr('Actions', 'إجراءات')],
+        prescriptions.map(p => ({
+          cells: [
+            p.patient_id || '',
+            p.patient_name || '',
+            p.medication || p.medication_name || '',
+            p.dosage || '',
+            p.frequency || '',
+            statusBadge(p.status),
+            rawHtml(`
+              <button class="btn btn-sm btn-primary" onclick="openClinicalReviewModal(${p.id}, ${p.patient_id}, '${jsStr(p.patient_name || '')}', '${jsStr(p.medication || p.medication_name || '')}')">🔍 ${tr('Review', 'مراجعة')}</button>
+              ${(p.status === 'pending' || p.status === 'Pending') ? `<button class="btn btn-sm btn-success" onclick="verifyPrescription(${p.id})">✅ ${tr('Verify', 'تأكيد الوصفة')}</button>` : ''}
+            `)
+          ]
+        }))
+      );
+    } else {
+      tblContainer.innerHTML = `<div class="empty-state-card"><div class="empty-state-icon">💊</div><div>${tr('No prescriptions found', 'لا توجد وصفات طبية')}</div></div>`;
+    }
+  }
+  else if (cpTab === 'checker') {
+    tabContainer.innerHTML = `
+      <div class="split-layout" style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <div class="card" style="padding:20px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.05)">
+          <h4 style="margin:0 0 16px;color:var(--primary)">🔍 ${tr('Drug Interaction Checker', 'فحص تداخل الأدوية')}</h4>
+          <div class="form-group mb-12">
+            <label class="label">${tr('Drug 1', 'الدواء 1')}</label>
+            <input class="input w-full" id="cpDrug1" placeholder="${tr('e.g. Warfarin', 'مثال: وارفارين')}">
+          </div>
+          <div class="form-group mb-16">
+            <label class="label">${tr('Drug 2', 'الدواء 2')}</label>
+            <input class="input w-full" id="cpDrug2" placeholder="${tr('e.g. Aspirin', 'مثال: أسبرين')}">
+          </div>
+          <button class="btn btn-primary w-full" onclick="checkInteraction()">🔍 ${tr('Check Interaction', 'فحص التداخل')}</button>
+          <div id="cpResult" style="margin-top:16px"></div>
+        </div>
+        <div class="card" style="padding:20px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.05)">
+          <h4 style="margin:0 0 16px;color:var(--primary)">⚠️ ${tr('Seeded Clinical Interactions', 'التدخلات السريرية المخزنة في النظام')}</h4>
+          <div style="max-height:380px;overflow-y:auto;padding-inline-end:4px">
+            ${interactions.length ? interactions.map(i => `
+              <div style="padding:10px;margin-bottom:8px;border-radius:8px;background:${i.severity === 'High' ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)'};border-inline-start:4px solid ${i.severity === 'High' ? '#ef4444' : '#f59e0b'}">
+                <strong>${escapeHTML(i.drug_a)} + ${escapeHTML(i.drug_b)}</strong>
+                <div style="font-size:12px;color:var(--text-dim);margin:4px 0">${escapeHTML(i.description)}</div>
+                <div style="font-size:11px;color:var(--primary)">Action: ${escapeHTML(i.clinical_action || '')}</div>
+                <span class="badge ${i.severity === 'High' ? 'badge-danger' : 'badge-warning'}" style="margin-top:6px">${escapeHTML(i.severity)}</span>
+              </div>
+            `).join('') : `<div style="color:var(--text-dim)">${tr('No interactions in catalog', 'لا توجد تداخلات مسجلة')}</div>`}
+          </div>
+        </div>
+      </div>
+    `;
+
+    window.checkInteraction = () => {
+      const d1 = (document.getElementById('cpDrug1')?.value || '').toLowerCase().trim();
+      const d2 = (document.getElementById('cpDrug2')?.value || '').toLowerCase().trim();
+      const res = document.getElementById('cpResult');
+      if (!d1 || !d2) { res.innerHTML = '<p style="color:#ef4444">' + tr('Please enter both drug names', 'الرجاء إدخال اسم الدوائين') + '</p>'; return; }
+      
+      const found = interactions.find(i => 
+        (i.drug_a.toLowerCase().includes(d1) && i.drug_b.toLowerCase().includes(d2)) || 
+        (i.drug_a.toLowerCase().includes(d2) && i.drug_b.toLowerCase().includes(d1))
+      );
+      if (found) {
+        res.innerHTML = `
+          <div style="padding:12px;background:rgba(239,68,68,0.1);border-radius:8px;border-inline-start:4px solid #ef4444">
+            <strong style="color:#ef4444">⚠️ ${tr('INTERACTION FOUND', 'تم اكتشاف تداخل دوائي!')}</strong><br>
+            <strong style="display:block;margin:4px 0">${escapeHTML(found.drug_a)} + ${escapeHTML(found.drug_b)}</strong>
+            <span style="font-size:12px;color:var(--text-dim)">${escapeHTML(found.description)}</span><br>
+            <span style="font-size:12px;color:var(--primary)">Action: ${escapeHTML(found.clinical_action || '')}</span><br>
+            <span class="badge badge-danger" style="margin-top:6px">${escapeHTML(found.severity.toUpperCase())}</span>
+          </div>
+        `;
+      } else {
+        res.innerHTML = `
+          <div style="padding:12px;background:rgba(16,185,129,0.1);border-radius:8px;border-inline-start:4px solid #10b981;color:#10b981">
+            <strong>✅ ${tr('No known interaction found in database', 'لم يتم العثور على تداخل معروف في قاعدة البيانات')}</strong>
+          </div>
+        `;
+      }
+    };
+  }
+  else if (cpTab === 'reviews') {
+    tabContainer.innerHTML = `
+      <h3>📋 ${tr('Pharmacist Clinical Review Ledger', 'سجل مراجعات الصيدلي السريري')}</h3>
+      <div id="reviewsLedgerTableContainer"></div>
+    `;
+    const revContainer = document.getElementById('reviewsLedgerTableContainer');
+    if (reviews.length) {
+      createTable(revContainer, 'reviewsLedgerTbl',
+        [tr('Patient', 'المريض'), tr('Pharmacist', 'الصيدلي'), tr('Severity', 'الخطورة'), tr('Findings', 'الملاحظات'), tr('Recommendations', 'التوصيات'), tr('Outcome', 'النتيجة'), tr('Status', 'الحالة'), tr('Actions', 'إجراءات')],
+        reviews.map(r => ({
+          cells: [
+            r.patient_name || '',
+            r.pharmacist || '',
+            r.severity === 'High' ? rawHtml('<span class="badge badge-danger">🔴 High</span>') : r.severity === 'Medium' ? rawHtml('<span class="badge badge-warning">🟡 Medium</span>') : rawHtml('<span class="badge badge-success">🟢 Low</span>'),
+            r.findings || '',
+            r.recommendations || '',
+            r.outcome || '-',
+            statusBadge(r.status),
+            rawHtml(r.status === 'Open' ? `<button class="btn btn-sm btn-success" onclick="resolveCPReview(${r.id})">✅ ${tr('Resolve', 'إغلاق المراجعة')}</button>` : '-')
+          ]
+        }))
+      );
+    } else {
+      revContainer.innerHTML = `<div class="empty-state-card"><div class="empty-state-icon">📋</div><div>${tr('No clinical reviews found', 'لا توجد مراجعات سريرية مسجلة')}</div></div>`;
+    }
+  }
+  else if (cpTab === 'education') {
+    tabContainer.innerHTML = `
+      <div class="split-layout" style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <div class="card" style="padding:20px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.05)">
+          <h4 style="margin:0 0 16px;color:var(--primary)">📚 ${tr('New Patient Drug Education', 'تثقيف مريض دواء جديد')}</h4>
+          <div class="form-group mb-12">
+            <label class="label">${tr('Select Patient', 'اختر المريض')}</label>
+            <select class="input w-full" id="cpePatient">
+              ${patients.map(p => `<option value="${p.id}" data-name="${escapeHTML(p.name_en || p.name_ar || '')}">${escapeHTML(p.name_en || p.name_ar || '')} (ID: ${p.id})</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group mb-12">
+            <label class="label">${tr('Medication Name', 'اسم الدواء')}</label>
+            <input class="input w-full" id="cpeMedication" placeholder="e.g. Warfarin 5mg">
+          </div>
+          <div class="form-group mb-12">
+            <label class="label">${tr('Usage Instructions', 'تعليمات الاستخدام')}</label>
+            <textarea class="input w-full" id="cpeInstructions" rows="2" placeholder="Take once daily at evening..."></textarea>
+          </div>
+          <div class="form-group mb-12">
+            <label class="label">${tr('Potential Side Effects', 'الآثار الجانبية المحتملة')}</label>
+            <textarea class="input w-full" id="cpeSideEffects" rows="2" placeholder="Bleeding, bruising..."></textarea>
+          </div>
+          <div class="form-group mb-16">
+            <label class="label">${tr('Precautions', 'الاحتياطات اللازمة')}</label>
+            <textarea class="input w-full" id="cpePrecautions" rows="2" placeholder="Avoid heavy green vegetables..."></textarea>
+          </div>
+          <button class="btn btn-primary w-full" onclick="submitCPEducation()">💾 ${tr('Save Counseling Log', 'حفظ سجل التثقيف الدوائي')}</button>
+        </div>
+        <div class="card" style="padding:20px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.05)">
+          <h4 style="margin:0 0 16px;color:var(--primary)">📚 ${tr('Previous Patient Counseling Logs', 'سجلات تثقيف المرضى السابقة')}</h4>
+          <div style="max-height:480px;overflow-y:auto;padding-inline-end:4px">
+            ${educationLogs.length ? educationLogs.map(e => `
+              <div class="card" style="margin-bottom:8px;padding:12px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.04)">
+                <div style="font-weight:600;color:var(--primary)">${escapeHTML(e.patient_name)}</div>
+                <div style="font-size:13px;font-weight:bold;margin:4px 0">${escapeHTML(e.medication)}</div>
+                <div style="font-size:12px;color:var(--text-dim)"><strong style="color:var(--text-normal)">Instruct:</strong> ${escapeHTML(e.instructions)}</div>
+                <div style="font-size:12px;color:var(--text-dim)"><strong style="color:var(--text-normal)">Side Effects:</strong> ${escapeHTML(e.side_effects)}</div>
+                <div style="font-size:12px;color:var(--text-dim)"><strong style="color:var(--text-normal)">Educator:</strong> ${escapeHTML(e.educated_by)} | ${e.created_at ? new Date(e.created_at).toLocaleDateString('ar-SA') : ''}</div>
+              </div>
+            `).join('') : `<div style="color:var(--text-dim)">${tr('No counseling logs yet', 'لا توجد سجلات تثقيف مسجلة')}</div>`}
+          </div>
+        </div>
+      </div>
+    `;
+
+    window.submitCPEducation = async () => {
+      const sel = document.getElementById('cpePatient');
+      const patient_name = sel.options[sel.selectedIndex].dataset.name;
+      const medication = document.getElementById('cpeMedication').value;
+      const instructions = document.getElementById('cpeInstructions').value;
+      const side_effects = document.getElementById('cpeSideEffects').value;
+      const precautions = document.getElementById('cpePrecautions').value;
+
+      if (!medication) { showToast(tr('Medication is required', 'اسم الدواء مطلوب'), 'error'); return; }
+
+      try {
+        await API.post('/api/clinical-pharmacy/education', {
+          patient_id: sel.value,
+          patient_name,
+          medication,
+          instructions,
+          side_effects,
+          precautions
+        });
+        showToast(tr('Education log saved successfully', 'تم حفظ سجل التثقيف الدوائي بنجاح'));
+        navigateTo(31);
+      } catch (err) {
+        showToast(tr('Error saving', 'حدث خطأ أثناء الحفظ'), 'error');
+      }
+    };
+  }
+
+  // Helper functions exposed globally
+  window.openClinicalReviewModal = (prescriptionId, patientId, patientName, medicationName) => {
+    const modalHtml = `
+      <div class="modal-backdrop" id="cpReviewModal">
+        <div class="modal-content glass-card-premium" style="max-width:600px;padding:24px">
+          <h3 style="margin-top:0">🔍 ${tr('Create Clinical Pharmacy Review', 'إنشاء مراجعة صيدلية سريرية')}</h3>
+          <p style="margin-bottom:16px;color:var(--text-dim)">
+            <strong>${tr('Patient', 'المريض')}:</strong> ${escapeHTML(patientName)} (ID: ${patientId})<br>
+            <strong>${tr('Medication', 'الدواء')}:</strong> ${escapeHTML(medicationName)} (Queue #${prescriptionId})
+          </p>
+          <div class="form-group mb-12">
+            <label class="label">${tr('Review Type', 'نوع المراجعة')}</label>
+            <select class="input w-full" id="cpModalType">
+              <option value="Medication Review">${tr('Medication Review', 'مراجعة الدواء العامة')}</option>
+              <option value="Dose Adjustment">${tr('Dose Adjustment', 'تعديل الجرعة')}</option>
+              <option value="Allergy Check">${tr('Allergy Check', 'فحص الحساسية')}</option>
+              <option value="Drug-Drug Interaction">${tr('Drug-Drug Interaction', 'تداخل دوائي')}</option>
+            </select>
+          </div>
+          <div class="form-group mb-12">
+            <label class="label">${tr('Severity', 'مستوى الخطورة')}</label>
+            <select class="input w-full" id="cpModalSeverity">
+              <option value="Low">${tr('Low', 'منخفضة')}</option>
+              <option value="Medium">${tr('Medium', 'متوسطة')}</option>
+              <option value="High">${tr('High', 'عالية جداً')}</option>
+            </select>
+          </div>
+          <div class="form-group mb-12">
+            <label class="label">${tr('Findings', 'الملاحظات المكتشفة')}</label>
+            <textarea class="input w-full" id="cpModalFindings" rows="2" placeholder="Describe clinical findings..."></textarea>
+          </div>
+          <div class="form-group mb-12">
+            <label class="label">${tr('Recommendations', 'التوصيات')}</label>
+            <textarea class="input w-full" id="cpModalRecs" rows="2" placeholder="Pharmacist recommendations..."></textarea>
+          </div>
+          <div class="form-group mb-16">
+            <label class="label">${tr('Interventions', 'الإجراء السريري المتخذ')}</label>
+            <textarea class="input w-full" id="cpModalInterventions" rows="2" placeholder="Actions taken (e.g. called prescribing doctor)..."></textarea>
+          </div>
+          <div class="flex-row" style="justify-content:flex-end;gap:12px">
+            <button class="btn" onclick="document.getElementById('cpReviewModal').remove()">${tr('Cancel', 'إلغاء')}</button>
+            <button class="btn btn-primary" onclick="submitModalClinicalReview(${patientId}, '${jsStr(patientName)}', ${prescriptionId})">💾 ${tr('Submit Review', 'حفظ المراجعة')}</button>
+          </div>
+        </div>
+      </div>
+    `;
+    const div = document.createElement('div');
+    div.innerHTML = modalHtml;
+    document.body.appendChild(div.firstElementChild);
   };
 
-}
-window.submitCPReview = async function () {
-  const sel = document.getElementById('cpPatient');
-  const patient_name = sel.options[sel.selectedIndex].dataset.name;
-  await API.post('/api/clinical-pharmacy/reviews', { patient_id: sel.value, patient_name, review_type: document.getElementById('cpType').value, severity: document.getElementById('cpSeverity').value, findings: document.getElementById('cpFindings').value, recommendations: document.getElementById('cpRecs').value });
-  showToast(tr('Review submitted', 'تم الإرسال')); cpTab = 'reviews'; navigateTo(31);
-};
-window.resolveCPReview = async function (id) {
-  await API.put('/api/clinical-pharmacy/reviews/' + id, { outcome: 'Resolved', status: 'Closed' });
-  showToast(tr('Resolved', 'تم الحل')); navigateTo(31);
-};
+  window.submitModalClinicalReview = async (patientId, patientName, prescriptionId) => {
+    const review_type = document.getElementById('cpModalType').value;
+    const severity = document.getElementById('cpModalSeverity').value;
+    const findings = document.getElementById('cpModalFindings').value;
+    const recommendations = document.getElementById('cpModalRecs').value;
+    const interventions = document.getElementById('cpModalInterventions').value;
 
+    try {
+      await API.post('/api/clinical-pharmacy/reviews', {
+        patient_id: patientId,
+        patient_name: patientName,
+        prescription_id: prescriptionId,
+        review_type,
+        findings,
+        recommendations,
+        interventions,
+        severity
+      });
+      showToast(tr('Clinical Review submitted successfully', 'تم إرسال المراجعة السريرية بنجاح'));
+      document.getElementById('cpReviewModal')?.remove();
+      navigateTo(31);
+    } catch (e) {
+      showToast(tr('Error submitting review', 'خطأ أثناء الإرسال'), 'error');
+    }
+  };
+
+  window.verifyPrescription = async (id) => {
+    const r = confirm(tr('Are you sure you want to verify and approve this prescription?', 'هل أنت متأكد من تأكيد هذه الوصفة الطبية؟'));
+    if (!r) return;
+    try {
+      await API.put('/api/pharmacy/queue/' + id + '/verify', {});
+      showToast(tr('Prescription verified successfully', 'تم تأكيد الوصفة بنجاح'));
+      navigateTo(31);
+    } catch (err) {
+      showToast(tr('Error verifying prescription', 'خطأ في تأكيد الوصفة'), 'error');
+    }
+  };
+
+  window.resolveCPReview = async (id) => {
+    try {
+      await API.put('/api/clinical-pharmacy/reviews/' + id, { outcome: 'Resolved', status: 'Closed' });
+      showToast(tr('Review marked as Resolved and Closed', 'تم إغلاق المراجعة وحلها بنجاح'));
+      navigateTo(31);
+    } catch (err) {
+      showToast(tr('Error resolving review', 'حدث خطأ أثناء الحل'), 'error');
+    }
+  };
+}
 // ===== REHABILITATION / PT =====
 let rehabTab = 'patients';
 async function renderRehabilitation(el) {
