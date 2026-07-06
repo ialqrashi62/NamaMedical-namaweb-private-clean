@@ -275,3 +275,38 @@
 ✅ PM2 Production deployment: online (pid: 371048)
 ✅ Health Check online: https://jumanasoft.com/api/health -> {"status":"UP","db":"up"} (HTTP 200)
 ```
+
+---
+
+## 👩‍⚕️ المرحلة E6: ترقية محطة التمريض وتصليب أمن عزل المستأجرين (Nursing Station Upgrade & RLS Hardening)
+
+**التاريخ**: 2026-07-06  
+**الوضع**: ✅ مكتمل وتم النشر بنسبة 100%
+
+### 1. الإنجازات البرمجية والأمنية:
+- **تفعيل محطة التمريض المطورة (Nursing Station UI)**:
+  - تم ربط وتفعيل دالة `renderNursing(el)` في [app.js](file:///c:/Users/ice/Desktop/NamaMedical/namaweb/public/js/app.js) لتقوم بالتحويل المباشر للمحطة المطورة ذات الواجهات الثلاثية المتناسقة.
+- **عزل المستأجرين وقواعد RLS في قاعدة البيانات**:
+  - تم إنشاء ملفات الهجرة `migrations/e6_04_nursing_rls_up.sql` و `down.sql` و `validate.sql`.
+  - تفعيل **Row Level Security (RLS)** وفرض سياسات العزل وحراسة القيود وجلب المعرف التلقائي لكل من جداول التمريض السريرية: `nursing_io` و `nursing_handover` و `nursing_pain_assessments`.
+- **حل مشكلة تعليق الاختبارات التراكمية**:
+  - تم إدراج المعامل `idleTimeoutMillis: 1000` في ملف [db_postgres.js](file:///c:/Users/ice/Desktop/NamaMedical/namaweb/db_postgres.js) للبيئات غير الإنتاجية، مما أدى لحل مشكلة تعليق الاختبارات وتسهيل خروجها التلقائي.
+
+### 2. نتائج الاختبار والنشر الفعلي:
+- **الاختبارات الآلية التراكمية**: اجتازت جميع ملفات الفحص الـ **174** بنجاح كامل 100% ودون تعليق:
+  ```bash
+  Found 174 test files to run.
+  --- TEST SUMMARY ---
+  Total test files run: 174
+  Passed: 174
+  Failed: 0
+  All tests passed successfully!
+  ```
+- **التحقق البصري**: تم التحقق البصري والسريري للواجهات والتقاط صورة للـ UI وتأكيد صحتها: [nursing_station_load.png](file:///C:/Users/ice/.gemini/antigravity-ide/brain/82cd63bd-6d7f-4ad3-a1a1-50439b56bdf1/nursing_station_load.png).
+- **حالة النشر والإنتاج**: تم تطبيق الهجرة وتحديث الأكواد وإعادة التشغيل بنجاح:
+  - **الرابط العام**: https://jumanasoft.com/api/health -> `{"status":"UP","db":"up"}` (HTTP 200)
+  - **حالة الـ RLS على الإنتاج**:
+    - `nursing_io` | rowsecurity: `true` | policy_count: `1`
+    - `nursing_handover` | rowsecurity: `true` | policy_count: `1`
+    - `nursing_pain_assessments` | rowsecurity: `true` | policy_count: `1`
+

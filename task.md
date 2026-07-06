@@ -1,31 +1,13 @@
-# Batch E Tasks - Governance, Facility & Analytics
+# 📋 قائمة مهام ترقية محطة التمريض وتصليب الأمان
 
-- [x] تشغيل اختبارات محرك المالية والفوترة الإلكترونية (`finance_engine`) والتحقق من سلامتها رياضياً.
-- [x] تشغيل اختبارات محرك التأمين والضمان الصحي (`e11_insurance_engine`) والتحقق من حسابات المشاركة للعام الجديد.
-- [x] تدقيق منطق الفوترة الإلكترونية (ZATCA):
-  - [x] مطابقة توليد ملف UBL XML ودقته وحظر التواقيع الوهمية.
-  - [x] مطابقة كود الاستجابة السريعة QR وتوليد الهاش.
-  - [x] مطابقة حارس اليومية والقيود المالية وحظر تعديل القيود المقفلة.
-- [x] تدقيق منطق التأمين والضمان الصحي (NPHIES):
-  - [x] مطابقة دورة طلبات الأهلية وصلاحية التحولات بين الحالات (State Machine).
-  - [x] مطابقة حساب مشاركة المريض (Patient Share) والتأكد من منع القيم الخاطئة.
-  - [x] مطابقة حارس الربط الخارجي والتأكد من إرجاع استجابة 503 عند غياب الاتصال الفعلي.
-- [x] تدقيق أمان الخصوصية وحماية البيانات السيبرانية (PDPL & NCA):
-  - [x] فحص عزل وحماية البيانات الصحية الشخصية (PHI).
-  - [x] التحقق من عزل المستأجرين (Tenant Scope) على واجهات برمجة تطبيقات ZATCA و NPHIES.
-  - [x] التحقق من فصل بيانات المصادقة الثنائية (MFA) وسجلات التدقيق التابعة للنظام.
-- [x] صياغة وإصدار تقرير تدقيق مطابقة الامتثال الوطني للمرحلة الأولى.
-- [x] تشغيل جميع اختبارات النظام الـ 172 والتأكد من الجودة 100%
-- [x] النشر التلقائي للإنتاج الفعلي والتحقق من سلامة الخدمة 200 OK
-- [x] فحص القائمة الجانبية والمراجعة الطبية الشاملة (HOS_PRO Audit).
-- [x] بناء وتفعيل محطة التمريض v1 بـ 10 أقسام متكاملة.
-- [x] توثيق مخرجات التدقيق الطبي السريري في مجلد `.ai-brain`.
-- [x] Verify application in the browser using test credentials and confirm zero console errors
-- [x] Document results in reports:
-  - `docs/STITCH_BATCH_E_GOVERNANCE_FACILITY_ANALYTICS_REPORT_AR.md`
-  - `docs/STITCH_MODULE_BATCH_PROGRESS_AR.md`
-  - `docs/STITCH_DESIGN_IMPLEMENTATION_REPORT_AR.md`
-  - `task.md`
-  - `walkthrough.md`
-- [x] Create git commit for Batch E changes
-
+- `[x]` تعديل دالة الاتصال في [db_postgres.js](file:///c:/Users/ice/Desktop/NamaMedical/namaweb/db_postgres.js) لإضافة `idleTimeoutMillis: 1000`
+- `[x]` تعديل [app.js](file:///c:/Users/ice/Desktop/NamaMedical/namaweb/public/js/app.js) لربط دالة `renderNursing(el)` مع محطة التمريض المطورة
+- `[x]` إنشاء ملفات الهجرة لتصليب RLS على جداول التمريض:
+  - `[x]` [e6_04_nursing_rls_up.sql](file:///c:/Users/ice/Desktop/NamaMedical/namaweb/migrations/e6_04_nursing_rls_up.sql)
+  - `[x]` [e6_04_nursing_rls_down.sql](file:///c:/Users/ice/Desktop/NamaMedical/namaweb/migrations/e6_04_nursing_rls_down.sql)
+  - `[x]` [e6_04_nursing_rls_validate.sql](file:///c:/Users/ice/Desktop/NamaMedical/namaweb/migrations/e6_04_nursing_rls_validate.sql)
+- `[x]` تطبيق هجرة RLS التمريض محلياً على قاعدة بيانات التطوير
+- `[x]` التحقق من صحة واجهات التمريض يدوياً/برمجياً
+- `[x]` تشغيل كامل حزمة الاختبارات (npm run test) للتأكد من نجاحها وعدم تعليقها
+- `[x]` توثيق التعديلات وحفظها في الـ AI Brain وكتابة تقرير الإنجاز
+- `[x]` نشر التغييرات الفورية لبيئة الإنتاج jumanasoft.com وإعادة تشغيل PM2 والتحقق من رابط الصحة
