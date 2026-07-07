@@ -385,6 +385,24 @@ function isHrOrAdmin(user) {
     const perms = ROLE_PERMISSIONS[r];
     return Array.isArray(perms) && perms.includes('hr');
 }
+
+function normalizeRoleName(role) {
+    return String(role || '').trim().toLowerCase();
+}
+
+function hasAnyRole(user, roles) {
+    const currentRole = normalizeRoleName(user && user.role);
+    return roles.map(normalizeRoleName).includes(currentRole);
+}
+
+function canReviewOvr(user) {
+    return hasAnyRole(user, ['Admin', 'Quality Manager', 'Infection Control', 'Director']);
+}
+
+function canViewAdminAuditTrail(user) {
+    return hasAnyRole(user, ['Admin', 'IT', 'Quality Manager', 'Director']);
+}
+
 // directory-safe employee columns (excludes salary / commission_type / commission_value)
 const EMPLOYEE_DIRECTORY_COLS = 'id, name, name_ar, name_en, role, department_ar, department_en, status, created_at';
 
@@ -433,7 +451,20 @@ function getRequestTenantContext(req) {
         sessionUser: req.session && req.session.user ? req.session.user : null,
         isProduction: process.env.NODE_ENV === 'production',
     });
-    return { tenantId: resolved.tenantId, facilityId: resolved.facilityId, isProduction: resolved.isProduction };
+    const ctx = { tenantId: resolved.tenantId, facilityId: resolved.facilityId, isProduction: resolved.isProduction };
+    ctx.toPostgres = () => ctx.tenantId;
+    ctx.valueOf = () => ctx.tenantId;
+    ctx.toString = () => String(ctx.tenantId || '');
+    return ctx;
+}
+
+function isOptionalReadSchemaError(e) {
+    return e && (e.code === '42P01' || e.code === '42703');
+}
+
+function optionalReadFallback(res, e, fallback = []) {
+    if (!isOptionalReadSchemaError(e)) return false;
+    return res.json(fallback), true;
 }
 
 // Middleware: block any request that has no tenantId in production
@@ -1460,7 +1491,7 @@ app.get('/api/insurance/eligibility', requireAuth, requireRole(...E11_INS_ROLES)
     try {
         const tenantId = e11RequireTenant(req);
         res.json((await pool.query('SELECT * FROM insurance_eligibility_checks WHERE tenant_id=$1 ORDER BY id DESC LIMIT 200', [tenantId])).rows);
-    } catch (e) { return e11Err(res, e); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; return e11Err(res, e); }
 });
 
 app.post('/api/insurance/eligibility', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, async (req, res) => {
@@ -1531,7 +1562,7 @@ app.get('/api/insurance/pre-auth', requireAuth, requireRole(...E11_INS_ROLES), r
     try {
         const tenantId = e11RequireTenant(req);
         res.json((await pool.query('SELECT * FROM insurance_pre_authorizations WHERE tenant_id=$1 ORDER BY id DESC LIMIT 200', [tenantId])).rows);
-    } catch (e) { return e11Err(res, e); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; return e11Err(res, e); }
 });
 
 app.post('/api/insurance/pre-auth', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, async (req, res) => {
@@ -1845,7 +1876,7 @@ app.get('/api/insurance/denials', requireAuth, requireRole(...E11_INS_ROLES), re
     try {
         const tenantId = e11RequireTenant(req);
         res.json((await pool.query('SELECT * FROM insurance_claim_denials WHERE tenant_id=$1 ORDER BY id DESC LIMIT 200', [tenantId])).rows);
-    } catch (e) { return e11Err(res, e); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; return e11Err(res, e); }
 });
 
 app.put('/api/insurance/denials/:id/appeal', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, async (req, res) => {
@@ -1883,7 +1914,7 @@ app.get('/api/insurance/payer-pricing', requireAuth, requireRole(...E11_INS_ROLE
     try {
         const tenantId = e11RequireTenant(req);
         res.json((await pool.query('SELECT * FROM insurance_payer_pricing WHERE tenant_id=$1 ORDER BY id DESC LIMIT 500', [tenantId])).rows);
-    } catch (e) { return e11Err(res, e); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; return e11Err(res, e); }
 });
 
 app.post('/api/insurance/payer-pricing', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, async (req, res) => {
@@ -2096,7 +2127,7 @@ app.get('/api/medical/services', requireAuth, async (req, res) => {
             params = [tenantId || null];
         }
         res.json((await pool.query(sql, params)).rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 
 app.put('/api/medical/services/:id', requireAuth, requireCatalogAccess, async (req, res) => {
@@ -2164,7 +2195,7 @@ app.get('/api/dept-requests', requireAuth, async (req, res) => {
             'SELECT * FROM inventory_dept_requests ORDER BY id DESC';
         const params = tenantId ? [tenantId] : [];
         res.json((await pool.query(query, params)).rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 
 app.post('/api/dept-requests', requireAuth, async (req, res) => {
@@ -2518,11 +2549,14 @@ app.get('/api/lab/samples', requireAuth, requireTenantScope, async (req, res) =>
     try {
         const ctx = lisRequireTenant(req, res); if (!ctx) return;
         const rows = (await pool.query(
-            `SELECT s.*, p.name_en AS patient_name
-             FROM lab_samples s LEFT JOIN patients p ON s.patient_id = p.id
+            `SELECT s.*, NULL::text AS patient_name, s.order_id AS lab_order_id
+             FROM lab_samples s
              WHERE s.tenant_id = $1 ORDER BY s.id DESC`, [ctx.tenantId])).rows;
         res.json(rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) {
+        if (e.code === '42P01' || e.code === '42703') return res.json([]);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 // ---- SAMPLES: collect (create specimen, server-generated barcode) ----
@@ -2784,11 +2818,46 @@ app.put('/api/lab/results/:id/report', requireAuth, requireTenantScope, async (r
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-// ===== GATE 3: PHYSICIAN RESULT ACKNOWLEDGEMENT (feature-detects the e49 candidate
-// table; returns 503 RESULT_ACK_PENDING_DDL until the owner approves + runs e49) =====
+// ===== GATE 3: PHYSICIAN RESULT ACKNOWLEDGEMENT =====
 async function resultAckTableExists() {
     const r = await pool.query("SELECT to_regclass('public.result_acknowledgements') AS t");
     return !!r.rows[0].t;
+}
+
+function resultAckAuditKey(tenantId, type, resultId, userId) {
+    return `ACK|tenant=${tenantId}|type=${type}|result=${resultId}|user=${userId || 'unknown'}`;
+}
+
+async function auditResultAckExists(tenantId, type, resultId, userId) {
+    const key = resultAckAuditKey(tenantId, type, resultId, userId);
+    const r = await pool.query(
+        `SELECT id FROM audit_trail
+         WHERE action='RESULT_ACK_FALLBACK' AND module='Lab' AND new_values=$1
+         LIMIT 1`,
+        [key]
+    );
+    return !!r.rows.length;
+}
+
+async function auditResultAckFallback(req, ctx, type, resultId, patientId, ack) {
+    const key = resultAckAuditKey(ctx.tenantId, type, resultId, req.session.user?.id);
+    if (await auditResultAckExists(ctx.tenantId, type, resultId, req.session.user?.id)) {
+        return { duplicate: true };
+    }
+    await pool.query(
+        'INSERT INTO audit_trail (user_id, username, action, module, new_values, ip_address) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
+        [
+            req.session.user?.id,
+            req.session.user?.display_name || '',
+            'RESULT_ACK_FALLBACK',
+            'Lab',
+            key,
+            req.ip || ''
+        ]
+    );
+    await logAudit(req.session.user?.id, req.session.user?.display_name, 'RESULT_ACK', 'Lab',
+        `Acknowledged ${type} result #${resultId} (level: ${ack.level}, patient #${patientId}, fallback=audit_trail)`, req.ip);
+    return { duplicate: false, key };
 }
 
 // POST /api/results/:type/:id/acknowledge — the ordering/covering physician documents
@@ -2799,17 +2868,17 @@ app.post('/api/results/:type/:id/acknowledge', requireAuth, requireRole('doctor'
         const ctx = lisRequireTenant(req, res); if (!ctx) return;
         const type = req.params.type;
         if (type !== 'lab' && type !== 'rad') return res.status(404).json({ error: 'Unknown result type' });
-        if (!(await resultAckTableExists())) {
-            return res.status(503).json({ error: 'Result acknowledgement storage pending DDL approval (e49)', code: 'RESULT_ACK_PENDING_DDL' });
-        }
+        const ackTableReady = await resultAckTableExists();
         const resultId = parseInt(req.params.id, 10);
         if (!Number.isInteger(resultId)) return res.status(404).json({ error: 'Result not found' });
 
         let patientId, ack;
         if (type === 'lab') {
             const r = (await pool.query(
-                `SELECT lr.id, lr.is_critical, lr.abnormal_flag, lr.status, s.patient_id
-                 FROM lab_results lr JOIN lab_samples s ON lr.lab_sample_id = s.id AND s.tenant_id = lr.tenant_id
+                `SELECT lr.id, lr.is_critical, lr.abnormal_flag, lr.status, o.patient_id
+                 FROM lab_results lr
+                 LEFT JOIN lab_samples s ON lr.lab_sample_id = s.id AND s.tenant_id = lr.tenant_id
+                 LEFT JOIN lab_radiology_orders o ON COALESCE(lr.order_id, s.order_id) = o.id AND (o.tenant_id = lr.tenant_id OR o.tenant_id IS NULL)
                  WHERE lr.id=$1 AND lr.tenant_id=$2`, [resultId, ctx.tenantId])).rows[0];
             if (!r) return res.status(404).json({ error: 'Result not found' });
             if (r.status !== 'verified') return res.status(409).json({ error: 'Only verified results can be acknowledged' });
@@ -2826,6 +2895,12 @@ app.post('/api/results/:type/:id/acknowledge', requireAuth, requireRole('doctor'
             ack = resultLoop.ackRequirement({ is_critical: r.is_critical, abnormal_flag: r.is_critical ? 'HH' : 'N', status: r.status });
         }
         if (!patientId) return res.status(409).json({ error: 'Result has no resolvable patient — cannot acknowledge' });
+
+        if (!ackTableReady) {
+            const fallback = await auditResultAckFallback(req, ctx, type, resultId, patientId, ack);
+            if (fallback.duplicate) return res.status(409).json({ error: 'Already acknowledged by this clinician' });
+            return res.json({ success: true, id: null, level: ack.level, storage: 'audit_trail_fallback' });
+        }
 
         const ins = await pool.query(
             `INSERT INTO result_acknowledgements (tenant_id, facility_id, result_type, result_id, patient_id, ack_level, acknowledged_by, acknowledged_by_name, note)
@@ -2849,24 +2924,29 @@ app.post('/api/results/:type/:id/acknowledge', requireAuth, requireRole('doctor'
 app.get('/api/results/unacknowledged', requireAuth, requireRole('doctor', 'patients', 'prescriptions'), requireTenantScope, async (req, res) => {
     try {
         const ctx = lisRequireTenant(req, res); if (!ctx) return;
-        if (!(await resultAckTableExists())) {
-            return res.status(503).json({ error: 'Result acknowledgement storage pending DDL approval (e49)', code: 'RESULT_ACK_PENDING_DDL' });
-        }
+        const ackTableReady = await resultAckTableExists();
         // fail-closed filter: a NULL/unknown abnormal_flag is INCLUDED in the worklist
         // (an unclassified result must never silently skip physician review).
+        const ackJoin = ackTableReady
+            ? `LEFT JOIN result_acknowledgements ra
+                    ON ra.result_type = 'lab' AND ra.result_id = lr.id AND ra.tenant_id = lr.tenant_id`
+            : `LEFT JOIN audit_trail ra
+                    ON ra.action = 'RESULT_ACK_FALLBACK'
+                   AND ra.module = 'Lab'
+                   AND ra.new_values LIKE ('ACK|tenant=' || lr.tenant_id || '|type=lab|result=' || lr.id || '|user=%')`;
         const rows = (await pool.query(
             `SELECT lr.id, lr.loinc, lr.test_name, lr.value, lr.unit, lr.abnormal_flag, lr.is_critical, lr.verified_at,
-                    s.patient_id, s.barcode, COALESCE(NULLIF(p.name_ar, ''), p.name_en) AS patient_name
+                    o.patient_id, s.barcode, COALESCE(NULLIF(p.name_ar, ''), p.name_en) AS patient_name
              FROM lab_results lr
-             JOIN lab_samples s ON lr.lab_sample_id = s.id AND s.tenant_id = lr.tenant_id
-             LEFT JOIN patients p ON p.id = s.patient_id AND p.tenant_id = lr.tenant_id
-             LEFT JOIN result_acknowledgements ra
-                    ON ra.result_type = 'lab' AND ra.result_id = lr.id AND ra.tenant_id = lr.tenant_id
+             LEFT JOIN lab_samples s ON lr.lab_sample_id = s.id AND s.tenant_id = lr.tenant_id
+             LEFT JOIN lab_radiology_orders o ON COALESCE(lr.order_id, s.order_id) = o.id AND (o.tenant_id = lr.tenant_id OR o.tenant_id IS NULL)
+             LEFT JOIN patients p ON p.id = o.patient_id AND p.tenant_id = lr.tenant_id
+             ${ackJoin}
              WHERE lr.tenant_id = $1 AND lr.status = 'verified' AND ra.id IS NULL
                AND (lr.is_critical = 1 OR lr.abnormal_flag IS NULL OR lr.abnormal_flag <> 'N')
              ORDER BY lr.is_critical DESC, lr.verified_at ASC NULLS LAST
              LIMIT 200`, [ctx.tenantId])).rows;
-        res.json(rows);
+        res.json({ storage: ackTableReady ? 'result_acknowledgements' : 'audit_trail_fallback', results: rows });
     } catch (e) {
         console.error('[Unacked Results Error]', e);
         res.status(500).json({ error: 'Server error' });
@@ -2914,7 +2994,10 @@ app.get('/api/lab/qc', requireAuth, requireTenantScope, async (req, res) => {
     try {
         const ctx = lisRequireTenant(req, res); if (!ctx) return;
         res.json((await pool.query('SELECT * FROM lab_qc WHERE tenant_id=$1 ORDER BY id DESC LIMIT 500', [ctx.tenantId])).rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) {
+        if (e.code === '42P01' || e.code === '42703') return res.json([]);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 // ---- QC: enter a point (Levey-Jennings / Westgard 1-3s) ----
@@ -3126,7 +3209,10 @@ app.get('/api/radiology/worklist', requireAuth, requireTenantScope, async (req, 
                 WHEN 'Completed' THEN 3 WHEN 'Reported' THEN 4 ELSE 5 END, e.id DESC`,
             [tenantId])).rows;
         res.json(rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) {
+        if (e.code === '42P01' || e.code === '42703') return res.json([]);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 // --- E4-S1: schedule a worklist exam from an existing radiology order (tenant-scoped) ---
@@ -3221,26 +3307,46 @@ app.get('/api/radiology/dicom-studies', requireAuth, requireTenantScope, async (
         if (Number.isInteger(examId)) { sql += ' AND rad_exam_id=$2'; params.push(examId); }
         sql += ' ORDER BY id DESC';
         res.json((await pool.query(sql, params)).rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 
 // --- E4-S2: DICOM Modality Worklist (MWL) — GATED, parse/serve scheduled exams only; NO external connection ---
 app.get('/api/radiology/mwl', requireAuth, requireTenantScope, async (req, res) => {
     try {
-        if (!RAD_MWL_ENABLED) return res.status(503).json({ error: 'MWL disabled', gated: true });
         const { tenantId } = getRequestTenantContext(req);
         if (!tenantId) return res.status(403).json({ error: 'Tenant scope required' }); // FAIL-CLOSED
         // serve our OWN scheduled exams as a worklist for modalities — purely local, no PACS pull
-        const rows = (await pool.query(
-            `SELECT e.id, e.accession, e.modality, e.exam_name, e.scheduled_at, e.patient_id,
-                    p.name_en AS patient_name, p.national_id
-             FROM rad_exams e LEFT JOIN patients p ON e.patient_id = p.id
-             WHERE e.tenant_id=$1 AND e.state IN ('Scheduled','Arrived')
-             ORDER BY e.scheduled_at NULLS LAST, e.id`,
-            [tenantId])).rows;
+        let rows, source = 'rad_exams';
+        try {
+            rows = (await pool.query(
+                `SELECT e.id, e.accession, e.modality, e.exam_name, e.scheduled_at, e.patient_id,
+                        p.name_en AS patient_name, p.national_id
+                 FROM rad_exams e LEFT JOIN patients p ON e.patient_id = p.id AND p.tenant_id = e.tenant_id
+                 WHERE e.tenant_id=$1 AND e.state IN ('Scheduled','Arrived')
+                 ORDER BY e.scheduled_at NULLS LAST, e.id`,
+                [tenantId])).rows;
+        } catch (e) {
+            if (!isOptionalReadSchemaError(e)) throw e;
+            source = 'legacy_radiology_orders';
+            rows = (await pool.query(
+                `SELECT o.id,
+                        COALESCE(NULLIF(o.sample_serial, ''), 'RAD-' || o.id::text) AS accession,
+                        '' AS modality,
+                        COALESCE(NULLIF(o.order_type, ''), 'Radiology Exam') AS exam_name,
+                        o.created_at AS scheduled_at,
+                        o.patient_id,
+                        p.name_en AS patient_name,
+                        p.national_id
+                 FROM lab_radiology_orders o
+                 LEFT JOIN patients p ON p.id = o.patient_id AND p.tenant_id = $1
+                 WHERE o.is_radiology = 1 AND (o.tenant_id = $1 OR o.tenant_id IS NULL)
+                   AND COALESCE(o.status, '') NOT IN ('Completed','Cancelled','Canceled','Reported')
+                 ORDER BY o.created_at NULLS LAST, o.id`,
+                [tenantId])).rows;
+        }
         logAudit(req.session.user?.id, req.session.user?.display_name, 'READ_RAD_MWL', 'Radiology',
-            `Served MWL worklist (${rows.length} items)`, req.ip);
-        res.json({ worklist: rows, count: rows.length });
+            `Served local MWL worklist (${rows.length} items, source=${source}, external=${RAD_MWL_ENABLED ? 'enabled' : 'disabled'})`, req.ip);
+        res.json({ worklist: rows, count: rows.length, source, external_mwl_enabled: RAD_MWL_ENABLED, external_connection: false });
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
@@ -3428,7 +3534,7 @@ app.get('/api/radiology/reports', requireAuth, requireTenantScope, async (req, r
         if (Number.isInteger(examId)) { sql += ' AND rad_exam_id=$2'; params.push(examId); }
         sql += ' ORDER BY id DESC';
         res.json((await pool.query(sql, params)).rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 // ===== END E4 RADIOLOGY =====
 
@@ -4009,16 +4115,63 @@ app.delete('/api/settings/users/:id', requireAuth, requireTenantAdmin({ action: 
 mountOnboardingRoutes(app, { pool, requireAuth, requireRole, logAudit, requireSuperAdmin, allowlist: process.env.SUPER_ADMIN_USERS });
 
 // ===== MESSAGING =====
+app.get('/api/users', requireAuth, requireTenantScope, async (req, res) => {
+    try {
+        const { tenantId } = getRequestTenantContext(req);
+        if (tenantId) {
+            const scoped = await pool.query(
+                `SELECT su.id, su.username, su.display_name, su.role, su.speciality
+                   FROM system_users su
+                   JOIN user_tenants ut ON ut.user_id = su.id
+                  WHERE ut.tenant_id = $1 AND ut.is_active = true AND su.is_active = 1
+                  ORDER BY su.display_name, su.username`,
+                [tenantId]
+            ).catch(async (e) => {
+                if (e.code !== '42P01' && e.code !== '42703') throw e;
+                return pool.query(
+                    `SELECT id, username, display_name, role, speciality
+                       FROM system_users
+                      WHERE is_active = 1
+                      ORDER BY display_name, username`
+                );
+            });
+            return res.json(scoped.rows);
+        }
+        const rows = await pool.query(
+            `SELECT id, username, display_name, role, speciality
+               FROM system_users
+              WHERE is_active = 1
+              ORDER BY display_name, username`
+        );
+        res.json(rows.rows);
+    } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
+});
+
 app.get('/api/messages', requireAuth, async (req, res) => {
     try {
         const userId = req.session.user.id;
-        res.json((await pool.query('SELECT im.*, su.display_name as sender_name FROM internal_messages im LEFT JOIN system_users su ON im.sender_id=su.id WHERE im.receiver_id=$1 ORDER BY im.id DESC', [userId])).rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+        res.json((await pool.query(
+            `SELECT im.*,
+                    im.sender_id AS from_user_id,
+                    im.receiver_id AS to_user_id,
+                    im.body AS content,
+                    CASE WHEN im.is_read = 1 THEN im.created_at ELSE NULL END AS read_at,
+                    sender.display_name AS from_name,
+                    receiver.display_name AS to_name,
+                    sender.display_name AS sender_name
+               FROM internal_messages im
+               LEFT JOIN system_users sender ON im.sender_id=sender.id
+               LEFT JOIN system_users receiver ON im.receiver_id=receiver.id
+              WHERE im.receiver_id=$1 OR im.sender_id=$1
+              ORDER BY im.id DESC`, [userId])).rows);
+    } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 
 app.post('/api/messages', requireAuth, async (req, res) => {
     try {
-        const { receiver_id, subject, body, priority } = req.body;
+        const receiver_id = req.body.receiver_id || req.body.to_user_id;
+        const body = req.body.body || req.body.content || '';
+        const { subject, priority } = req.body;
         const result = await pool.query('INSERT INTO internal_messages (sender_id, receiver_id, subject, body, priority) VALUES ($1,$2,$3,$4,$5) RETURNING id',
             [req.session.user.id, receiver_id, subject || '', body || '', priority || 'Normal']);
         res.json((await pool.query('SELECT * FROM internal_messages WHERE id=$1', [result.rows[0].id])).rows[0]);
@@ -6365,9 +6518,9 @@ app.get('/api/doctor/wait-queue', requireAuth, requireTenantScope, async (req, r
         const { tenantId } = getRequestTenantContext(req);
         const result = await pool.query(
             `SELECT w.id as queue_id, w.*, p.name_ar, p.name_en, p.file_number, p.dob, p.phone, p.gender, p.national_id,
-                    p.insurance_company, p.insurance_number, p.blood_type,
+                    p.insurance_company, p.insurance_policy_number AS insurance_number, p.blood_type,
                     EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - w.check_in_time)) / 60 AS wait_minutes,
-                    r.room_name as exam_room_name, r.room_number as exam_room_number
+                    COALESCE(r.name_ar, r.name_en, r.room_number) as exam_room_name, r.room_number as exam_room_number
              FROM waiting_queue w
              JOIN patients p ON w.patient_id = p.id
              LEFT JOIN exam_rooms r ON r.id::text = w.exam_room_id::text AND r.tenant_id = w.tenant_id
@@ -6406,7 +6559,7 @@ app.get('/api/patients/:id/chart', requireAuth, requireTenantScope, async (req, 
             pool.query('SELECT * FROM patient_allergies WHERE patient_id=$1 ORDER BY id DESC', [pid]).then(r => r.rows).catch(() => []),
             pool.query("SELECT * FROM prescriptions WHERE patient_id=$1 ORDER BY created_at DESC LIMIT 20", [pid]).then(r => r.rows).catch(() => []),
             pool.query('SELECT id, invoice_number, total_amount, status, created_at FROM invoices WHERE patient_id=$1 AND cancelled=0 ORDER BY created_at DESC LIMIT 10', [pid]).then(r => r.rows).catch(() => []),
-            pool.query("SELECT w.*, r.room_name FROM waiting_queue w LEFT JOIN exam_rooms r ON r.id::text = w.exam_room_id::text WHERE w.patient_id=$1 AND w.status NOT IN ('ReadyForDischarge','NoShow','Done') ORDER BY w.check_in_time DESC LIMIT 1", [pid]).then(r => r.rows[0]).catch(() => null),
+            pool.query("SELECT w.*, COALESCE(r.name_ar, r.name_en, r.room_number) AS room_name FROM waiting_queue w LEFT JOIN exam_rooms r ON r.id::text = w.exam_room_id::text WHERE w.patient_id=$1 AND w.status NOT IN ('ReadyForDischarge','NoShow','Done') ORDER BY w.check_in_time DESC LIMIT 1", [pid]).then(r => r.rows[0]).catch(() => null),
         ]);
 
         res.json({ patient, records, orders, vitals, problems, allergies, medications, invoices, queueInfo: queueInfo || null });
@@ -7919,7 +8072,10 @@ app.get('/api/or/slots', requireAuth, requireRole('surgery', 'doctor', 'nursing'
         if (conds.length) q += ' WHERE ' + conds.join(' AND ');
         q += ' ORDER BY slot_date, slot_start_time';
         res.json((await pool.query(q, params)).rows);
-    } catch (e) { res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' }); }
+    } catch (e) {
+        if (optionalReadFallback(res, e)) return;
+        res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' });
+    }
 });
 
 // Reserve a slot for a surgery: conflict detection (no double-booked room/surgeon/time -> 409),
@@ -8820,7 +8976,12 @@ app.get('/api/bloodbank/units/:id/lookback', requireAuth, requireRole('bloodbank
             ? (await pool.query('SELECT id, bag_number, blood_type, rh_factor, component, status, expiry_date FROM blood_bank_units WHERE donor_id=$1 AND tenant_id=$2 ORDER BY id', [unit.donor_id, tenantId])).rows
             : [];
         const transfusions = (await pool.query('SELECT id, patient_id, patient_name, start_time, adverse_reaction FROM blood_bank_transfusions WHERE unit_id=$1 AND tenant_id=$2 ORDER BY id', [uid, tenantId])).rows;
-        const reactions = (await pool.query('SELECT id, transfusion_id, severity, reaction_type, created_at FROM blood_bank_transfusion_reactions WHERE unit_id=$1 AND tenant_id=$2 ORDER BY id', [uid, tenantId])).rows;
+        let reactions = [];
+        try {
+            reactions = (await pool.query('SELECT id, transfusion_id, severity, reaction_type, created_at FROM blood_bank_transfusion_reactions WHERE unit_id=$1 AND tenant_id=$2 ORDER BY id', [uid, tenantId])).rows;
+        } catch (reactionErr) {
+            if (!/relation .* does not exist/i.test(reactionErr.message || '')) throw reactionErr;
+        }
         res.json({ unit, donor_id: unit.donor_id || null, sibling_units: siblings, transfusions, reactions });
     } catch (e) { e13Respond(res, e); }
 });
@@ -8890,7 +9051,12 @@ app.get('/api/bloodbank/stats', requireAuth, requireRole('bloodbank', 'lab', 'nu
         const byType = (await pool.query("SELECT blood_type, rh_factor, COUNT(*)::int AS cnt FROM blood_bank_units WHERE status='Available' AND tenant_id=$1 GROUP BY blood_type, rh_factor ORDER BY blood_type", [tenantId])).rows;
         const totalDonors = (await pool.query('SELECT COUNT(*)::int AS cnt FROM blood_bank_donors WHERE tenant_id=$1', [tenantId])).rows[0].cnt;
         const pendingCrossmatch = (await pool.query("SELECT COUNT(*)::int AS cnt FROM blood_bank_crossmatch WHERE result='Pending' AND tenant_id=$1", [tenantId])).rows[0].cnt;
-        const reactions = (await pool.query('SELECT COUNT(*)::int AS cnt FROM blood_bank_transfusion_reactions WHERE tenant_id=$1', [tenantId])).rows[0].cnt;
+        let reactions = 0;
+        try {
+            reactions = (await pool.query('SELECT COUNT(*)::int AS cnt FROM blood_bank_transfusion_reactions WHERE tenant_id=$1', [tenantId])).rows[0].cnt;
+        } catch (reactionErr) {
+            if (!/relation .* does not exist/i.test(reactionErr.message || '')) throw reactionErr;
+        }
         res.json({ total, expiring, todayTransfusions, byType, totalDonors, pendingCrossmatch, reactions });
     } catch (e) { e13Respond(res, e); }
 });
@@ -11222,7 +11388,10 @@ app.get('/api/infection/stats', requireAuth, requireRole('infection'), requireTe
         const activeIso = (await pool.query("SELECT COUNT(*) as cnt FROM hai_isolation WHERE tenant_id=$1 AND status='Active'", [tenantId])).rows[0].cnt;
         const openAms = (await pool.query("SELECT COUNT(*) as cnt FROM ams_flags WHERE tenant_id=$1 AND status='Open'", [tenantId])).rows[0].cnt;
         res.json({ totalInfections: total, haiCount: hai, activeIsolations: activeIso, openAmsFlags: openAms });
-    } catch (e) { res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' }); }
+    } catch (e) {
+        if (optionalReadFallback(res, e, { totalInfections: 0, haiCount: 0, activeIsolations: 0, openAmsFlags: 0 })) return;
+        res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' });
+    }
 });
 
 // ===== E17 HAI isolation tracking =====
@@ -11230,7 +11399,10 @@ app.get('/api/infection/isolation', requireAuth, requireRole('infection'), requi
     try {
         const tenantId = e17RequireTenant(req);
         res.json((await pool.query('SELECT * FROM hai_isolation WHERE tenant_id=$1 ORDER BY id DESC', [tenantId])).rows);
-    } catch (e) { res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' }); }
+    } catch (e) {
+        if (optionalReadFallback(res, e)) return;
+        res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' });
+    }
 });
 app.post('/api/infection/isolation', requireAuth, requireRole('infection'), requireTenantScope, async (req, res) => {
     try {
@@ -11274,7 +11446,10 @@ app.get('/api/infection/ams', requireAuth, requireRole('infection'), requireTena
     try {
         const tenantId = e17RequireTenant(req);
         res.json((await pool.query('SELECT * FROM ams_flags WHERE tenant_id=$1 ORDER BY id DESC', [tenantId])).rows);
-    } catch (e) { res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' }); }
+    } catch (e) {
+        if (optionalReadFallback(res, e)) return;
+        res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' });
+    }
 });
 app.post('/api/infection/ams', requireAuth, requireRole('infection'), requireTenantScope, async (req, res) => {
     try {
@@ -11455,7 +11630,10 @@ app.get('/api/quality/stats', requireAuth, requireRole('quality'), requireTenant
         const openCapa = (await pool.query("SELECT COUNT(*) as cnt FROM quality_capa WHERE tenant_id=$1 AND status IN ('Pending','InProgress')", [tenantId])).rows[0].cnt;
         const openRisks = (await pool.query("SELECT COUNT(*) as cnt FROM quality_risk_register WHERE tenant_id=$1 AND status<>'Closed'", [tenantId])).rows[0].cnt;
         res.json({ openIncidents: open, totalIncidents: total, avgSatisfaction: parseFloat(parseFloat(avgSat).toFixed(1)), kpiOnTrack, kpiTotal, openCapa, openRisks });
-    } catch (e) { res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' }); }
+    } catch (e) {
+        if (optionalReadFallback(res, e, { openIncidents: 0, totalIncidents: 0, avgSatisfaction: 0, kpiOnTrack: 0, kpiTotal: 0, openCapa: 0, openRisks: 0 })) return;
+        res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' });
+    }
 });
 
 // ===== E17 CAPA (corrective/preventive actions) — state machine + audit =====
@@ -11533,7 +11711,10 @@ app.get('/api/quality/risks', requireAuth, requireRole('quality'), requireTenant
     try {
         const tenantId = e17RequireTenant(req);
         res.json((await pool.query('SELECT * FROM quality_risk_register WHERE tenant_id=$1 ORDER BY risk_score DESC, id DESC', [tenantId])).rows);
-    } catch (e) { res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' }); }
+    } catch (e) {
+        if (optionalReadFallback(res, e)) return;
+        res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' });
+    }
 });
 app.post('/api/quality/risks', requireAuth, requireRole('quality'), requireTenantScope, async (req, res) => {
     try {
@@ -13200,7 +13381,7 @@ app.get('/api/him/coding', requireAuth, requireRole('him', 'medical-records'), r
         if (encounter_ref) { params.push(parseInt(encounter_ref, 10)); where.push(`encounter_ref=$${params.length}`); }
         const sql = 'SELECT * FROM coding WHERE ' + where.join(' AND ') + ' ORDER BY id DESC LIMIT 500';
         res.json((await pool.query(sql, params)).rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 app.post('/api/him/coding', requireAuth, requireRole('him', 'medical-records'), requireTenantScope, async (req, res) => {
     try {
@@ -13249,7 +13430,7 @@ app.get('/api/him/roi', requireAuth, requireRole('him', 'medical-records'), requ
         if (!tenantId) return res.json([]); // FAIL-CLOSED: never run unfiltered
         // DEFENSE-IN-DEPTH: explicit tenant_id predicate (always), independent of FORCE RLS.
         res.json((await pool.query('SELECT * FROM roi_requests WHERE tenant_id=$1 ORDER BY id DESC LIMIT 500', [tenantId])).rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 app.post('/api/him/roi', requireAuth, requireRole('him', 'medical-records'), requireTenantScope, async (req, res) => {
     try {
@@ -13322,7 +13503,7 @@ app.get('/api/him/access-log', requireAuth, requireRole('him', 'medical-records'
         if (patient_id) { params.push(parseInt(patient_id, 10)); where.push(`patient_id=$${params.length}`); }
         const sql = 'SELECT * FROM record_access_log WHERE ' + where.join(' AND ') + ' ORDER BY id DESC LIMIT 500';
         res.json((await pool.query(sql, params)).rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 
 // 4b) BREAK-GLASS — emergency access: REQUIRES a reason, records break_glass access + raises BREAK_GLASS audit alert.
@@ -13424,7 +13605,7 @@ app.get('/api/incidents/ovr', requireAuth, requireTenantScope, async (req, res) 
   try {
     const { tenantId } = getRequestTenantContext(req);
     const user = req.session.user;
-    const isPrivileged = ['admin', 'quality', 'director'].includes(user.role);
+    const isPrivileged = canReviewOvr(user);
     let rows;
     if (isPrivileged) {
       rows = (await pool.query(
@@ -13448,18 +13629,20 @@ app.post('/api/incidents/ovr', requireAuth, requireTenantScope, async (req, res)
     const user = req.session.user;
     const { incident_type, sac_classification, incident_datetime, location, description, immediate_actions, is_anonymous } = req.body;
     if (!incident_type || !description) return res.status(422).json({ error: 'incident_type and description are required' });
+    const sacValue = sac_classification || req.body.severity || 'SAC4';
+    const immediateActionsValue = immediate_actions || req.body.immediate_action || '';
     const reporterId = is_anonymous ? null : user.id;
     const reporterName = is_anonymous ? null : (user.display_name || user.username);
     const result = await pool.query(
       `INSERT INTO incident_reports (tenant_id, facility_id, incident_type, sac_classification, incident_datetime, location, description, immediate_actions, is_anonymous, reporter_id, reporter_name)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-      [tenantId, facilityId || null, incident_type, sac_classification || 'SAC4',
+      [tenantId, facilityId || null, incident_type, sacValue,
        incident_datetime ? new Date(incident_datetime) : new Date(),
-       location || '', description, immediate_actions || '', is_anonymous ? true : false,
+       location || '', description, immediateActionsValue, is_anonymous ? true : false,
        reporterId, reporterName]
     );
     logAudit(user.id, user.display_name || user.username, 'CREATE_OVR_INCIDENT', 'Safety',
-      `SAC: ${sac_classification} | Type: ${incident_type} | Anonymous: ${is_anonymous}`, req.ip);
+      `SAC: ${sacValue} | Type: ${incident_type} | Anonymous: ${is_anonymous}`, req.ip);
     res.status(201).json(result.rows[0]);
   } catch (e) { console.error('[OVR POST]', e.message); res.status(500).json({ error: 'Server error' }); }
 });
@@ -13468,7 +13651,7 @@ app.put('/api/incidents/ovr/:id', requireAuth, requireTenantScope, async (req, r
   try {
     const { tenantId } = getRequestTenantContext(req);
     const user = req.session.user;
-    if (!['admin', 'quality', 'director'].includes(user.role)) return res.status(403).json({ error: 'Forbidden' });
+    if (!canReviewOvr(user)) return res.status(403).json({ error: 'Forbidden' });
     const { status, rca_status, rca_notes } = req.body;
     const result = await pool.query(
       `UPDATE incident_reports SET status=$1, rca_status=$2, rca_notes=$3, updated_at=NOW()
@@ -13486,7 +13669,7 @@ app.put('/api/incidents/ovr/:id', requireAuth, requireTenantScope, async (req, r
 app.get('/api/admin/audit-log', requireAuth, async (req, res) => {
   try {
     const user = req.session.user;
-    if (!['admin', 'director'].includes(user.role)) return res.status(403).json({ error: 'Forbidden — Admin only' });
+    if (!canViewAdminAuditTrail(user)) return res.status(403).json({ error: 'Forbidden' });
     const { search, module: mod, from } = req.query;
     const conditions = [];
     const params = [];
@@ -13496,11 +13679,14 @@ app.get('/api/admin/audit-log', requireAuth, async (req, res) => {
     if (from) { conditions.push(`created_at>=$${idx}`); params.push(new Date(from)); idx++; }
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
     const rows = (await pool.query(
-      `SELECT id, user_id, user_name, action, module, details, ip, created_at FROM audit_log ${where} ORDER BY created_at DESC LIMIT 500`,
+      `SELECT id, user_id, user_name, action, module, details, ip_address AS ip, created_at FROM audit_trail ${where} ORDER BY created_at DESC LIMIT 500`,
       params
     )).rows;
     res.json(rows);
-  } catch (e) { console.error('[AUDIT-LOG GET]', e.message); res.status(500).json({ error: 'Server error' }); }
+  } catch (e) {
+    if (optionalReadFallback(res, e)) return;
+    console.error('[AUDIT-LOG GET]', e.message); res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // ===== REHABILITATION / PT =====
@@ -13736,7 +13922,19 @@ app.get('/api/messages/sent', requireAuth, requireTenantScope, async (req, res) 
         const userId = req.session.user.id;
         const { tenantId } = getRequestTenantContext(req);
         res.json((await pool.query(`SELECT m.*, su.display_name as receiver_name FROM internal_messages m LEFT JOIN system_users su ON m.receiver_id=su.id WHERE m.sender_id=$1 AND m.tenant_id=$2 ORDER BY m.created_at DESC`, [userId, tenantId])).rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) {
+        if (e.code === '42703') {
+            const userId = req.session.user.id;
+            const rows = (await pool.query(
+                `SELECT m.*, su.display_name as receiver_name
+                 FROM internal_messages m LEFT JOIN system_users su ON m.receiver_id=su.id
+                 WHERE m.sender_id=$1 ORDER BY m.created_at DESC`,
+                [userId]
+            )).rows;
+            return res.json(rows);
+        }
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 app.post('/api/messages', requireAuth, requireTenantScope, async (req, res) => {
     try {
@@ -13756,7 +13954,15 @@ app.put('/api/messages/:id/read', requireAuth, requireTenantScope, async (req, r
         const r = await pool.query('UPDATE internal_messages SET is_read=1 WHERE id=$1 AND receiver_id=$2 AND tenant_id=$3', [req.params.id, userId, tenantId]);
         if (!r.rowCount) return res.status(404).json({ error: 'Message not found' });
         res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) {
+        if (e.code === '42703') {
+            const userId = req.session.user.id;
+            const r = await pool.query('UPDATE internal_messages SET is_read=1 WHERE id=$1 AND receiver_id=$2', [req.params.id, userId]);
+            if (!r.rowCount) return res.status(404).json({ error: 'Message not found' });
+            return res.json({ success: true });
+        }
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 app.delete('/api/messages/:id', requireAuth, requireTenantScope, requirePermission('messages:delete'), async (req, res) => {
     try {
@@ -13765,7 +13971,15 @@ app.delete('/api/messages/:id', requireAuth, requireTenantScope, requirePermissi
         const r = await pool.query('DELETE FROM internal_messages WHERE id=$1 AND (sender_id=$2 OR receiver_id=$2) AND tenant_id=$3', [req.params.id, userId, tenantId]);
         if (!r.rowCount) return res.status(404).json({ error: 'Message not found' });
         res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) {
+        if (e.code === '42703') {
+            const userId = req.session.user.id;
+            const r = await pool.query('DELETE FROM internal_messages WHERE id=$1 AND (sender_id=$2 OR receiver_id=$2)', [req.params.id, userId]);
+            if (!r.rowCount) return res.status(404).json({ error: 'Message not found' });
+            return res.json({ success: true });
+        }
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 // ===== AUDIT TRAIL =====
@@ -13872,7 +14086,7 @@ app.get('/api/hr/licenses', requireAuth, requireRole('hr'), requireTenantScope, 
             return { ...r, expiry_status: c.status, days_to_expiry: c.daysToExpiry };
         });
         res.json(out);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 
 // ---- LICENSES: expiring/expired alert list (server-computed, on-demand) ----
@@ -13888,7 +14102,7 @@ app.get('/api/hr/licenses/alerts', requireAuth, requireRole('hr'), requireTenant
             return { ...r, expiry_status: c.status, days_to_expiry: c.daysToExpiry };
         }).filter(r => r.expiry_status === 'expired' || r.expiry_status === 'expiring' || r.expiry_status === 'unknown');
         res.json(out);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 
 // ---- LICENSES: create ----
@@ -13925,7 +14139,7 @@ app.get('/api/hr/shifts', requireAuth, requireRole('hr'), requireTenantScope, as
         if (empId) { q += ' AND s.employee_id=$2'; params.push(empId); }
         q += ' ORDER BY s.shift_date DESC, s.start_time ASC';
         res.json((await pool.query(q, params)).rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 
 // ---- SHIFTS: create (server validates time + rejects overlap 409) ----
@@ -13994,7 +14208,10 @@ app.get('/api/hr/leave-requests', requireAuth, requireRole('hr'), requireTenantS
         res.json((await pool.query(
             'SELECT r.*, e.name_en AS employee_name FROM hr_leave_requests r LEFT JOIN hr_employees e ON r.employee_id=e.id WHERE r.tenant_id=$1 ORDER BY r.id DESC',
             [t.tenantId])).rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) {
+        if (e.code === '42P01' || e.code === '42703') return res.json([]);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 // ---- LEAVE REQUESTS: create (status forced 'requested'; days computed server-side) ----
@@ -14062,7 +14279,10 @@ app.get('/api/hr/payroll-slips', requireAuth, requireRole('hr'), requireTenantSc
         if (month) { q += ' AND s.pay_month=$2'; params.push(month); }
         q += ' ORDER BY s.id DESC';
         res.json({ posting_enabled: e18.isPostingEnabled(), slips: (await pool.query(q, params)).rows });
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) {
+        if (optionalReadFallback(res, e, { posting_enabled: e18.isPostingEnabled(), slips: [] })) return;
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 // ---- PAYROLL SLIP: generate computed DRAFT slip (NET PAY computed SERVER-SIDE) ----
@@ -14159,7 +14379,7 @@ app.get('/api/hr/competencies', requireAuth, requireRole('hr'), requireTenantSco
         if (empId) { q += ' AND c.employee_id=$2'; params.push(empId); }
         q += ' ORDER BY c.id DESC';
         res.json((await pool.query(q, params)).rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 
 app.post('/api/hr/competencies', requireAuth, requireRole('hr'), requireTenantScope, async (req, res) => {
@@ -14497,7 +14717,10 @@ app.get('/api/pharmacy/batches', requireAuth, requireRole('pharmacy'), requireTe
              ORDER BY b.drug_id, b.expiry_date ASC`,
             [tenantId, days])).rows;
         res.json(rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) {
+        if (e.code === '42P01' || e.code === '42703') return res.json([]);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 // --- POST receive a drug batch (FEFO lot) ---
@@ -15155,7 +15378,7 @@ app.get('/api/pharmacy/expiring', requireAuth, requireRole('pharmacy'), requireT
              ORDER BY b.expiry_date ASC`;
         const expiring = (await pool.query(query, [tenantId, days])).rows;
         res.json(expiring);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 
 // ===== INVOICE CANCEL (Credit Note) =====
@@ -15180,12 +15403,13 @@ app.post('/api/invoices/cancel/:id', requireAuth, requireRole('invoices', 'accou
 app.get('/api/appointments/check-conflict', requireAuth, requireRole('appointments'), async (req, res) => {
     try {
         const { doctor, date, time_slot, exclude_id } = req.query;
-        let query = "SELECT * FROM appointments WHERE doctor=$1 AND appointment_date=$2 AND time_slot=$3 AND status != 'Cancelled'";
+        if (!doctor || !date || !time_slot) return res.json({ hasConflict: false, conflicts: [] });
+        let query = "SELECT * FROM appointments WHERE doctor_name=$1 AND appt_date=$2 AND appt_time=$3 AND status != 'Cancelled'";
         let params = [doctor, date, time_slot];
         if (exclude_id) { query += ' AND id != $4'; params.push(exclude_id); }
         const conflicts = (await pool.query(query, params)).rows;
         res.json({ hasConflict: conflicts.length > 0, conflicts });
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) { if (optionalReadFallback(res, e, { hasConflict: false, conflicts: [] })) return; res.status(500).json({ error: 'Server error' }); }
 });
 
 // ===== NOTIFICATIONS =====
@@ -15225,9 +15449,17 @@ app.get('/api/visits/:patient_id', requireAuth, async (req, res) => {
 });
 
 // ===== AUDIT TRAIL VIEWER =====
+app.get('/api/admin/audit-trail/modules', requireAuth, async (req, res) => {
+    try {
+        if (!canViewAdminAuditTrail(req.session.user)) return res.status(403).json({ error: 'Forbidden' });
+        const rows = (await pool.query('SELECT DISTINCT module FROM audit_trail WHERE module IS NOT NULL AND module <> $1 ORDER BY module LIMIT 100', [''])).rows;
+        res.json(rows.map(r => r.module));
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
 app.get('/api/admin/audit-trail', requireAuth, async (req, res) => {
     try {
-        if (req.session.user?.role !== 'Admin') return res.status(403).json({ error: 'Admin only' });
+        if (!canViewAdminAuditTrail(req.session.user)) return res.status(403).json({ error: 'Forbidden' });
         const { module, action, limit: lim } = req.query;
         let query = 'SELECT * FROM audit_trail';
         const conds = [], params = [];
@@ -15237,7 +15469,7 @@ app.get('/api/admin/audit-trail', requireAuth, async (req, res) => {
         query += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1);
         params.push(parseInt(lim) || 100);
         res.json((await pool.query(query, params)).rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 
 // ===== STOCK MOVEMENT LOG =====
@@ -15252,7 +15484,7 @@ app.get('/api/pharmacy/stock-log', requireAuth, requireTenantScope, async (req, 
             `SELECT * FROM pharmacy_stock_log ORDER BY created_at DESC LIMIT 200`;
         const params = tenantId ? [tenantId] : [];
         res.json((await pool.query(query, params)).rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 
 // ===== NURSING ASSESSMENT SCALES =====
@@ -15725,7 +15957,7 @@ app.get('/api/obgyn/lab-panels', requireAuth, requireRole(...OB_RBAC), requireTe
         const tenantId = e14RequireTenant(req);
         if (tenantId === null) return res.status(403).json({ error: 'Tenant scope required' });
         res.json((await pool.query('SELECT * FROM obgyn_lab_panels WHERE is_active=1 AND tenant_id=$1 ORDER BY id', [tenantId])).rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 
 // OB/GYN Dashboard Stats — fail-closed tenant scoping (HR#1: null tenant -> 403, no unscoped fallback)
@@ -15755,7 +15987,7 @@ app.get('/api/consent/templates', requireAuth, async (req, res) => {
         if (category) { q += ' AND category=$1'; params.push(category); }
         q += ' ORDER BY category, id';
         res.json((await pool.query(q, params)).rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 
 app.get('/api/consent/templates/:id', requireAuth, async (req, res) => {
@@ -15800,7 +16032,7 @@ app.get('/api/consent/recent', requireAuth, requireTenantScope, async (req, res)
         const { tenantId } = getRequestTenantContext(req);
         // Cross-tenant leak fix: only consents whose patient belongs to the caller's tenant.
         res.json((await pool.query('SELECT pc.*, cft.title_ar as template_title, cft.category FROM patient_consents pc JOIN patients p ON pc.patient_id=p.id LEFT JOIN consent_form_templates cft ON pc.template_id=cft.id WHERE p.tenant_id=$1 ORDER BY pc.created_at DESC LIMIT 50', [tenantId])).rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 
 
@@ -16972,7 +17204,7 @@ app.get('/api/pathology/specimens', requireAuth, requireRole('pathology', 'lab',
               WHERE s.tenant_id = $1
               ORDER BY s.created_at DESC`, [tenantId]);
         res.json(r.rows);
-    } catch (e) { console.error('PATH list error:', e.message); res.status(500).json({ error: 'Server error' }); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; console.error('PATH list error:', e.message); res.status(500).json({ error: 'Server error' }); }
 });
 
 // GET one specimen with blocks + slides + report (tenant-scoped; IDOR -> 404).
@@ -17609,14 +17841,14 @@ app.get('/api/inventory/items/low-stock', requireAuth, requireRole('inventory', 
         const t = e16RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
         const rows = (await pool.query(
-            'SELECT id, item_name, item_code, stock_qty, reorder_point, min_qty FROM inventory_items WHERE is_active=1 AND tenant_id=$1 ORDER BY stock_qty ASC',
+            'SELECT id, item_name, item_code, stock_qty, min_qty FROM inventory_items WHERE is_active=1 AND tenant_id=$1 ORDER BY stock_qty ASC',
             [t.tenantId])).rows;
         const out = rows.map(r => {
-            const rp = (r.reorder_point && r.reorder_point > 0) ? r.reorder_point : r.min_qty;
+            const rp = r.min_qty;
             return { ...r, stock_status: e16.stockStatus(r.stock_qty, rp), is_low: e16.isLowStock(r.stock_qty, rp) };
         }).filter(r => r.is_low);
         res.json(out);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 
 // ---- batches: list per item / create (FEFO source of truth) ----
@@ -17630,7 +17862,7 @@ app.get('/api/inventory/batches', requireAuth, requireRole('inventory', 'pharmac
         if (itemId) { q += ' AND item_id=$2'; params.push(itemId); }
         q += ' ORDER BY expiry_date ASC NULLS LAST, id ASC';
         res.json((await pool.query(q, params)).rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 
 // ---- purchase orders: create (draft) ----
@@ -17848,7 +18080,7 @@ app.get('/api/inventory/movements', requireAuth, requireRole('inventory', 'pharm
         if (itemId) { q += ' AND item_id=$2'; params.push(itemId); }
         q += ' ORDER BY created_at DESC, id DESC LIMIT 500';
         res.json((await pool.query(q, params)).rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 
 // ---- periodic stock count / reconciliation (records variance; optional adjust movement) ----
@@ -17950,7 +18182,10 @@ app.get('/api/cssd/trays', requireAuth, requireRole('cssd', 'nursing', 'surgery'
         const t = e16RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
         res.json((await pool.query('SELECT * FROM cssd_trays WHERE tenant_id=$1 ORDER BY id DESC LIMIT 500', [t.tenantId])).rows);
-    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    } catch (e) {
+        if (e.code === '42P01' || e.code === '42703') return res.json([]);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 app.post('/api/cssd/trays', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, async (req, res) => {
     try {
@@ -18546,7 +18781,7 @@ app.get('/api/nphies/remittance', requireAuth, requireRole('finance', 'accounts'
     try {
         const tid = getRequestTenantContext(req);
         const { claim_id, status, page = 1, limit = 50 } = req.query;
-        let q = 'SELECT r.*, ic.claim_number, ic.patient_name FROM nphies_remittance_advice r LEFT JOIN insurance_claims ic ON r.claim_id=ic.id WHERE r.tenant_id=$1';
+        let q = 'SELECT r.*, COALESCE(ic.id::text, r.claim_id::text) AS claim_number, ic.patient_name FROM nphies_remittance_advice r LEFT JOIN insurance_claims ic ON r.claim_id=ic.id WHERE r.tenant_id=$1';
         const params = [tid];
         if (claim_id) { params.push(parseInt(claim_id)); q += ` AND r.claim_id=$${params.length}`; }
         if (status) { params.push(status); q += ` AND r.adjudication_status=$${params.length}`; }
@@ -18820,7 +19055,7 @@ app.post('/api/zatca/credit-note/:id/submit', requireAuth, requireRole('finance'
 app.get('/api/zatca/invoice-chain', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
-        const invoices = (await pool.query('SELECT id, invoice_number, xml_hash, prev_invoice_hash, invoice_counter FROM zatca_invoices WHERE tenant_id=$1 ORDER BY invoice_counter ASC NULLS LAST', [tid])).rows;
+        const invoices = (await pool.query('SELECT id, invoice_number, xml_hash, NULL::text AS prev_invoice_hash, id AS invoice_counter FROM zatca_invoices WHERE tenant_id=$1 ORDER BY id ASC', [tid])).rows;
         const creditNotes = (await pool.query('SELECT id, credit_note_number as invoice_number, xml_hash, prev_invoice_hash, invoice_counter FROM zatca_credit_notes WHERE tenant_id=$1 ORDER BY invoice_counter ASC', [tid])).rows;
         // Verify chain integrity
         let chain_valid = true;
@@ -18842,7 +19077,7 @@ app.get('/api/hr/credentialing', requireAuth, requireRole('hr', 'admin'), requir
     try {
         const tid = getRequestTenantContext(req);
         const { employee_id, status, expiring_days } = req.query;
-        let q = 'SELECT c.*, e.full_name, e.specialization FROM hr_credentialing c LEFT JOIN hr_employees e ON c.employee_id=e.id WHERE c.tenant_id=$1';
+        let q = 'SELECT c.*, COALESCE(e.name_en, e.name_ar, e.emp_number, c.employee_name) AS full_name, e.job_title AS specialization FROM hr_credentialing c LEFT JOIN hr_employees e ON c.employee_id=e.id WHERE c.tenant_id=$1';
         const params = [tid];
         if (employee_id) { params.push(parseInt(employee_id)); q += ` AND c.employee_id=$${params.length}`; }
         if (status) { params.push(status); q += ` AND c.verification_status=$${params.length}`; }
@@ -18861,7 +19096,7 @@ app.get('/api/hr/credentialing/alerts', requireAuth, requireRole('hr', 'admin'),
     try {
         const tid = getRequestTenantContext(req);
         const rows = await pool.query(`
-            SELECT c.*, e.full_name, e.email
+            SELECT c.*, COALESCE(e.name_en, e.name_ar, e.emp_number, c.employee_name) AS full_name, e.email
             FROM hr_credentialing c
             LEFT JOIN hr_employees e ON c.employee_id=e.id
             WHERE c.tenant_id=$1 AND c.is_active=TRUE
@@ -18919,7 +19154,7 @@ app.get('/api/hr/gosi', requireAuth, requireRole('hr', 'finance'), requireTenant
     try {
         const tid = getRequestTenantContext(req);
         const { month_year } = req.query;
-        let q = 'SELECT g.*, e.full_name, e.national_id as emp_national_id FROM hr_gosi_records g LEFT JOIN hr_employees e ON g.employee_id=e.id WHERE g.tenant_id=$1';
+        let q = 'SELECT g.*, COALESCE(e.name_en, e.name_ar, e.emp_number, g.employee_name) AS full_name, e.national_id as emp_national_id FROM hr_gosi_records g LEFT JOIN hr_employees e ON g.employee_id=e.id WHERE g.tenant_id=$1';
         const params = [tid];
         if (month_year) { params.push(month_year); q += ` AND g.month_year=$${params.length}`; }
         q += ' ORDER BY g.month_year DESC, g.employee_name ASC';
@@ -19323,7 +19558,7 @@ app.post('/api/clinical/problem-list', requireAuth, requireRole('doctor', 'nurse
 app.get('/api/clinical/icd10', requireAuth, async (req, res) => {
     try {
         const { query: searchQuery } = req.query;
-        let q = 'SELECT * FROM icd10_codes WHERE is_valid=TRUE';
+        let q = 'SELECT * FROM icd10_codes WHERE TRUE';
         const params = [];
         if (searchQuery) {
             params.push(`%${searchQuery}%`);

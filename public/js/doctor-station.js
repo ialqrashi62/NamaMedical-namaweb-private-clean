@@ -22,6 +22,7 @@ window._DS = window._DS || {
   selectedPatientId: null,
   selectedPatientData: null,
   activeTab: 'summary',
+  activeOrderSection: 'diagnosis',
   rxItems: [],           // وصفة إلكترونية قيد الإعداد
   activeEncounterId: null,
   waitTimer: null,       // setInterval for live wait-time refresh
@@ -361,6 +362,7 @@ window.dsRenderPatientChart = function(patient, chart, vitals, problems, allergi
         { id: 'vitals',      icon: '❤️', en: 'Vitals',     ar: 'المؤشرات',  count: vitals.length },
         { id: 'notes',       icon: '📝', en: 'Notes',      ar: 'الملاحظات' },
         { id: 'orders',      icon: '📋', en: 'Orders',     ar: 'الأوامر' },
+        { id: 'consents',    icon: '📜', en: 'Consents',   ar: 'الإقرارات' },
         { id: 'results',     icon: '🔬', en: 'Results',    ar: 'النتائج' },
         { id: 'history_ext', icon: '👨‍👩‍👦', en: 'History+',  ar: 'التاريخ+' },
       ].map(t => `
@@ -405,6 +407,7 @@ window.dsSwitchTab = function(tabId) {
       window.dsInitSoapNotes();
       break;
     case 'orders':      window.dsTabOrders(content); break;
+    case 'consents':    window.dsTabConsents(content); break;
     case 'results':     window.dsTabResults(content); break;
     case 'history_ext': window.dsTabHistoryExt(content); break;
     default: content.innerHTML = `<p>${tr('Coming soon', 'قريباً')}</p>`;
@@ -785,10 +788,12 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
   if (!ordersPanel) return;
   const pid = safeId(patient.id);
   const patName = escapeHTML(isArabic ? (patient.name_ar || patient.name_en || '-') : (patient.name_en || patient.name_ar || '-'));
+  const activeSection = window._DS.activeOrderSection || 'diagnosis';
+  const sectionClass = id => `ds-order-section ${activeSection === id ? 'open' : 'collapsed'}`;
 
   ordersPanel.innerHTML = `
     <!-- Quick Diagnosis -->
-    <div class="ds-order-section">
+    <div class="${sectionClass('diagnosis')}" data-section="diagnosis">
       <div class="ds-order-section-header" onclick="window.dsToggleSection(this)">
         🩺 ${tr('Diagnosis', 'التشخيص')} <span style="margin-inline-start:auto">▾</span>
       </div>
@@ -814,7 +819,7 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
     </div>
 
     <!-- E-Prescription -->
-    <div class="ds-order-section">
+    <div class="${sectionClass('rx')}" data-section="rx">
       <div class="ds-order-section-header" onclick="window.dsToggleSection(this)">
         💊 ${tr('E-Prescription', 'الوصفة الإلكترونية')} <span style="margin-inline-start:auto">▾</span>
       </div>
@@ -836,7 +841,7 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
     </div>
 
     <!-- Lab Order -->
-    <div class="ds-order-section">
+    <div class="${sectionClass('lab')}" data-section="lab">
       <div class="ds-order-section-header" onclick="window.dsToggleSection(this)">
         🔬 ${tr('Lab Order', 'طلب مختبر')} <span style="margin-inline-start:auto">▾</span>
       </div>
@@ -876,7 +881,7 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
     </div>
 
     <!-- Radiology Order -->
-    <div class="ds-order-section">
+    <div class="${sectionClass('radiology')}" data-section="radiology">
       <div class="ds-order-section-header" onclick="window.dsToggleSection(this)">
         📡 ${tr('Radiology Order', 'طلب أشعة')} <span style="margin-inline-start:auto">▾</span>
       </div>
@@ -921,7 +926,7 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
     </div>
 
     <!-- Referral -->
-    <div class="ds-order-section">
+    <div class="${sectionClass('referral')}" data-section="referral">
       <div class="ds-order-section-header" onclick="window.dsToggleSection(this)">
         🏥 ${tr('Referral', 'تحويل')} <span style="margin-inline-start:auto">▾</span>
       </div>
@@ -957,7 +962,7 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
     </div>
 
     <!-- Diet Order -->
-    <div class="ds-order-section">
+    <div class="${sectionClass('diet')}" data-section="diet">
       <div class="ds-order-section-header" onclick="window.dsToggleSection(this)">
         🥗 ${tr('Diet Order', 'أمر الحمية')} <span style="margin-inline-start:auto">▾</span>
       </div>
@@ -991,7 +996,7 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
     </div>
 
     <!-- IV Fluids Order -->
-    <div class="ds-order-section">
+    <div class="${sectionClass('iv')}" data-section="iv">
       <div class="ds-order-section-header" onclick="window.dsToggleSection(this)">
         💉 ${tr('IV Fluids', 'السوائل الوريدية')} <span style="margin-inline-start:auto">▾</span>
       </div>
@@ -1029,7 +1034,7 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
     </div>
 
     <!-- Nursing Order -->
-    <div class="ds-order-section">
+    <div class="${sectionClass('nursing')}" data-section="nursing">
       <div class="ds-order-section-header" onclick="window.dsToggleSection(this)">
         🩺 ${tr('Nursing Orders', 'أوامر التمريض')} <span style="margin-inline-start:auto">▾</span>
       </div>
@@ -1060,6 +1065,38 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
       </div>
     </div>
 
+    <!-- Medical Consents -->
+    <div class="${sectionClass('consent')}" data-section="consent">
+      <div class="ds-order-section-header" onclick="window.dsToggleSection(this)">
+        📜 ${tr('Medical Consents', 'الإقرارات الطبية')} <span style="margin-inline-start:auto">▾</span>
+      </div>
+      <div class="ds-order-section-body">
+        <div class="form-group mb-8">
+          <label style="font-size:11px;font-weight:700">${tr('Consent Type', 'نوع الإقرار')}</label>
+          <select class="form-input" id="dsConsentType">
+            <option value="general_medical">${tr('General Medical Procedure', 'إجراء طبي عام')}</option>
+            <option value="surgical">${tr('Surgical Consent', 'إقرار عملية جراحية')}</option>
+            <option value="anesthesia">${tr('Anesthesia Consent', 'إقرار تخدير')}</option>
+            <option value="blood_transfusion">${tr('Blood Transfusion', 'نقل دم')}</option>
+            <option value="treatment_refusal">${tr('Treatment Refusal', 'رفض علاج')}</option>
+            <option value="privacy">${tr('Privacy Consent', 'سياسة الخصوصية')}</option>
+          </select>
+        </div>
+        <div class="form-group mb-8">
+          <label style="font-size:11px;font-weight:700">${tr('Procedure / Notes', 'الإجراء / ملاحظات')}</label>
+          <textarea class="form-input" id="dsConsentNote" rows="2" placeholder="${tr('Procedure, risks explained, or consent notes...', 'الإجراء، المخاطر المشروحة، أو ملاحظات الإقرار...')}"></textarea>
+        </div>
+        <div class="ds-order-actions-grid">
+          <button class="btn btn-primary" onclick="window.dsCreateConsentFromStation(${pid})" style="height:36px;font-size:12px">
+            📜 ${tr('Create', 'إنشاء')}
+          </button>
+          <button class="btn" onclick="window.dsSwitchTab('consents')" style="height:36px;font-size:12px">
+            📋 ${tr('Registry', 'السجل')}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Sign & Close -->
     <div style="padding:12px 0">
       <button class="btn w-full" onclick="window.dsSignEncounter()"
@@ -1069,6 +1106,7 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
     </div>
   `;
 
+  window.dsApplyOrdersAccordion(ordersPanel, activeSection);
   window.dsRenderRxItems();
 };
 
@@ -1076,13 +1114,36 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
 /* ============================================================ */
 /*  Collapsible Sections                                         */
 /* ============================================================ */
+window.dsApplyOrdersAccordion = function(panel, activeSection) {
+  const root = panel || document.getElementById('dsOrdersContent');
+  if (!root) return;
+  const sections = Array.from(root.querySelectorAll('.ds-order-section'));
+  const target = activeSection || sections[0]?.dataset?.section || '';
+  sections.forEach(section => {
+    const isOpen = section.dataset.section === target;
+    section.classList.toggle('open', isOpen);
+    section.classList.toggle('collapsed', !isOpen);
+    const arrow = section.querySelector('.ds-order-section-header span:last-child');
+    if (arrow) arrow.textContent = isOpen ? '▾' : '▸';
+  });
+  window._DS.activeOrderSection = target || 'diagnosis';
+};
+
 window.dsToggleSection = function(header) {
-  const body = header.nextElementSibling;
-  if (!body) return;
-  const collapsed = body.style.display === 'none';
-  body.style.display = collapsed ? '' : 'none';
-  const arrow = header.querySelector('span:last-child');
-  if (arrow) arrow.textContent = collapsed ? '▾' : '▸';
+  const section = header.closest('.ds-order-section');
+  const root = header.closest('#dsOrdersContent');
+  if (!section || !root) return;
+  document.querySelectorAll('#dsOrdersContent .ds-order-section').forEach(item => {
+    item.classList.add('collapsed');
+    item.classList.remove('open');
+    const arrow = item.querySelector('.ds-order-section-header span:last-child');
+    if (arrow) arrow.textContent = '▸';
+  });
+  section.classList.remove('collapsed');
+  section.classList.add('open');
+  const arrow = section.querySelector('.ds-order-section-header span:last-child');
+  if (arrow) arrow.textContent = '▾';
+  window._DS.activeOrderSection = section.dataset.section || 'diagnosis';
 };
 
 /* ============================================================ */
@@ -1281,6 +1342,187 @@ window.dsSendPrescription = async function(patientId) {
     showToast(e?.message || tr('Failed to send prescription', 'فشل إرسال الوصفة'), 'error');
     const btn = document.getElementById('dsSendRxBtn');
     if (btn) btn.disabled = false;
+  }
+};
+
+/* ============================================================ */
+/*  MEDICAL CONSENTS                                             */
+/* ============================================================ */
+window.dsCreateConsentFromStation = async function(patientId, selectId = 'dsConsentType') {
+  if (!patientId) return showToast(tr('No patient selected', 'لا يوجد مريض محدد'), 'error');
+  const patient = window._DS.selectedPatientData?.patient || {};
+  const templateType = document.getElementById(selectId)?.value || document.getElementById('dsConsentType')?.value || 'general_medical';
+  const note = document.getElementById('dsConsentNote')?.value || '';
+  const doctorName = window._DS.currentUser?.display_name || window._DS.currentUser?.name || window._DS.currentUser?.username || 'Doctor';
+  let templates = [];
+  try { templates = await API.get('/api/consent-forms/templates/list'); } catch { templates = []; }
+  const template = templates.find(t => t.type === templateType) || templates.find(t => t.type === 'general_medical') || {
+    type: 'general_medical',
+    title: 'General Medical Procedure Consent',
+    title_ar: 'إقرار إجراء طبي عام',
+    content: ''
+  };
+  const patientName = isArabic ? (patient.name_ar || patient.name_en || '') : (patient.name_en || patient.name_ar || '');
+  const content = [
+    template.content || '',
+    note.trim() ? `${tr('Doctor notes', 'ملاحظات الطبيب')}: ${note.trim()}` : ''
+  ].filter(Boolean).join('\n\n');
+
+  try {
+    await API.post('/api/consent-forms', {
+      patient_id: patientId,
+      patient_name: patientName,
+      form_type: template.type,
+      form_title: template.title || template.title_ar || tr('Medical Consent', 'إقرار طبي'),
+      form_title_ar: template.title_ar || template.title || tr('Medical Consent', 'إقرار طبي'),
+      content,
+      doctor_name: doctorName,
+      notes: note
+    });
+    showToast(tr('Consent form created', 'تم إنشاء الإقرار الطبي'));
+    const noteEl = document.getElementById('dsConsentNote');
+    if (noteEl) noteEl.value = '';
+    window.dsSwitchTab('consents');
+  } catch (e) {
+    showToast(e?.message || tr('Failed to create consent', 'فشل إنشاء الإقرار'), 'error');
+  }
+};
+
+window.dsTabConsents = async function(container) {
+  const pid = window._DS.selectedPatientId;
+  if (!pid) return;
+  container.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text-dim)"><div style="font-size:32px">⏳</div><p>${tr('Loading consents...', 'جاري تحميل الإقرارات...')}</p></div>`;
+  let forms = [], templates = [];
+  try {
+    [forms, templates] = await Promise.all([
+      API.get(`/api/consent-forms?patient_id=${encodeURIComponent(pid)}`).catch(() => []),
+      API.get('/api/consent-forms/templates/list').catch(() => []),
+    ]);
+  } catch {
+    forms = [];
+    templates = [];
+  }
+  const signedCount = forms.filter(f => String(f.status || '').toLowerCase() === 'signed' || f.signed_at).length;
+  const pendingCount = Math.max(forms.length - signedCount, 0);
+  container.innerHTML = `
+    <div class="ds-consent-toolbar">
+      <div>
+        <strong style="font-size:13px">📜 ${tr('Medical Consents', 'الإقرارات الطبية')}</strong>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:3px">
+          ${tr('Signed', 'موقعة')}: ${signedCount} · ${tr('Pending', 'بانتظار التوقيع')}: ${pendingCount}
+        </div>
+      </div>
+      <div class="ds-consent-create">
+        <select class="form-input" id="dsConsentTemplate" style="height:34px;font-size:12px">
+          ${templates.map(t => `<option value="${escapeHTML(t.type || '')}">${escapeHTML(isArabic ? (t.title_ar || t.title || '') : (t.title || t.title_ar || ''))}</option>`).join('')}
+        </select>
+        <button class="btn btn-primary" onclick="window.dsCreateConsentFromStation(${safeId(pid)}, 'dsConsentTemplate')" style="height:34px;font-size:12px">
+          📜 ${tr('Create Consent', 'إنشاء إقرار')}
+        </button>
+      </div>
+    </div>
+    ${forms.length ? `
+      <div class="ds-consent-list">
+        ${forms.map(f => {
+          const title = isArabic ? (f.form_title_ar || f.form_title || '-') : (f.form_title || f.form_title_ar || '-');
+          const isSigned = String(f.status || '').toLowerCase() === 'signed' || f.signed_at;
+          const created = f.created_at ? new Date(f.created_at).toLocaleDateString(isArabic ? 'ar-SA' : 'en-US') : '-';
+          const signed = f.signed_at ? new Date(f.signed_at).toLocaleDateString(isArabic ? 'ar-SA' : 'en-US') : '-';
+          return `
+            <div class="ds-consent-card">
+              <div class="ds-consent-card-main">
+                <div style="font-weight:700;font-size:12px">${escapeHTML(title)}</div>
+                <div style="font-size:11px;color:var(--text-dim);margin-top:3px">
+                  ${tr('Created', 'أنشئ')}: ${escapeHTML(created)} · ${tr('Signed', 'التوقيع')}: ${escapeHTML(signed)}
+                </div>
+              </div>
+              <span class="ds-consent-status ${isSigned ? 'signed' : 'pending'}">${isSigned ? tr('Signed', 'موقع') : tr('Pending', 'بانتظار التوقيع')}</span>
+              <div class="ds-consent-actions">
+                ${!isSigned ? `<button class="btn btn-sm btn-primary" onclick="window.dsOpenConsentSignModal(${safeId(f.id)})">✍️ ${tr('Sign', 'توقيع')}</button>` : ''}
+                <button class="btn btn-sm" onclick="window.printConsentForm ? window.printConsentForm(${safeId(f.id)}) : window.dsOpenConsentSignModal(${safeId(f.id)})">🖨️ ${tr('Print', 'طباعة')}</button>
+              </div>
+            </div>`;
+        }).join('')}
+      </div>` : `
+      <div style="text-align:center;padding:32px;color:var(--text-dim)">
+        <div style="font-size:48px;opacity:.3">📜</div>
+        <p>${tr('No consent forms for this patient', 'لا توجد إقرارات لهذا المريض')}</p>
+      </div>`}
+  `;
+};
+
+window.dsOpenConsentSignModal = async function(formId) {
+  let form = null;
+  try { form = await API.get(`/api/consent-forms/${formId}`); }
+  catch (e) { return showToast(e?.message || tr('Consent not found', 'لم يتم العثور على الإقرار'), 'error'); }
+  const modal = document.createElement('div');
+  modal.className = 'ds-consent-modal';
+  modal.innerHTML = `
+    <div class="ds-consent-modal-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
+        <strong style="font-size:15px">✍️ ${escapeHTML(isArabic ? (form.form_title_ar || form.form_title || '') : (form.form_title || form.form_title_ar || ''))}</strong>
+        <button class="btn btn-sm" onclick="this.closest('.ds-consent-modal').remove()">✕</button>
+      </div>
+      <div class="ds-consent-preview">
+        <p style="white-space:pre-wrap;margin:0">${escapeHTML(form.content || '')}</p>
+        <div style="margin-top:12px;font-size:12px;color:var(--text-dim)">
+          <strong>${tr('Patient', 'المريض')}:</strong> ${escapeHTML(form.patient_name || '')}
+          <br><strong>${tr('Doctor', 'الطبيب')}:</strong> ${escapeHTML(form.doctor_name || '')}
+        </div>
+      </div>
+      <label style="font-size:12px;font-weight:700;margin-top:12px;display:block">${tr('Patient Signature', 'توقيع المريض')}</label>
+      <canvas id="dsConsentSigCanvas" width="560" height="180" class="ds-consent-canvas"></canvas>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:10px">
+        <input class="form-input" id="dsConsentWitness" placeholder="${tr('Witness name', 'اسم الشاهد')}">
+        <button class="btn" onclick="window.dsClearConsentSignature()" style="height:38px">${tr('Clear', 'مسح')}</button>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+        <button class="btn" onclick="this.closest('.ds-consent-modal').remove()">${tr('Cancel', 'إلغاء')}</button>
+        <button class="btn btn-primary" onclick="window.dsSignConsentFromStation(${safeId(formId)})">✍️ ${tr('Sign Consent', 'توقيع الإقرار')}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  setTimeout(window.dsInitConsentSignatureCanvas, 0);
+};
+
+window.dsInitConsentSignatureCanvas = function() {
+  const canvas = document.getElementById('dsConsentSigCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#111827';
+  let drawing = false;
+  const point = e => {
+    const rect = canvas.getBoundingClientRect();
+    return { x: (e.clientX - rect.left) * (canvas.width / rect.width), y: (e.clientY - rect.top) * (canvas.height / rect.height) };
+  };
+  canvas.onpointerdown = e => { drawing = true; canvas.setPointerCapture(e.pointerId); const p = point(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); };
+  canvas.onpointermove = e => { if (!drawing) return; const p = point(e); ctx.lineTo(p.x, p.y); ctx.stroke(); };
+  canvas.onpointerup = () => { drawing = false; };
+  canvas.onpointercancel = () => { drawing = false; };
+};
+
+window.dsClearConsentSignature = function() {
+  const canvas = document.getElementById('dsConsentSigCanvas');
+  if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+};
+
+window.dsSignConsentFromStation = async function(formId) {
+  const canvas = document.getElementById('dsConsentSigCanvas');
+  const signature = canvas ? canvas.toDataURL('image/png') : '';
+  const witnessName = document.getElementById('dsConsentWitness')?.value || '';
+  try {
+    await API.put(`/api/consent-forms/${formId}/sign`, {
+      patient_signature: signature,
+      witness_name: witnessName
+    });
+    showToast(tr('Consent signed', 'تم توقيع الإقرار'));
+    document.querySelector('.ds-consent-modal')?.remove();
+    window.dsSwitchTab('consents');
+  } catch (e) {
+    showToast(e?.message || tr('Failed to sign consent', 'فشل توقيع الإقرار'), 'error');
   }
 };
 
@@ -1857,5 +2099,3 @@ window.dsSaveFamilyHistory = async function(pid) {
     window.dsSwitchTab('history_ext');
   } catch (e) { showToast(e?.message || tr('Error', 'خطأ'), 'error'); }
 };
-
-

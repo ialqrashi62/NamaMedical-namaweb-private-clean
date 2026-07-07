@@ -4,7 +4,7 @@
  * E4 — Radiology (RIS + PACS metadata) STATIC code-guard test.
  * DB-free. Reads server.js + migrations as text and asserts the security
  * invariants: explicit tenant predicate on every E4 query, FAIL-CLOSED null
- * tenant, critical-sign fail-closed, prior-compare signed-only, MWL gated,
+ * tenant, critical-sign fail-closed, prior-compare signed-only, local MWL
  * images only via guarded phi-files (no public webroot), FORCE RLS canonical
  * on new tables, idempotent migrations.
  *
@@ -122,9 +122,11 @@ chk('prior_study_id must be signed when referenced', s.includes("status='Signed'
   chk('guarded phi-files endpoint still present', s.includes("app.get('/api/phi-files/:id', requireAuth"));
 }
 
-// ---- MWL GATED, no external connection ----
-chk('MWL gated by RAD_MWL_ENABLED', s.includes('RAD_MWL_ENABLED') && s.includes("if (!RAD_MWL_ENABLED) return res.status(503)"));
+// ---- MWL local worklist, no external connection ----
+chk('MWL keeps RAD_MWL_ENABLED as external-connection flag', s.includes('RAD_MWL_ENABLED') && s.includes('external_mwl_enabled'));
+chk('MWL does not 503 when external MWL is disabled', !s.includes("if (!RAD_MWL_ENABLED) return res.status(503)"));
 chk('MWL serves only local scheduled exams (no PACS pull)', /FROM rad_exams[\s\S]{0,200}state IN \('Scheduled','Arrived'\)/.test(s.replace(/\n/g, ' ')));
+chk('MWL has legacy radiology order fallback', s.includes('legacy_radiology_orders') && s.includes('FROM lab_radiology_orders o'));
 chk('MWL audited', s.includes("'READ_RAD_MWL'"));
 
 // ---- audit actions present ----

@@ -43,7 +43,7 @@ const lisRoutes = (s.match(/app\.(get|post|put)\('\/api\/lab\/(samples|results|h
 chk('11 LIS routes guarded with requireAuth+requireTenantScope', lisRoutes.length === 11);
 
 console.log('[4] explicit tenant_id predicate (defense-in-depth)');
-chk('samples select tenant_id=$', has('FROM lab_samples s LEFT JOIN patients p ON s.patient_id = p.id WHERE s.tenant_id = $1'));
+chk('samples select tenant_id=$', has('FROM lab_samples s') && has('WHERE s.tenant_id = $1'));
 chk('sample fetch tenant predicate', has('SELECT * FROM lab_samples WHERE id=$1 AND tenant_id=$2'));
 chk('results insert stamps tenant_id', has('INSERT INTO lab_results') && has('tenant_id, facility_id, lab_sample_id'));
 chk('qc list tenant predicate', has('FROM lab_qc WHERE tenant_id=$1'));

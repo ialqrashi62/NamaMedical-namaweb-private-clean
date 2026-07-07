@@ -8,7 +8,7 @@
  *   - report SIGN is FAIL-CLOSED when critical without documented notification
  *   - prior-compare returns ONLY signed priors within the same tenant + modality
  *   - DICOM study metadata is tenant-scoped; NO public image path (phi-files only)
- *   - MWL is GATED (RAD_MWL_ENABLED) and serves only local scheduled exams
+ *   - MWL serves only local scheduled exams; RAD_MWL_ENABLED only flags external wiring
  *   - cross-tenant + null-tenant access is denied (fail-closed)
  * Also runs the e4 migrations against a mock pg client to assert up/validate/down
  * are idempotent (re-running up twice is safe) and down is clean.
@@ -172,10 +172,9 @@ function hRegisterStudy(db, tenantId, body, phiFiles) {
 }
 // --- handler: MWL (gated) ---
 function hMwl(db, tenantId, mwlEnabled) {
-    if (!mwlEnabled) return { status: 503, gated: true };
     if (!tenantId) return { status: 403 };
     const rows = db.rad_exams.filter(e => e.tenant_id === tenantId && ['Scheduled', 'Arrived'].includes(e.state));
-    return { status: 200, worklist: rows };
+    return { status: 200, worklist: rows, external_mwl_enabled: !!mwlEnabled, external_connection: false };
 }
 
 // ============================================================================
@@ -269,15 +268,16 @@ console.log(`\n${BOLD}[4] DICOM study metadata isolation (no bytes / no public p
 }
 
 // ============================================================================
-// [5] MWL gated (no external connection) + tenant-scoped
+// [5] MWL local worklist (no external connection) + tenant-scoped
 // ============================================================================
-console.log(`\n${BOLD}[5] MWL gated${RESET}`);
+console.log(`\n${BOLD}[5] MWL local worklist${RESET}`);
 {
     const db = freshDb();
     hSchedule(db, 1, { rad_order_id: 1, modality: 'CT' });
-    assert(hMwl(db, 1, false).status === 503, 'MWL disabled by default -> 503 (gated)');
+    const local = hMwl(db, 1, false);
+    assert(local.status === 200 && local.external_connection === false, 'MWL disabled externally still serves local worklist');
     const en = hMwl(db, 1, true);
-    assert(en.status === 200 && en.worklist.every(e => e.tenant_id === 1), 'MWL when enabled serves only tenant1 local scheduled exams');
+    assert(en.status === 200 && en.worklist.every(e => e.tenant_id === 1), 'MWL serves only tenant1 local scheduled exams');
     assert(hMwl(db, null, true).status === 403, 'MWL enabled but null tenant -> 403 (fail-closed)');
 }
 
