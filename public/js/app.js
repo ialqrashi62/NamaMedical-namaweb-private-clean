@@ -33,10 +33,10 @@ let facilityType = 'general_hospital';
 
 const FACILITY_ALLOWED = {
   medical_city: null, // all allowed
-  general_hospital: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 30, 33, 34, 42, 43, 45, 46],
-  specialized_hospital: [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 13, 14, 15, 17, 18, 20, 34, 42, 45, 46],
-  tertiary_hospital: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 30, 33, 34, 42, 43, 45, 46],
-  polyclinic: [0, 1, 2, 3, 4, 6, 8, 9, 13, 14, 15, 20, 34, 42, 43, 45, 46],
+  general_hospital: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 30, 33, 34, 42, 43, 45, 46, 47],
+  specialized_hospital: [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 13, 14, 15, 17, 18, 20, 34, 42, 45, 46, 47],
+  tertiary_hospital: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 30, 33, 34, 42, 43, 45, 46, 47],
+  polyclinic: [0, 1, 2, 3, 4, 6, 8, 9, 13, 14, 15, 20, 34, 42, 43, 45, 46, 47],
   phc: [0, 1, 2, 3, 4, 6, 14, 15, 33, 34],
   specialty_center: [0, 1, 2, 3, 4, 6, 8, 14, 15, 20, 34, 43],
   diagnostic_center: [3, 4, 14, 15],
@@ -11922,6 +11922,11 @@ let settingsTab = 'hospital';
 async function renderSettings(el) {
   const content = el;
 
+  const role = getCurrentUserRole();
+  const isAdmin = role === 'Admin';
+  const permissions = getCurrentUserPermissions();
+  const canReadAudit = isAdmin || permissions.includes('audit.read') || permissions.includes('46');
+
   // Show premium loading skeletons instantly
   content.innerHTML = `
     <div class="flex justify-between items-end mb-6">
@@ -11972,6 +11977,9 @@ async function renderSettings(el) {
       ]);
     } else if (settingsTab === 'compliance') {
       window.integrationsList = await API.get('/api/settings/integrations').catch(() => []);
+    } else if (settingsTab === 'audit') {
+      auditLogs = await API.get('/api/admin/audit-trail?limit=1000').catch(() => []);
+      window._fullAuditLogs = auditLogs;
     }
   } catch (e) {
     content.innerHTML = `
@@ -12012,6 +12020,11 @@ async function renderSettings(el) {
       <button class="px-4 py-2 font-bold rounded-lg transition-all ${settingsTab === 'compliance' ? 'bg-primary text-white shadow-md' : 'text-on-surface-variant hover:bg-surface-container-high/50'}" onclick="settingsTab='compliance';navigateTo(42)">
         🇸🇦 ${tr('Saudi Compliance & Integrations', 'الامتثال والتكامل السعودي')}
       </button>
+      ${canReadAudit ? `
+      <button class="px-4 py-2 font-bold rounded-lg transition-all ${settingsTab === 'audit' ? 'bg-primary text-white shadow-md' : 'text-on-surface-variant hover:bg-surface-container-high/50'}" onclick="settingsTab='audit';navigateTo(42)">
+        🔍 ${tr('Audit Trail Viewer', 'عارض سجل التدقيق')}
+      </button>
+      ` : ''}
     </div>
 
     <div class="tab-pane-content">
@@ -12372,18 +12385,97 @@ async function renderSettings(el) {
                       <span class="text-on-surface-variant">${tr('Last Sync', 'آخر تزامن')}:</span>
                       <span>${item.last_sync ? new Date(item.last_sync).toLocaleDateString('ar-SA') : tr('Never', 'لم يتم')}</span>
                     </div>
-                    <button class="btn btn-sm btn-secondary w-full mt-3" onclick="openIntegrationConfig('${escapeHTML(item.integration_name)}')">
-                      ⚙️ ${tr('Configure', 'ضبط الإعدادات')}
-                    </button>
+                    <div class="flex justify-between items-center mt-1">
+                      <span class="text-on-surface-variant text-xs">${tr('Connection State', 'حالة الاتصال')}:</span>
+                      <span id="ping_state_${escapeHTML(item.integration_name)}" class="px-2 py-0.5 rounded text-[10px] bg-outline-variant/30 text-on-surface-variant font-bold">${tr('Not Checked', 'لم يتم الفحص')}</span>
+                    </div>
+                    <div class="flex gap-2 mt-3">
+                      <button class="btn btn-sm btn-secondary flex-1" onclick="openIntegrationConfig('${escapeHTML(item.integration_name)}')">
+                        ⚙️ ${tr('Configure', 'ضبط الإعدادات')}
+                      </button>
+                      <button class="btn btn-sm flex-1" style="background:var(--primary-container);color:var(--on-primary-container)" onclick="pingIntegration('${escapeHTML(item.integration_name)}')">
+                        ⚡ ${tr('Ping', 'فحص')}
+                      </button>
+                    </div>
                   </div>
                 </div>
               `).join('')}
             </div>
           </div>
         </div>
+      ` : settingsTab === 'audit' ? `
+        <div class="space-y-md">
+          <div class="glass-card glass-card-premium p-6 rounded-2xl">
+            <h4 class="font-title-lg text-title-lg text-primary mb-4">🔍 ${tr('Audit Trail Search & Export', 'البحث والتصدير في سجل تدقيق النظام')}</h4>
+            <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+              <input class="form-input" id="auditSearchInput" placeholder="${tr('Search by user, action or details...', 'بحث بالمستخدم، الحركة أو التفاصيل...')}" style="max-width:300px" oninput="window.filterAuditLogs()">
+              <select class="form-input" id="auditModuleFilter" style="max-width:200px" onchange="window.filterAuditLogs()">
+                <option value="">${tr('All Modules', 'كل الأقسام')}</option>
+                ${[...new Set((window._fullAuditLogs || []).map(l => l.module))].map(mod => `<option value="${escapeHTML(mod)}">${escapeHTML(mod)}</option>`).join('')}
+              </select>
+              <button class="btn btn-sm" onclick="exportToCSV(window._filteredAuditLogs||window._fullAuditLogs||[], 'system_audit_trail')" style="background:#e0f7fa;color:#00838f">📥 ${tr('Export to CSV', 'تصدير كـ CSV')}</button>
+            </div>
+            
+            <div class="overflow-x-auto max-h-[500px]">
+              <table class="w-full text-right divide-y divide-outline-variant/30 text-xs" id="auditLogsTable">
+                <thead class="bg-surface-container-low font-label-md text-on-surface-variant">
+                  <tr>
+                    <th class="p-3">${tr('User', 'المستخدم')}</th>
+                    <th class="p-3">${tr('Module', 'القسم')}</th>
+                    <th class="p-3">${tr('Action', 'الحركة')}</th>
+                    <th class="p-3">${tr('Context / Details', 'التفاصيل والسياق')}</th>
+                    <th class="p-3">${tr('IP Address', 'عنوان IP')}</th>
+                    <th class="p-3">${tr('Timestamp', 'الوقت والتاريخ')}</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-outline-variant/10" id="auditLogsTableBody">
+                  <!-- Dynamic content -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       ` : ''}
     </div>
   `;
+
+  // Global action to filter logs
+  window.filterAuditLogs = () => {
+    const q = (document.getElementById('auditSearchInput')?.value || '').toLowerCase();
+    const mod = document.getElementById('auditModuleFilter')?.value || '';
+    const logs = window._fullAuditLogs || [];
+    const filtered = logs.filter(log => {
+      const uMatch = (log.user_name || log.user_id || '').toLowerCase().includes(q);
+      const aMatch = (log.action || '').toLowerCase().includes(q);
+      const dMatch = (typeof log.details === 'object' ? JSON.stringify(log.details) : String(log.details || '')).toLowerCase().includes(q);
+      const mMatch = !mod || log.module === mod;
+      return (uMatch || aMatch || dMatch) && mMatch;
+    });
+    window._filteredAuditLogs = filtered;
+
+    const tbody = document.getElementById('auditLogsTableBody');
+    if (!tbody) return;
+    if (!filtered.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-on-surface-variant">${tr('No matching logs found', 'لم يتم العثور على سجلات مطابقة')}</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = filtered.map(log => `
+      <tr class="hover:bg-primary/5 transition-colors">
+        <td class="p-3 font-bold text-primary">${escapeHTML(log.user_name || log.user_id || '—')}</td>
+        <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] bg-secondary/10 text-secondary font-bold">${escapeHTML(log.module)}</span></td>
+        <td class="p-3">${getActionBadge(log.action)}</td>
+        <td class="p-3 text-on-surface-variant max-w-xs truncate" title="${escapeHTML(typeof log.details === 'object' ? JSON.stringify(log.details) : String(log.details || ''))}">${escapeHTML(typeof log.details === 'object' ? JSON.stringify(log.details) : String(log.details || ''))}</td>
+        <td class="p-3 font-mono text-[11px]">${escapeHTML(log.ip_address || '—')}</td>
+        <td class="p-3 text-on-surface-variant">${new Date(log.created_at).toLocaleString('ar-SA')}</td>
+      </tr>
+    `).join('');
+  };
+
+  if (settingsTab === 'audit') {
+    window.filterAuditLogs();
+  }
+}
 }
 
 window.toggleIntegration = async (name, enabled) => {
@@ -12404,6 +12496,33 @@ window.toggleIntegration = async (name, enabled) => {
     navigateTo(currentPage);
   } catch (e) {
     showToast(tr('Error', 'خطأ'), 'error');
+  }
+};
+
+window.pingIntegration = async (name) => {
+  const badge = document.getElementById(`ping_state_${name}`);
+  if (badge) {
+    badge.className = 'px-2 py-0.5 rounded text-[10px] bg-warning-container text-on-warning-container font-bold';
+    badge.innerText = tr('Checking...', 'جاري الفحص...');
+  }
+  try {
+    const res = await API.post('/api/settings/integrations/ping', { integration_name: name });
+    if (badge) {
+      if (res.success) {
+        badge.className = 'px-2 py-0.5 rounded text-[10px] bg-success text-white font-bold';
+        badge.innerText = tr('Connected', 'متصل');
+      } else {
+        badge.className = 'px-2 py-0.5 rounded text-[10px] bg-error text-white font-bold';
+        badge.innerText = tr('Failed', 'فشل الاتصال');
+        showToast(res.message || tr('Connection failed', 'فشل الاتصال'), 'error');
+      }
+    }
+  } catch (e) {
+    if (badge) {
+      badge.className = 'px-2 py-0.5 rounded text-[10px] bg-error text-white font-bold';
+      badge.innerText = tr('Error', 'خطأ');
+    }
+    showToast(e.message || tr('Connection error', 'خطأ في الاتصال'), 'error');
   }
 };
 

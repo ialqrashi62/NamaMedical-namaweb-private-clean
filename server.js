@@ -1557,6 +1557,71 @@ app.post('/api/insurance/eligibility', requireAuth, requireRole(...E11_INS_ROLES
     } catch (e) { return e11Err(res, e); }
 });
 
+// NPHIES Aliases for eligibility checks
+app.get('/api/nphies/eligibility', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, async (req, res) => {
+    try {
+        const tenantId = e11RequireTenant(req);
+        res.json((await pool.query('SELECT * FROM insurance_eligibility_checks WHERE tenant_id=$1 ORDER BY id DESC LIMIT 200', [tenantId])).rows);
+    } catch (e) { if (optionalReadFallback(res, e)) return; return e11Err(res, e); }
+});
+
+app.post('/api/nphies/eligibility', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, async (req, res) => {
+    try {
+        const tenantId = e11RequireTenant(req);
+        const patientId = e11IntId(req.body.patient_id);
+        const companyId = e11IntId(req.body.insurance_company_id);
+        const policyNumber = String(req.body.policy_number || '');
+        if (patientId) {
+            const p = await pool.query('SELECT id FROM patients WHERE id=$1 AND tenant_id=$2', [patientId, tenantId]);
+            if (!p.rows.length) return res.status(404).json({ error: 'Patient not found' });
+        }
+        if (companyId) {
+            const c = await pool.query('SELECT id FROM insurance_companies WHERE id=$1 AND tenant_id=$2', [companyId, tenantId]);
+            if (!c.rows.length) return res.status(404).json({ error: 'Insurance company not found' });
+        }
+        const intent = JSON.stringify({ patient_id: patientId, insurance_company_id: companyId, policy_number: policyNumber, ts: new Date().toISOString() });
+        const ins = await pool.query(
+            `INSERT INTO insurance_eligibility_checks (tenant_id, patient_id, insurance_company_id, policy_number, status, nphies_request_json, checked_by)
+             VALUES ($1,$2,$3,$4,'pending',$5,$6) RETURNING id`,
+            [tenantId, patientId, companyId, policyNumber, intent, req.session.user.id]);
+        const checkId = ins.rows[0].id;
+        logAudit(req.session.user.id, req.session.user.display_name, 'INSURANCE_ELIGIBILITY_CHECK', 'Insurance', `Eligibility #${checkId} (patient ${patientId})`, req.ip);
+        
+        const settings = (await pool.query('SELECT * FROM integration_settings WHERE tenant_id=$1 AND integration_name=$2', [tenantId, 'NPHIES'])).rows[0];
+        const isNphiesEnabled = e11NphiesEnabled() && settings && settings.is_enabled === 1 && settings.api_key && settings.api_secret && settings.endpoint_url;
+
+        if (!isNphiesEnabled) {
+            return res.status(503).json({ error: 'NPHIES integration disabled', gated: true, eligibility_id: checkId, status: 'pending' });
+        }
+        
+        const nphiesClient = require('./nphies_client');
+        const patient = patientId ? (await pool.query('SELECT * FROM patients WHERE id=$1 AND tenant_id=$2', [patientId, tenantId])).rows[0] : null;
+        const company = companyId ? (await pool.query('SELECT * FROM insurance_companies WHERE id=$1 AND tenant_id=$2', [companyId, tenantId])).rows[0] : null;
+        
+        const bundle = nphiesClient.buildEligibilityMessage({ patient, company, policy: policyNumber });
+        const client = new nphiesClient.NphiesClient({
+            endpointUrl: settings.endpoint_url,
+            apiKey: settings.api_key,
+            apiSecret: settings.api_secret,
+            enabled: true,
+            fetchImpl: fetch
+        });
+        
+        const result = await client.checkEligibility(bundle);
+        const finalStatus = result.ok ? 'eligible' : 'ineligible';
+        const responseJson = JSON.stringify(result.body);
+        
+        await pool.query(
+            `UPDATE insurance_eligibility_checks 
+             SET status=$1, nphies_request_json=$2, nphies_response_json=$3 
+             WHERE id=$4 AND tenant_id=$5`,
+            [finalStatus, JSON.stringify(bundle), responseJson, checkId, tenantId]
+        );
+        
+        return res.json({ success: result.ok, eligibility_id: checkId, status: finalStatus, response: result.body });
+    } catch (e) { return e11Err(res, e); }
+});
+
 // ----- Pre-authorization workflow (request -> approved/denied/partial; server-authoritative) -----
 app.get('/api/insurance/pre-auth', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, async (req, res) => {
     try {
@@ -3947,6 +4012,52 @@ app.post('/api/settings/integrations', requireAuth, requireTenantContext, async 
 
         logAudit(req.session.user?.id, req.session.user?.display_name, 'UPDATE_INTEGRATION_SETTINGS', 'Settings', `Updated integration ${integration_name} settings`, req.ip);
         res.json({ success: true });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.post('/api/settings/integrations/ping', requireAuth, requireTenantContext, async (req, res) => {
+    try {
+        const tenantId = req.tenantId;
+        const { integration_name } = req.body;
+        if (!integration_name) return res.status(400).json({ error: 'Missing integration_name' });
+
+        const settings = (await pool.query('SELECT * FROM integration_settings WHERE tenant_id = $1 AND integration_name = $2', [tenantId, integration_name])).rows[0];
+        if (!settings || !settings.endpoint_url) {
+            return res.status(400).json({ error: 'No endpoint URL configured for this integration' });
+        }
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+        try {
+            const response = await fetch(settings.endpoint_url, {
+                method: 'HEAD',
+                signal: controller.signal
+            }).catch(async (e) => {
+                return await fetch(settings.endpoint_url, {
+                    method: 'GET',
+                    signal: controller.signal
+                });
+            });
+            
+            clearTimeout(timeoutId);
+
+            return res.json({
+                success: response.ok,
+                status: response.status,
+                statusText: response.statusText,
+                message: `Connection successful: ${response.status} ${response.statusText}`
+            });
+        } catch (fetchError) {
+            clearTimeout(timeoutId);
+            return res.json({
+                success: false,
+                message: fetchError.name === 'AbortError' ? 'Connection timed out (3s)' : `Connection failed: ${fetchError.message}`
+            });
+        }
     } catch (e) {
         console.error(e);
         res.status(500).json({ error: 'Server error' });
