@@ -1630,7 +1630,7 @@ app.get('/api/insurance/pre-auth', requireAuth, requireRole(...E11_INS_ROLES), r
     } catch (e) { if (optionalReadFallback(res, e)) return; return e11Err(res, e); }
 });
 
-app.post('/api/insurance/pre-auth', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, async (req, res) => {
+app.post('/api/insurance/pre-auth', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e11RequireTenant(req);
         const patientId = e11IntId(req.body.patient_id);
@@ -1700,7 +1700,7 @@ app.post('/api/insurance/pre-auth', requireAuth, requireRole(...E11_INS_ROLES), 
 });
 
 // pre-auth decision — server-authoritative state machine (requested -> approved/denied/partial)
-app.put('/api/insurance/pre-auth/:id/decision', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, async (req, res) => {
+app.put('/api/insurance/pre-auth/:id/decision', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const tenantId = e11RequireTenant(req);
@@ -1907,7 +1907,7 @@ app.get('/api/insurance/claims/:id/lines', requireAuth, requireRole(...E11_INS_R
     } catch (e) { return e11Err(res, e); }
 });
 
-app.post('/api/insurance/claims/:id/lines', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, async (req, res) => {
+app.post('/api/insurance/claims/:id/lines', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e11RequireTenant(req);
         const claimId = e11IntId(req.params.id);
@@ -2007,7 +2007,7 @@ app.post('/api/insurance/payer-pricing', requireAuth, requireRole(...E11_INS_ROL
 });
 
 // ----- NPHIES submission (GATED — 503 stub when NPHIES_ENABLED off; records submission intent) -----
-app.post('/api/nphies/submit-claim/:id', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, async (req, res) => {
+app.post('/api/nphies/submit-claim/:id', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const tenantId = e11RequireTenant(req);
@@ -13318,7 +13318,7 @@ app.get('/api/finance/daily-close', requireAuth, requireRole('finance', 'account
         res.json((await pool.query('SELECT * FROM daily_close WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 30', [tenantId])).rows);
     } catch (e) { e10Err(res, e); }
 });
-app.post('/api/finance/daily-close', requireAuth, requireRole('finance', 'accounts', 'invoices'), requireTenantScope, async (req, res) => {
+app.post('/api/finance/daily-close', requireAuth, requireRole('finance', 'accounts', 'invoices'), requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e10RequireTenant(req); // E10: fail-closed; aggregate only THIS tenant's invoices (no cross-tenant leak)
         const today = new Date().toISOString().split('T')[0];
@@ -15493,7 +15493,7 @@ app.get('/api/pharmacy/expiring', requireAuth, requireRole('pharmacy'), requireT
 });
 
 // ===== INVOICE CANCEL (Credit Note) =====
-app.post('/api/invoices/cancel/:id', requireAuth, requireRole('invoices', 'accounts'), requireTenantScope, requirePermission('invoices:cancel'), async (req, res) => {
+app.post('/api/invoices/cancel/:id', requireAuth, requireRole('invoices', 'accounts'), requireTenantScope, requirePermission('invoices:cancel'), idempotencyGuard, async (req, res) => {
     try {
         const { reason } = req.body;
         // --- TENANT SCOPE: verify invoice belongs to current tenant before cancel (IDOR prevention) ---
@@ -19746,7 +19746,7 @@ app.get('/api/finance/ap', requireAuth, requireRole('finance', 'accounts', 'admi
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/finance/ap', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, async (req, res) => {
+app.post('/api/finance/ap', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { vendor_id, vendor_name, invoice_number, invoice_date, due_date, po_reference, description, subtotal, vat_amount, total_amount, gl_account_code, cost_center, notes } = req.body;
@@ -19838,7 +19838,7 @@ app.get('/api/finance/ar', requireAuth, requireRole('finance', 'accounts', 'admi
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/finance/ar', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, async (req, res) => {
+app.post('/api/finance/ar', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { patient_id, patient_name, payer_type = 'Patient', payer_id, payer_name, invoice_number, visit_id, admission_id, due_date, subtotal, discount_amount, insurance_share, patient_share, vat_amount, total_amount, notes } = req.body;
