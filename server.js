@@ -4557,7 +4557,7 @@ app.post('/api/clinical/records/:id/lock', requireAuth, requireRole('patients'),
 });
 
 // ===== INVOICES (Enhanced) =====
-app.post('/api/invoices/generate', requireAuth, requireRole('invoices', 'accounts'), async (req, res) => {
+app.post('/api/invoices/generate', requireAuth, requireRole('invoices', 'accounts'), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, items } = req.body;
         // --- TENANT SCOPE: verify patient belongs to current tenant ---
@@ -4603,7 +4603,7 @@ app.post('/api/invoices/generate', requireAuth, requireRole('invoices', 'account
     } catch (e) { sendBillingError(res, e); }
 });
 
-app.put('/api/invoices/:id/pay', requireAuth, requireRole('invoices', 'accounts'), async (req, res) => {
+app.put('/api/invoices/:id/pay', requireAuth, requireRole('invoices', 'accounts'), idempotencyGuard, async (req, res) => {
     try {
         const { payment_method } = req.body;
         // --- TENANT SCOPE: verify invoice belongs to current tenant before paying (IDOR prevention) ---
@@ -4621,7 +4621,7 @@ app.put('/api/invoices/:id/pay', requireAuth, requireRole('invoices', 'accounts'
 });
 
 // ===== MOYASAR PAYMENTS =====
-app.post('/api/payments/moyasar/initiate', requireAuth, requireRole('invoices', 'accounts'), async (req, res) => {
+app.post('/api/payments/moyasar/initiate', requireAuth, requireRole('invoices', 'accounts'), idempotencyGuard, async (req, res) => {
     try {
         const { invoiceId } = req.body;
         const { tenantId } = getRequestTenantContext(req);
@@ -16591,7 +16591,7 @@ app.post('/api/allergy-check', requireAuth, async (req, res) => {
 // ===== PARTIAL PAYMENT & REFUND =====
 // H-1: partial payment — amount validated server-side (fail-closed), outstanding computed from DB,
 // no overpayment, row-locked transaction (race-safe), tenant-scoped + RLS-bound under the manual client.
-app.put('/api/invoices/:id/partial-pay', requireAuth, requireRole('invoices', 'accounts'), requireTenantScope, async (req, res) => {
+app.put('/api/invoices/:id/partial-pay', requireAuth, requireRole('invoices', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const { amount_paid, payment_method } = req.body;
@@ -16629,7 +16629,7 @@ app.put('/api/invoices/:id/partial-pay', requireAuth, requireRole('invoices', 'a
 // H-2: refund — original invoice MUST belong to current tenant (IDOR fix), amount validated server-side,
 // refundable = amount_paid - already-refunded (server-computed, tenant-scoped), refund row stamped with
 // tenant_id/facility_id, row-locked transaction. No GL/journal/ZATCA/NPHIES (out of scope).
-app.post('/api/invoices/:id/refund', requireAuth, requireRole('invoices', 'accounts'), requireTenantScope, validateBody(RS.invoiceRefund), async (req, res) => {
+app.post('/api/invoices/:id/refund', requireAuth, requireRole('invoices', 'accounts'), requireTenantScope, validateBody(RS.invoiceRefund), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const { amount, reason } = req.body;
@@ -18935,6 +18935,7 @@ app.post('/api/nphies/remittance/:id/post-to-ar', requireAuth, requireRole('fina
         const id = parseInt(req.params.id);
         
         await client.query('BEGIN');
+        await client.query("SELECT set_config('app.tenant_id', $1, true)", [String(tid)]);
         
         const ra = (await client.query('SELECT * FROM nphies_remittance_advice WHERE id=$1 AND tenant_id=$2 FOR UPDATE', [id, tid])).rows[0];
         if (!ra) {
@@ -19685,6 +19686,15 @@ app.get('/api/clinical/icd10', requireAuth, async (req, res) => {
 async function ensureCOAAccount(tenantId, code, nameEn, nameAr, accountClass, client) {
     const db = client || pool;
     const cleanCode = String(code).trim();
+    let normalizedClass = accountClass;
+    if (accountClass) {
+        const lower = accountClass.toLowerCase();
+        if (lower === 'asset') normalizedClass = 'Asset';
+        else if (lower === 'liability') normalizedClass = 'Liability';
+        else if (lower === 'equity') normalizedClass = 'Equity';
+        else if (lower === 'revenue') normalizedClass = 'Revenue';
+        else if (lower === 'expense') normalizedClass = 'Expense';
+    }
     const existing = (await db.query(
         'SELECT id FROM finance_chart_of_accounts WHERE tenant_id = $1 AND account_code = $2',
         [tenantId, cleanCode]
@@ -19696,7 +19706,7 @@ async function ensureCOAAccount(tenantId, code, nameEn, nameAr, accountClass, cl
         `INSERT INTO finance_chart_of_accounts 
             (account_code, account_name_en, account_name_ar, parent_id, account_type, account_class, tenant_id)
          VALUES ($1, $2, $3, 0, $4, $4, $5) RETURNING id`,
-        [cleanCode, nameEn, nameAr, accountClass, tenantId]
+        [cleanCode, nameEn, nameAr, normalizedClass, tenantId]
     );
     return res.rows[0].id;
 }
