@@ -3865,7 +3865,7 @@ app.post('/api/finance/journal', requireAuth, requireRole('finance', 'accounts')
 
 // ----- General Ledger: POST a draft entry to the ledger — GATED by ACCOUNTING_POSTING_ENABLED -----
 // State machine: DRAFT -> POSTED. Posting is irreversible (immutable); re-posting => 409.
-app.post('/api/finance/journal/:id/post', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, async (req, res) => {
+app.post('/api/finance/journal/:id/post', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const tenantId = e10RequireTenant(req);
@@ -3901,7 +3901,7 @@ app.post('/api/finance/journal/:id/post', requireAuth, requireRole('finance', 'a
 });
 
 // ----- General Ledger: REVERSE a posted entry (the only mutation of a POSTED entry) -----
-app.post('/api/finance/journal/:id/reverse', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, async (req, res) => {
+app.post('/api/finance/journal/:id/reverse', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const tenantId = e10RequireTenant(req);
@@ -12499,7 +12499,7 @@ app.get('/api/zatca/invoices', requireAuth, requireRole('finance', 'accounts', '
     } catch (e) { e10Err(res, e); }
 });
 
-app.post('/api/zatca/generate', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, async (req, res) => {
+app.post('/api/zatca/generate', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e10RequireTenant(req);
         const invoiceId = e10IntId(req.body.invoice_id);
@@ -18903,7 +18903,7 @@ app.get('/api/nphies/remittance', requireAuth, requireRole('finance', 'accounts'
 });
 
 // POST /api/nphies/remittance — record a remittance advice (manual or from NPHIES response)
-app.post('/api/nphies/remittance', requireAuth, requireRole('finance', 'accounts', 'insurance'), requireTenantScope, async (req, res) => {
+app.post('/api/nphies/remittance', requireAuth, requireRole('finance', 'accounts', 'insurance'), requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { claim_id, payer_id, remittance_date, payment_amount = 0, adjustment_amount = 0,
@@ -19078,7 +19078,7 @@ app.get('/api/zatca/credit-notes', requireAuth, requireRole('finance', 'accounts
 });
 
 // POST /api/zatca/credit-note — generate credit note for an invoice
-app.post('/api/zatca/credit-note', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, async (req, res) => {
+app.post('/api/zatca/credit-note', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { invoice_id, credit_reason = 'CANCEL', credit_reason_description, items_to_credit } = req.body;
@@ -19144,7 +19144,7 @@ app.post('/api/zatca/credit-note', requireAuth, requireRole('finance', 'accounts
 });
 
 // POST /api/zatca/credit-note/:id/submit — submit credit note to ZATCA (gated)
-app.post('/api/zatca/credit-note/:id/submit', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, async (req, res) => {
+app.post('/api/zatca/credit-note/:id/submit', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const id = parseInt(req.params.id);
@@ -19769,7 +19769,7 @@ app.post('/api/finance/ap', requireAuth, requireRole('finance', 'accounts'), req
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/finance/ap/:id/pay', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, async (req, res) => {
+app.post('/api/finance/ap/:id/pay', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const { tenantId: tid } = getRequestTenantContext(req);
@@ -19861,7 +19861,7 @@ app.post('/api/finance/ar', requireAuth, requireRole('finance', 'accounts'), req
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/finance/ar/:id/collect', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, async (req, res) => {
+app.post('/api/finance/ar/:id/collect', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const { tenantId: tid } = getRequestTenantContext(req);
