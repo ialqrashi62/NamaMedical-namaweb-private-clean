@@ -17817,6 +17817,17 @@ if (process.env.SUPER_ADMIN_ENABLED === 'true') {
 const { makePublicPlansRouter } = require('./plans');
 app.use('/api/public', makePublicPlansRouter({ pool }));
 
+// ===== CLINICAL CALCULATOR ROUTERS — Phase 2E2 (18 fns) + Phase 3 (48 fns across 26 engines) =====
+// Both routers are READ-ONLY clinical decision-support: no DB writes, no PHI, no PII.
+// requireAuth + requireTenantScope are applied INSIDE each router (router-level middleware).
+// Engine throws on validation error => translated to 400 with code='engine_error'.
+// Phase 2E2 lives at /api/calculators/*; Phase 3 (26 new engines) lives at /api/phase3/*.
+const { makeCalculatorsRouter } = require('./clinical_calculators_router');
+app.use('/api/calculators', makeCalculatorsRouter({ requireAuth, requireTenantScope }));
+
+const { makePhase3CalculatorsRouter } = require('./phase3_calculators_router');
+app.use('/api/phase3', makePhase3CalculatorsRouter({ requireAuth, requireTenantScope }));
+
 // ===== SaaS Batch 4A: Entitlements Runtime Resolver — OBSERVE-ONLY read surface, flag-gated =====
 // Inert unless ENTITLEMENTS_ENABLED=true (zero behavior change otherwise). No creation point is gated.
 // Read-only: Super Admin views the RESOLVED entitlements for a tenant. Fail-open if e25 catalog is absent.
