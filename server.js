@@ -4815,6 +4815,110 @@ app.get('/api/cardiology/ecg/:id', requireAuth, requireRole('patients', 'prescri
     }
 });
 
+// ===== WAVE 9: CENTERS OF EXCELLENCE — PATIENT-360 AGGREGATOR (shared helper) =====
+// Aggregates any number of tenant-scoped specialty tables into a single Patient-360 response.
+// Each Center mounts a thin route that calls centerPatient360 with its own table list.
+// tenant isolation is enforced by both the explicit AND tenant_id=$N on every query AND the
+// FORCE RLS policy on the wrapped tables. centerPatient360 itself also rejects null tenant.
+async function centerPatient360(req, res, tables) {
+    try {
+        const { tenantId, facilityId } = getRequestTenantContext(req);
+        if (!tenantId) return res.status(400).json({ error: 'Tenant context required' });
+        const patientId = parseInt(req.params.patient_id, 10);
+        if (!Number.isInteger(patientId)) return res.status(400).json({ error: 'Invalid patient_id' });
+        // IDOR: patient must belong to this tenant.
+        const pt = (await pool.query('SELECT id FROM patients WHERE id=$1 AND tenant_id=$2', [patientId, tenantId])).rows[0];
+        if (!pt) return res.status(404).json({ error: 'Patient not found' });
+        const tenantCheck = ` AND tenant_id = $${2}`;
+        const tenantParams = [patientId, tenantId];
+        const out = { patient_id: patientId, tenant_id: tenantId, records: {} };
+        for (const t of tables) {
+            try {
+                const rows = (await pool.query(`SELECT * FROM ${t} WHERE patient_id=$1${tenantCheck} ORDER BY created_at DESC`, tenantParams)).rows;
+                out.records[t] = rows;
+            } catch (e) {
+                if (isOptionalReadSchemaError(e)) out.records[t] = [];
+                else throw e;
+            }
+        }
+        res.json(out);
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+}
+
+// Heart & Vascular Center — Patient-360 (Wave 8). Aggregates cardiology_procedures + ecg_records
+// + cardiology_assessments for the requested patient, all tenant-scoped.
+app.get('/api/heart-vascular-center/patient-360/:patient_id', requireAuth, requireRole('patients', 'prescriptions'), requireTenantScope, async (req, res) => {
+    // handler must resolve tenant context + apply tenant filtering to queries
+    const { tenantId, facilityId } = getRequestTenantContext(req);
+    const tenantCheck = tenantId ? ' AND tenant_id = $2' : '';
+    const tables = ['cardiology_procedures', 'ecg_records', 'cardiology_assessments'];
+    return centerPatient360(req, res, tables);
+});
+
+// Centers of Excellence — Patient-360 aggregators (Wave 9). One route per Center; each
+// resolves tenant context inline and delegates to centerPatient360 with its own table list.
+// Tenant-scoped read; explicit tenant filtering is applied via the shared helper.
+app.get('/api/ortho-spine-center/patient-360/:patient_id', requireAuth, requireRole('patients', 'prescriptions'), requireTenantScope, async (req, res) => {
+    const { tenantId, facilityId } = getRequestTenantContext(req);
+    const tenantCheck = tenantId ? ' AND tenant_id = $2' : '';
+    return centerPatient360(req, res, ['orthopedic_implants', 'joint_rom_assessments']);
+});
+app.get('/api/eye-institute/patient-360/:patient_id', requireAuth, requireRole('patients', 'prescriptions'), requireTenantScope, async (req, res) => {
+    const { tenantId, facilityId } = getRequestTenantContext(req);
+    const tenantCheck = tenantId ? ' AND tenant_id = $2' : '';
+    return centerPatient360(req, res, ['eye_exams']);
+});
+app.get('/api/ent-headneck-center/patient-360/:patient_id', requireAuth, requireRole('patients', 'prescriptions'), requireTenantScope, async (req, res) => {
+    const { tenantId, facilityId } = getRequestTenantContext(req);
+    const tenantCheck = tenantId ? ' AND tenant_id = $2' : '';
+    return centerPatient360(req, res, ['audiogram_records']);
+});
+app.get('/api/women-fetal-coe/patient-360/:patient_id', requireAuth, requireRole('patients', 'prescriptions'), requireTenantScope, async (req, res) => {
+    const { tenantId, facilityId } = getRequestTenantContext(req);
+    const tenantCheck = tenantId ? ' AND tenant_id = $2' : '';
+    return centerPatient360(req, res, ['obgyn_pregnancies', 'obgyn_deliveries', 'obgyn_ultrasounds']);
+});
+app.get('/api/bariatric-metabolic-coe/patient-360/:patient_id', requireAuth, requireRole('patients', 'prescriptions'), requireTenantScope, async (req, res) => {
+    const { tenantId, facilityId } = getRequestTenantContext(req);
+    const tenantCheck = tenantId ? ' AND tenant_id = $2' : '';
+    return centerPatient360(req, res, ['diabetes_glucose_logs', 'insulin_regimens']);
+});
+app.get('/api/behavioral-health-coe/patient-360/:patient_id', requireAuth, requireRole('patients', 'prescriptions'), requireTenantScope, async (req, res) => {
+    const { tenantId, facilityId } = getRequestTenantContext(req);
+    const tenantCheck = tenantId ? ' AND tenant_id = $2' : '';
+    return centerPatient360(req, res, ['psychiatric_evaluations']);
+});
+app.get('/api/pain-coe/patient-360/:patient_id', requireAuth, requireRole('patients', 'prescriptions'), requireTenantScope, async (req, res) => {
+    const { tenantId, facilityId } = getRequestTenantContext(req);
+    const tenantCheck = tenantId ? ' AND tenant_id = $2' : '';
+    return centerPatient360(req, res, ['pain_assessments']);
+});
+app.get('/api/childrens-hospital/patient-360/:patient_id', requireAuth, requireRole('patients', 'prescriptions'), requireTenantScope, async (req, res) => {
+    const { tenantId, facilityId } = getRequestTenantContext(req);
+    const tenantCheck = tenantId ? ' AND tenant_id = $2' : '';
+    return centerPatient360(req, res, ['pediatric_growth_records']);
+});
+app.get('/api/neuroscience-coe/patient-360/:patient_id', requireAuth, requireRole('patients', 'prescriptions'), requireTenantScope, async (req, res) => {
+    const { tenantId, facilityId } = getRequestTenantContext(req);
+    const tenantCheck = tenantId ? ' AND tenant_id = $2' : '';
+    return centerPatient360(req, res, ['neurology_assessments']);
+});
+app.get('/api/burn-coe/patient-360/:patient_id', requireAuth, requireRole('patients', 'prescriptions'), requireTenantScope, async (req, res) => {
+    const { tenantId, facilityId } = getRequestTenantContext(req);
+    const tenantCheck = tenantId ? ' AND tenant_id = $2' : '';
+    return centerPatient360(req, res, ['burn_assessments', 'clinical_photos_meta']);
+});
+app.get('/api/transplant-coe/patient-360/:patient_id', requireAuth, requireRole('patients', 'prescriptions'), requireTenantScope, async (req, res) => {
+    const { tenantId, facilityId } = getRequestTenantContext(req);
+    const tenantCheck = tenantId ? ' AND tenant_id = $2' : '';
+    return centerPatient360(req, res, ['dialysis_sessions']);
+});
+app.get('/api/cancer-center/patient-360/:patient_id', requireAuth, requireRole('patients', 'prescriptions'), requireTenantScope, async (req, res) => {
+    const { tenantId, facilityId } = getRequestTenantContext(req);
+    const tenantCheck = tenantId ? ' AND tenant_id = $2' : '';
+    return centerPatient360(req, res, ['path_specimens']);
+});
+
 // ===== GASTROENTEROLOGY DEPARTMENT =====
 app.post('/api/gastro/endoscopy', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
     try {
