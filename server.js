@@ -17932,6 +17932,11 @@ app.use('/api/calculators', makeCalculatorsRouter({ requireAuth, requireTenantSc
 const { makePhase3CalculatorsRouter } = require('./phase3_calculators_router');
 app.use('/api/phase3', makePhase3CalculatorsRouter({ requireAuth, requireTenantScope }));
 
+// ===== Phase 3 Wave 5-8 (Batch 2): 47 new clinical engines from the Phase 3 Week bundle =====
+// Mounted at /api/phase3/v2/* to avoid shadowing the 26 endpoints in the legacy router.
+const { makePhase3V2Router } = require('./phase3_v2_calculators_router');
+app.use('/api/phase3/v2', makePhase3V2Router({ requireAuth, requireTenantScope }));
+
 // ===== SaaS Batch 4A: Entitlements Runtime Resolver — OBSERVE-ONLY read surface, flag-gated =====
 // Inert unless ENTITLEMENTS_ENABLED=true (zero behavior change otherwise). No creation point is gated.
 // Read-only: Super Admin views the RESOLVED entitlements for a tenant. Fail-open if e25 catalog is absent.
