@@ -3,14 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>جمانة الطبي - jumanaMedical ERP</title>
-    <meta name="description" content="jumanaMedical ERP - نظام جمانة الطبي لإدارة المستشفيات والعيادات والملفات الطبية الإلكترونية المتكاملة">
-    <meta name="keywords" content="جمانة الطبي, نظام جمانة, jumanaMedical, ERP طبي, إدارة مستشفيات, نظام عيادات, الملف الطبي الإلكتروني, الهيئة السعودية للتخصصات الصحية, نظام طبي متكامل, ZATCA, NPHIES">
+    <title>جمانة الطبي | نظام إدارة المستشفيات والملفات الطبية المتكامل</title>
+    <meta name="description" content="نظام جمانة الطبي المتكامل (jumanaMedical ERP) لإدارة المنشآت والعيادات الطبية والملفات الإلكترونية. حلول سحابية متقدمة وممتثلة لـ ZATCA و NPHIES وسباهي.">
+    <link rel="canonical" href="https://jumanasoft.com/" />
+    <meta name="robots" content="index, follow" />
     
     <!-- Open Graph / Facebook / WhatsApp -->
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://www.jumanasoft.com/">
-    <meta property="og:title" content="جمانة الطبي - jumanaMedical ERP">
+    <meta property="og:title" content="جمانة الطبي | نظام إدارة المستشفيات والملفات الطبية المتكامل">
     <meta property="og:description" content="نظام جمانة الطبي المتكامل لإدارة المستشفيات والعيادات والملفات الطبية والمالية.">
     <meta property="og:image" content="https://www.jumanasoft.com/img/og-preview.jpg">
 
@@ -20,6 +21,43 @@
     <meta property="twitter:title" content="جمانة الطبي - jumanaMedical ERP">
     <meta property="twitter:description" content="نظام جمانة الطبي المتكامل لإدارة المستشفيات والعيادات والملفات الطبية والمالية.">
     <meta property="twitter:image" content="https://www.jumanasoft.com/img/og-preview.jpg">
+
+    <!-- Schema JSON-LD -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "MedicalOrganization",
+          "@id": "https://jumanasoft.com/#organization",
+          "name": "جمانة الطبي",
+          "alternateName": "jumanaMedical ERP",
+          "url": "https://jumanasoft.com/",
+          "logo": "https://jumanasoft.com/img/logo.jpg",
+          "description": "نظام وطني سعودي متكامل لإدارة معلومات المستشفيات والملفات الطبية والمالية ممتثل لـ ZATCA ونفيس وسباهي."
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://jumanasoft.com/#website",
+          "url": "https://jumanasoft.com/",
+          "name": "جمانة الطبي",
+          "publisher": {
+            "@id": "https://jumanasoft.com/#organization"
+          }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://jumanasoft.com/#software",
+          "name": "جمانة الطبي ERP",
+          "applicationCategory": "BusinessApplication",
+          "operatingSystem": "All",
+          "url": "https://jumanasoft.com/",
+          "description": "حل سحابي متميز لإدارة الملفات الإلكترونية وعمليات المستشفيات والعيادات الطبية."
+        }
+      ]
+    }
+    </script>
+
     <link rel="stylesheet" href="/css/tailwind-compiled.css">
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&amp;family=IBM+Plex+Sans:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&amp;display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
@@ -130,11 +168,43 @@
     <script src="/js/appointments-queue.js"></script>
     <script src="/js/clinical-billing.js"></script>
     <script src="/js/enterprise-security.js"></script>
+    <!-- Stitch specialist stations (added 2026-07-22) -->
+    <script src="/js/orthopedics-station.js?v=20260722_1"></script>
+    <script src="/js/neurosurgery-station.js?v=20260722_1"></script>
+    <script src="/js/cardiothoracic-station.js?v=20260722_1"></script>
+    <script src="/js/ent-station.js?v=20260722_1"></script>
+    <script src="/js/ophthalmology-station.js?v=20260722_1"></script>
+    <script src="/js/urology-station.js?v=20260722_1"></script>
+    <script src="/js/plastic-surgery-station.js?v=20260722_1"></script>
+    <script src="/js/lab-station.js?v=20260722_1"></script>
+    <script src="/js/radiology-station.js?v=20260722_1"></script>
+    <script src="/js/functional-tests-station.js?v=20260722_1"></script>
+    <script src="/js/er-station.js?v=20260722_1"></script>
+    <script src="/js/icu-station.js?v=20260722_1"></script>
+    <script src="/js/anesthesia-station.js?v=20260722_1"></script>
+    <script src="/js/pacu-station.js?v=20260722_1"></script>
+    <script src="/js/nicu-station.js?v=20260722_1"></script>
+    <script src="/js/routing-patch.js?v=20260722_1"></script>
+    <!-- Stitch specialist stations - internal medicine (added 2026-07-22 batch 2) -->
+    <script src="/js/cardiology-station.js?v=20260722_1"></script>
+    <script src="/js/pulmonology-station.js?v=20260722_1"></script>
+    <script src="/js/gastro-station.js?v=20260722_1"></script>
+    <script src="/js/nephrology-station.js?v=20260722_1"></script>
+    <script src="/js/endocrine-station.js?v=20260722_1"></script>
+    <script src="/js/rheuma-station.js?v=20260722_1"></script>
+    <script src="/js/derm-station.js?v=20260722_1"></script>
+    <script src="/js/infectious-station.js?v=20260722_1"></script>
+    <script src="/js/oncology-station.js?v=20260722_1"></script>
+    <script src="/js/obgyn-peds-station.js?v=20260722_1"></script>
+    <script src="/js/critical-station.js?v=20260722_1"></script>
+    <script src="/js/diagnostics-station.js?v=20260722_1"></script>
+    <script src="/js/surgery-station.js?v=20260722_1"></script>
     <script src="/js/enterprise-contracts.js"></script>
     <script src="/js/mock-api-runtime.js"></script>
     <script src="/js/app.js?v=20260706_6"></script>
     <script src="/js/doctor-station.js?v=20260706_6"></script>
     <script src="/js/nursing-station.js?v=20260706_6"></script>
+    <script src="/js/phase3-engines-ui.js?v=20260723_1"></script>
     <script src="/js/onboarding-wizard.js"></script>
     <script src="/js/local-api-preview-ui.js"></script>
 </body>

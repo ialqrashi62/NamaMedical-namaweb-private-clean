@@ -33,12 +33,12 @@ let facilityType = 'general_hospital';
 
 const FACILITY_ALLOWED = {
   medical_city: null, // all allowed
-  general_hospital: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 30, 33, 34, 42, 43, 45, 46, 47],
-  specialized_hospital: [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 13, 14, 15, 17, 18, 20, 34, 42, 45, 46, 47],
-  tertiary_hospital: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 30, 33, 34, 42, 43, 45, 46, 47],
+  general_hospital: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 30, 33, 34, 42, 43, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75],
+  specialized_hospital: [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 13, 14, 15, 17, 18, 20, 34, 42, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75],
+  tertiary_hospital: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 30, 33, 34, 42, 43, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75],
   polyclinic: [0, 1, 2, 3, 4, 6, 8, 9, 13, 14, 15, 20, 34, 42, 43, 45, 46, 47],
   phc: [0, 1, 2, 3, 4, 6, 14, 15, 33, 34],
-  specialty_center: [0, 1, 2, 3, 4, 6, 8, 14, 15, 20, 34, 43],
+  specialty_center: [0, 1, 2, 3, 4, 6, 8, 14, 15, 20, 34, 43, 75],
   diagnostic_center: [3, 4, 14, 15],
   rehabilitation_center: [0, 1, 2, 14, 15, 24],
   dialysis_center: [0, 1, 2, 14, 15, 20],
@@ -106,7 +106,39 @@ const NAV_ITEMS = [
   // 46: Audit Trail viewer — compliance (renderAuditLog). Read-only; grant to auditor/compliance/admin only.
   { icon: '🔐', en: 'Audit Trail', ar: 'سجل التدقيق' },
   // 47: Specialties Panel — E1 clinical specialties exposed to sidebar.
-  { icon: '🔬', en: 'Specialties Panel', ar: 'لوحة التخصصات', hidden: false }
+  { icon: '🔬', en: 'Specialties Panel', ar: 'لوحة التخصصات', hidden: false },
+  // 48-62: Stitch specialist stations (added 2026-07-22)
+  { icon: '🦴', en: 'Orthopedics', ar: 'العظام' },
+  { icon: '🧠', en: 'Neurosurgery', ar: 'جراحة المخ' },
+  { icon: '🫀', en: 'Cardiothoracic', ar: 'جراحة القلب' },
+  { icon: '👂', en: 'ENT', ar: 'الأنف والأذن' },
+  { icon: '👁️', en: 'Ophthalmology', ar: 'العيون' },
+  { icon: '💧', en: 'Urology', ar: 'المسالك' },
+  { icon: '✨', en: 'Plastic Surgery', ar: 'التجميل' },
+  { icon: '📈', en: 'Functional Tests', ar: 'الفحوصات الوظيفية' },
+  { icon: '💉', en: 'Anesthesia', ar: 'التخدير' },
+  { icon: '🌿', en: 'PACU', ar: 'الإفاقة' },
+  { icon: '👶', en: 'NICU', ar: 'حضانة الأطفال' },
+  // 55-75: Extended Stitch specialist stations (added 2026-07-22 batch 2)
+  { icon: '🔪', en: 'General Surgery', ar: 'الجراحة العامة' },
+  { icon: '❤️', en: 'Cardiology', ar: 'أمراض القلب' },
+  { icon: '🫁', en: 'Pulmonology', ar: 'أمراض الجهاز التنفسي' },
+  { icon: '🥼', en: 'Gastroenterology', ar: 'الجهاز الهضمي والكبد' },
+  { icon: '🫘', en: 'Nephrology', ar: 'أمراض الكلى' },
+  { icon: '🦋', en: 'Endocrinology', ar: 'الغدد الصماء' },
+  { icon: '🦴', en: 'Rheumatology', ar: 'أمراض الروماتيزم' },
+  { icon: '🧴', en: 'Dermatology', ar: 'الأمراض الجلدية' },
+  { icon: '🦠', en: 'Infectious Disease', ar: 'الأمراض المعدية' },
+  { icon: '🎗️', en: 'Oncology', ar: 'الأورام' },
+  { icon: '🤰', en: 'OBGYN & Pediatrics', ar: 'النساء والأطفال' },
+  { icon: '🆘', en: 'Critical Care', ar: 'العناية الحرجة' },
+  { icon: '🩺', en: 'Diagnostics Hub', ar: 'مركز التشخيص' },
+  // 71-75 already named above; indexes confirmed
+  { icon: '👨‍⚕️', en: 'Doctor Hub', ar: 'محطة الطبيب الموحدة' },
+  { icon: '🧪', en: 'Lab Advanced', ar: 'المختبر المتقدم' },
+  { icon: '📡', en: 'Radiology Advanced', ar: 'الأشعة المتقدمة' },
+  // 75: Phase 3 Engines gallery — 48 clinical calculators across 19 specialties (endocrinology, pulmonary, GI, nephrology, rheumatology, critical care, OBGYN, dermatology, trauma, neonatal, palliative, oncology, psychiatry, ENT/ophthalmology, urology, heme/ID, preop, nutrition). Wired via routing-patch.js -> Phase3EnginesUI.renderWithSearch.
+  { icon: '🧮', en: 'Phase 3 Engines', ar: 'محركات المرحلة 3' }
 ];
 
 const NAV_ACCESS_RULES = {
@@ -125,6 +157,11 @@ const NAV_ACCESS_RULES = {
   47: {
     permissionKeys: ['47', 'specialties', 'clinical.specialties.view'],
     roles: ['Admin', 'Doctor', 'OB/GYN', 'Neonatologist', 'Pathologist', 'Radiologist']
+  },
+  // 75: Phase 3 Engines gallery — admin/clinical roles only. Read-only calculators.
+  75: {
+    permissionKeys: ['75', 'phase3', 'clinical.calculators.view', 'clinical.engines.view'],
+    roles: ['Admin', 'Doctor', 'Specialist', 'Nurse', 'Pharmacist', 'Resident']
   }
 };
 
@@ -341,6 +378,7 @@ function buildNav() {
     38,  // Mortuary (خدمة الوفيات)
     43,  // Dental (الأسنان)
     47,  // Specialties Panel (لوحة التخصصات)
+    75,  // Phase 3 Engines (محركات المرحلة 3)
     42   // Settings (الإعدادات)
   ];
   const allIndices = [...CLINICAL_ORDER];
@@ -12476,7 +12514,7 @@ async function renderSettings(el) {
     window.filterAuditLogs();
   }
 }
-}
+
 
 window.toggleIntegration = async (name, enabled) => {
   const item = (window.integrationsList || []).find(i => i.integration_name === name);
