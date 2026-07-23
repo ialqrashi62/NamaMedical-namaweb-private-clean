@@ -1,6 +1,9 @@
 // phase3_calculators_router.js
-// REST API router for the 26 NEW clinical engines created in Phase 3 batches 11-17.
-// Each engine is pure deterministic, throws on invalid input, and returns a standard envelope:
+// REST API router for the 110 NEW clinical engines created across Phase 3 batches
+// (B11-B17 = 48 + Wave 5 critical_care = 9 + Wave 4 diagnostics = 9 + Wave 1
+// internal_medicine batches 1-4 = 25 + Wave 3 obgyn_peds = 9 + rare_specialized
+// = 12 + Wave 2 surgical = 10). All pure deterministic, throw on invalid input,
+// return a standard envelope:
 //   { ok: true,  function, input, ...engineResult }
 //   { ok: false, error, code }
 //
@@ -98,6 +101,17 @@ const uro = require('./urology_engine');
 const heme = require('./heme_infectious_engine');
 const preop = require('./surgical_preop_engine');
 const nutrition = require('./nutrition_malnutrition_engine');
+
+// ====== Additional wave engines (Waves 1-5, 8-10) mounted under /api/phase3 ======
+const wave5cc = require('./critical_care_wave5_engine');
+const wave4dx = require('./diagnostics_wave4_engine');
+const imWave1 = require('./internal_medicine_wave1_engine');
+const imWave1b2 = require('./internal_medicine_wave1_engine_batch2');
+const imWave1b3 = require('./internal_medicine_wave1_engine_batch3');
+const imWave1b4 = require('./internal_medicine_wave1_engine_batch4');
+const obgynWave3 = require('./obgyn_peds_wave3_engine');
+const rareSpec = require('./rare_specialized_engine');
+const surgWave2 = require('./surgical_wave2_engine');
 
 // Run engine + standard envelope
 function runOr400(res, fn, args, functionName) {
@@ -211,11 +225,112 @@ function makePhase3CalculatorsRouter({ requireAuth, requireTenantScope }) {
   router.post('/nutrition/bee', (req, res) => runOr400(res, nutrition.harrisBenedictBEE, req.body, 'harrisBenedictBEE'));
   router.post('/nutrition/nrs2002', (req, res) => runOr400(res, nutrition.nrs2002, req.body, 'nrs2002'));
 
+  // ====== Critical Care & Emergency — Wave 5 (9) ======
+  router.post('/stroke/tpa-eligibility', (req, res) => runOr400(res, wave5cc.checkTpaEligibility, req.body, 'checkTpaEligibility'));
+  router.post('/tox-er/toxidrome-id', (req, res) => runOr400(res, wave5cc.matchToxidromeAntidote, req.body, 'matchToxidromeAntidote'));
+  router.post('/obs-unit/disposition-check', (req, res) => runOr400(res, wave5cc.checkObservationDispositionAlert, req.body, 'checkObservationDispositionAlert'));
+  router.post('/minor-surg-er/wound-assessment', (req, res) => runOr400(res, wave5cc.checkWoundComplexityRouting, req.body, 'checkWoundComplexityRouting'));
+  router.post('/neuro-icu/icp-log', (req, res) => runOr400(res, wave5cc.checkCushingsTriad, req.body, 'checkCushingsTriad'));
+  router.post('/onc-icu/dual-surveillance', (req, res) => runOr400(res, wave5cc.checkOncologyIcuDualSurveillance, req.body, 'checkOncologyIcuDualSurveillance'));
+  router.post('/transplant-icu/dual-workup', (req, res) => runOr400(res, wave5cc.checkTransplantFeverWorkup, req.body, 'checkTransplantFeverWorkup'));
+  router.post('/hbot/pre-session-screen', (req, res) => runOr400(res, wave5cc.checkHbotSafetyGate, req.body, 'checkHbotSafetyGate'));
+  router.post('/trauma-center/activation-level', (req, res) => runOr400(res, wave5cc.checkTraumaActivationLevel, req.body, 'checkTraumaActivationLevel'));
+
+  // ====== Diagnostics — Wave 4 (9) ======
+  router.post('/nuc-med/preg-gate', (req, res) => runOr400(res, wave4dx.checkRadioisotopePregnancyGate, req.body, 'checkRadioisotopePregnancyGate'));
+  router.post('/immuno/pattern-label', (req, res) => runOr400(res, wave4dx.labelImmunologyPatternResult, req.body, 'labelImmunologyPatternResult'));
+  router.post('/mol-dx/variant-release', (req, res) => runOr400(res, wave4dx.checkVariantReportReleaseGate, req.body, 'checkVariantReportReleaseGate'));
+  router.post('/tox/acetaminophen-nomogram', (req, res) => runOr400(res, wave4dx.checkAcetaminophenNomogramAlert, req.body, 'checkAcetaminophenNomogramAlert'));
+  router.post('/eeg/ncse-alert', (req, res) => runOr400(res, wave4dx.checkNcseAlert, req.body, 'checkNcseAlert'));
+  router.post('/neuro-phy/guillain-barre', (req, res) => runOr400(res, wave4dx.checkGuillainBarreAlert, req.body, 'checkGuillainBarreAlert'));
+  router.post('/ct/contrast-extravasation', (req, res) => runOr400(res, wave4dx.checkContrastExtravasationAlert, req.body, 'checkContrastExtravasationAlert'));
+  router.post('/pulm/hemoptysis-alert', (req, res) => runOr400(res, wave4dx.checkMassiveHemoptysisAlert, req.body, 'checkMassiveHemoptysisAlert'));
+  router.post('/cf/sweat-test-validity', (req, res) => runOr400(res, wave4dx.checkSweatTestValidity, req.body, 'checkSweatTestValidity'));
+
+  // ====== Internal Medicine — Wave 1 batch 1 (8) ======
+  router.post('/heart-failure/risk-score', (req, res) => runOr400(res, imWave1.checkHeartFailureDecompensation, req.body, 'checkHeartFailureDecompensation'));
+  router.post('/vascular/risk-profile', (req, res) => runOr400(res, imWave1.checkCriticalLimbIschemia, req.body, 'checkCriticalLimbIschemia'));
+  router.post('/sleep/hypoxemia-check', (req, res) => runOr400(res, imWave1.checkNocturnalHypoxemia, req.body, 'checkNocturnalHypoxemia'));
+  router.post('/motility/surgical-consult-check', (req, res) => runOr400(res, imWave1.checkAchalasiaSurgicalConsult, req.body, 'checkAchalasiaSurgicalConsult'));
+  router.post('/nuclear/safety-lock', (req, res) => runOr400(res, imWave1.checkNuclearScanSafetyLock, req.body, 'checkNuclearScanSafetyLock'));
+  router.post('/preventive/risk-score', (req, res) => runOr400(res, imWave1.checkPreventiveCardiologyHighRisk, req.body, 'checkPreventiveCardiologyHighRisk'));
+  router.post('/allergic-pulm/anaphylaxis-check', (req, res) => runOr400(res, imWave1.checkAnaphylaxisAlert, req.body, 'checkAnaphylaxisAlert'));
+  router.post('/respiratory/abg-check', (req, res) => runOr400(res, imWave1.checkRespiratoryCriticalABG, req.body, 'checkRespiratoryCriticalABG'));
+
+  // ====== Internal Medicine — Wave 1 batch 2 (7) ======
+  router.post('/hepatology/liver-failure-alert', (req, res) => runOr400(res, imWave1b2.checkLiverFailureAlert, req.body, 'checkLiverFailureAlert'));
+  router.post('/gastro/pancreatitis-alert', (req, res) => runOr400(res, imWave1b2.checkAcutePancreatitisAlert, req.body, 'checkAcutePancreatitisAlert'));
+  router.post('/transplant/rejection-risk', (req, res) => runOr400(res, imWave1b2.checkTransplantRejectionRisk, req.body, 'checkTransplantRejectionRisk'));
+  router.post('/heme-onc/chemo-safety-lock', (req, res) => runOr400(res, imWave1b2.checkChemoSafetyLock, req.body, 'checkChemoSafetyLock'));
+  router.post('/heme-onc/hyperleukocytosis', (req, res) => runOr400(res, imWave1b2.checkHyperleukocytosisAlert, req.body, 'checkHyperleukocytosisAlert'));
+  router.post('/heme/transfusion-reversal', (req, res) => runOr400(res, imWave1b2.checkTransfusionReversalAlert, req.body, 'checkTransfusionReversalAlert'));
+  router.post('/heme-onc/febrile-neutropenia', (req, res) => runOr400(res, imWave1b2.checkFebrileNeutropeniaProtocol, req.body, 'checkFebrileNeutropeniaProtocol'));
+
+  // ====== Internal Medicine — Wave 1 batch 3 (6) ======
+  router.post('/gyn-onc/recurrence-risk', (req, res) => runOr400(res, imWave1b3.checkGynOncRecurrenceRisk, req.body, 'checkGynOncRecurrenceRisk'));
+  router.post('/ob/preeclampsia-alert', (req, res) => runOr400(res, imWave1b3.checkPreeclampsiaAlert, req.body, 'checkPreeclampsiaAlert'));
+  router.post('/ibd/step-up-therapy', (req, res) => runOr400(res, imWave1b3.checkStepUpTherapyNeeded, req.body, 'checkStepUpTherapyNeeded'));
+  router.post('/endocrine/hypercalcemic-crisis', (req, res) => runOr400(res, imWave1b3.checkHypercalcemicCrisis, req.body, 'checkHypercalcemicCrisis'));
+  router.post('/bariatric/weight-loss-plateau', (req, res) => runOr400(res, imWave1b3.checkWeightLossPlateau, req.body, 'checkWeightLossPlateau'));
+  router.post('/gyn/pid-referral', (req, res) => runOr400(res, imWave1b3.checkPidReferral, req.body, 'checkPidReferral'));
+
+  // ====== Internal Medicine — Wave 1 batch 4 (4) ======
+  router.post('/lupus-nephritis/risk', (req, res) => runOr400(res, imWave1b4.checkLupusNephritisRisk, req.body, 'checkLupusNephritisRisk'));
+  router.post('/tropical/severe-malaria', (req, res) => runOr400(res, imWave1b4.checkSevereMalariaCriteria, req.body, 'checkSevereMalariaCriteria'));
+  router.post('/travel/vaccine-contraindication', (req, res) => runOr400(res, imWave1b4.checkVaccinationContraindication, req.body, 'checkVaccinationContraindication'));
+  router.post('/nutrition/refeeding-syndrome', (req, res) => runOr400(res, imWave1b4.checkRefeedingSyndromeRisk, req.body, 'checkRefeedingSyndromeRisk'));
+
+  // ====== OBGYN + Pediatrics — Wave 3 (9) ======
+  router.post('/gyn-surg/mass-assessment', (req, res) => runOr400(res, obgynWave3.checkAdnexalMassRouting, req.body, 'checkAdnexalMassRouting'));
+  router.post('/ivf/ohss-risk-check', (req, res) => runOr400(res, obgynWave3.checkOhssFreezeAllRecommendation, req.body, 'checkOhssFreezeAllRecommendation'));
+  router.post('/adolescent-gyn/pubertal-assessment', (req, res) => runOr400(res, obgynWave3.checkPubertalTimingReferral, req.body, 'checkPubertalTimingReferral'));
+  router.post('/menopause/hrt-eligibility', (req, res) => runOr400(res, obgynWave3.checkHrtEligibility, req.body, 'checkHrtEligibility'));
+  router.post('/urogyn/routing-check', (req, res) => runOr400(res, obgynWave3.checkUrogynecologyRouting, req.body, 'checkUrogynecologyRouting'));
+  router.post('/peds-genetics/carrier-screening-check', (req, res) => runOr400(res, obgynWave3.checkExpandedCarrierScreening, req.body, 'checkExpandedCarrierScreening'));
+  router.post('/peds/malnutrition-classification', (req, res) => runOr400(res, obgynWave3.checkMalnutritionClassification, req.body, 'checkMalnutritionClassification'));
+  router.post('/peds/developmental-regression', (req, res) => runOr400(res, obgynWave3.checkDevelopmentalRegressionFlag, req.body, 'checkDevelopmentalRegressionFlag'));
+  router.post('/peds/dose-guard', (req, res) => runOr400(res, obgynWave3.checkPediatricDoseGuard, req.body, 'checkPediatricDoseGuard'));
+
+  // ====== Rare & Super-Specialized (12) ======
+  router.post('/space-dive/dcs-risk', (req, res) => runOr400(res, rareSpec.dcsRiskAssessment, req.body, 'dcsRiskAssessment'));
+  router.post('/complex-sleep/parasomnia-classification', (req, res) => runOr400(res, rareSpec.classifyParasomnia, req.body, 'classifyParasomnia'));
+  router.post('/epilepsy-monitoring/localization-analysis', (req, res) => runOr400(res, rareSpec.verifySurgicalCandidacy, req.body, 'verifySurgicalCandidacy'));
+  router.post('/stem-cell/protocol-verification', (req, res) => runOr400(res, rareSpec.verifyProtocolCompliance, req.body, 'verifyProtocolCompliance'));
+  router.post('/fetal-surgery/consensus-check', (req, res) => runOr400(res, rareSpec.verifyFetalSurgeryConsensus, req.body, 'verifyFetalSurgeryConsensus'));
+  router.post('/syndromic/pattern-recognition', (req, res) => runOr400(res, rareSpec.recognizeSyndromicPattern, req.body, 'recognizeSyndromicPattern'));
+  router.post('/trajectory/safety-verify', (req, res) => runOr400(res, rareSpec.verifyTrajectorySafety, req.body, 'verifyTrajectorySafety'));
+  router.post('/isolation/entry-gate', (req, res) => runOr400(res, rareSpec.verifyIsolationGate, req.body, 'verifyIsolationGate'));
+  router.post('/surg-onc/margin-coverage', (req, res) => runOr400(res, rareSpec.verifyMarginCoverage, req.body, 'verifyMarginCoverage'));
+  router.post('/derm/confocal-pattern', (req, res) => runOr400(res, rareSpec.classifyConfocalPattern, req.body, 'classifyConfocalPattern'));
+  router.post('/pharmaco/genotype-interaction', (req, res) => runOr400(res, rareSpec.checkGenotypeDrugInteraction, req.body, 'checkGenotypeDrugInteraction'));
+  router.post('/nano/protocol-compliance', (req, res) => runOr400(res, rareSpec.verifyNanomedicineProtocolCompliance, req.body, 'verifyNanomedicineProtocolCompliance'));
+
+  // ====== Surgical — Wave 2 (10) ======
+  router.post('/surg-onc/resectability-assessment', (req, res) => runOr400(res, surgWave2.checkTumorBoardSchedulingGate, req.body, 'checkTumorBoardSchedulingGate'));
+  router.post('/endo-surg/nerve-monitoring-log', (req, res) => runOr400(res, surgWave2.checkNerveMonitoringAlert, req.body, 'checkNerveMonitoringAlert'));
+  router.post('/robotic/docking-log', (req, res) => runOr400(res, surgWave2.checkDockingAngleSafety, req.body, 'checkDockingAngleSafety'));
+  router.post('/bariatric/eligibility-check', (req, res) => runOr400(res, surgWave2.checkBariatricOrSchedulingGate, req.body, 'checkBariatricOrSchedulingGate'));
+  router.post('/breast-surg/concordance-check', (req, res) => runOr400(res, surgWave2.checkBreastImagingPathologyConcordance, req.body, 'checkBreastImagingPathologyConcordance'));
+  router.post('/trauma/mtp-activation', (req, res) => runOr400(res, surgWave2.checkMassiveTransfusionProtocol, req.body, 'checkMassiveTransfusionProtocol'));
+  router.post('/surg/anastomotic-leak-risk', (req, res) => runOr400(res, surgWave2.checkAnastomoticLeakRisk, req.body, 'checkAnastomoticLeakRisk'));
+  router.post('/neuro-monitoring/ionm-requirement', (req, res) => runOr400(res, surgWave2.checkIonmRequirement, req.body, 'checkIonmRequirement'));
+  router.post('/spine/cauda-equina-emergency', (req, res) => runOr400(res, surgWave2.checkCaudaEquinaEmergency, req.body, 'checkCaudaEquinaEmergency'));
+  router.post('/airway/compromise-alert', (req, res) => runOr400(res, surgWave2.checkAirwayCompromiseAlert, req.body, 'checkAirwayCompromiseAlert'));
+
   // List all available engines
   router.get('/', (req, res) => {
     res.json({
       ok: true,
-      count: 48,
+      count: 110,
+      waves: {
+        phase3_b11_17: 48,
+        wave5_critical_care: 9,
+        wave4_diagnostics: 9,
+        wave1_internal_medicine: 25,
+        wave3_obgyn_peds: 9,
+        rare_specialized: 12,
+        wave2_surgical: 10
+      },
       engines: {
         endocrine: ['thyroid', 'bone-density', 'obesity', 'glycemic-control'],
         pulmonary: ['copd-severity', 'asthma-control', 'sleep-study'],
@@ -223,8 +338,8 @@ function makePhase3CalculatorsRouter({ requireAuth, requireTenantScope }) {
         nephrology: ['ckd/egfr', 'ckd/staging', 'hd-adequacy'],
         rheumatology: ['rheum/das28', 'rheum/sledai'],
         infectious: ['sepsis/news2'],
-        critical_care: ['icu/nihss', 'icu/apache'],
-        obgyn: ['obgyn/partograph', 'obgyn/bishop'],
+        critical_care: ['icu/nihss', 'icu/apache', 'stroke/tpa-eligibility', 'tox-er/toxidrome-id', 'obs-unit/disposition-check', 'minor-surg-er/wound-assessment', 'neuro-icu/icp-log', 'onc-icu/dual-surveillance', 'transplant-icu/dual-workup', 'hbot/pre-session-screen', 'trauma-center/activation-level'],
+        obgyn: ['obgyn/partograph', 'obgyn/bishop', 'gyn-surg/mass-assessment', 'ivf/ohss-risk-check', 'adolescent-gyn/pubertal-assessment', 'menopause/hrt-eligibility', 'urogyn/routing-check', 'peds-genetics/carrier-screening-check', 'peds/malnutrition-classification', 'peds/developmental-regression', 'peds/dose-guard'],
         dermatology: ['derm/pasi', 'derm/scorad'],
         trauma: ['trauma/gcs', 'trauma/iss', 'trauma/rts'],
         neonatal: ['neonatal/apgar', 'neonatal/bhutani', 'neonatal/birthweight'],
@@ -235,7 +350,11 @@ function makePhase3CalculatorsRouter({ requireAuth, requireTenantScope }) {
         urology: ['uro/ipss', 'uro/stones'],
         hematology_infectious: ['heme/wells-dvt', 'heme/wells-pe', 'heme/has-bled', 'heme/curb65'],
         surgical_preop: ['preop/asa', 'preop/rcri', 'preop/caprini'],
-        nutrition: ['nutrition/bmi', 'nutrition/bee', 'nutrition/nrs2002']
+        nutrition: ['nutrition/bmi', 'nutrition/bee', 'nutrition/nrs2002'],
+        diagnostics: ['nuc-med/preg-gate', 'immuno/pattern-label', 'mol-dx/variant-release', 'tox/acetaminophen-nomogram', 'eeg/ncse-alert', 'neuro-phy/guillain-barre', 'ct/contrast-extravasation', 'pulm/hemoptysis-alert', 'cf/sweat-test-validity'],
+        internal_medicine: ['heart-failure/risk-score', 'vascular/risk-profile', 'sleep/hypoxemia-check', 'motility/surgical-consult-check', 'nuclear/safety-lock', 'preventive/risk-score', 'allergic-pulm/anaphylaxis-check', 'respiratory/abg-check', 'hepatology/liver-failure-alert', 'gastro/pancreatitis-alert', 'transplant/rejection-risk', 'heme-onc/chemo-safety-lock', 'heme-onc/hyperleukocytosis', 'heme/transfusion-reversal', 'heme-onc/febrile-neutropenia', 'gyn-onc/recurrence-risk', 'ob/preeclampsia-alert', 'ibd/step-up-therapy', 'endocrine/hypercalcemic-crisis', 'bariatric/weight-loss-plateau', 'gyn/pid-referral', 'lupus-nephritis/risk', 'tropical/severe-malaria', 'travel/vaccine-contraindication', 'nutrition/refeeding-syndrome'],
+        rare_specialized: ['space-dive/dcs-risk', 'complex-sleep/parasomnia-classification', 'epilepsy-monitoring/localization-analysis', 'stem-cell/protocol-verification', 'fetal-surgery/consensus-check', 'syndromic/pattern-recognition', 'trajectory/safety-verify', 'isolation/entry-gate', 'surg-onc/margin-coverage', 'derm/confocal-pattern', 'pharmaco/genotype-interaction', 'nano/protocol-compliance'],
+        surgical: ['surg-onc/resectability-assessment', 'endo-surg/nerve-monitoring-log', 'robotic/docking-log', 'bariatric/eligibility-check', 'breast-surg/concordance-check', 'trauma/mtp-activation', 'surg/anastomotic-leak-risk', 'neuro-monitoring/ionm-requirement', 'spine/cauda-equina-emergency', 'airway/compromise-alert']
       }
     });
   });

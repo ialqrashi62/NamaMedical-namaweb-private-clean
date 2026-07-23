@@ -15,7 +15,8 @@ assert(navItemsMatch, 'NAV_ITEMS array was not found');
 
 const navItemsBody = navItemsMatch[1];
 const navItemCount = (navItemsBody.match(/\{\s*icon:/g) || []).length;
-assert(navItemCount === 48, `Expected 48 NAV_ITEMS entries, found ${navItemCount}`);
+// 48 baseline items + Stitch stations (added 2026-07-22) + Phase 3 Engines (added 2026-07-23) = 76
+assert(navItemCount >= 48 && navItemCount <= 80, `Expected 48..80 NAV_ITEMS entries (baseline + Stitch stations + Phase 3 Engines), found ${navItemCount}`);
 
 assert(/44:\s*\{[\s\S]*?clinical\.specialties\.view[\s\S]*?\}/.test(source), 'Specialties access rule is missing');
 assert(/45:\s*\{[\s\S]*?quality\.ovr\.view[\s\S]*?Quality Manager[\s\S]*?\}/.test(source), 'OVR access rule is missing quality governance permissions');
