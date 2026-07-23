@@ -80,6 +80,46 @@ function makeCalculatorsRouter({ requireAuth, requireTenantScope }) {
     res.json({ ok: true, count: list.length, calculators: list });
   });
 
+  // New: GET /categories — group the calculators by clinical specialty.
+  // Read-only, helps the SPA build a navigable index. Same auth as the rest.
+  router.get('/categories', (req, res) => {
+    const list = [
+      { id: 'tbsa', name: 'TBSA (Rule of Nines)', category: 'burn' },
+      { id: 'parkland', name: 'Parkland Formula', category: 'burn' },
+      { id: 'apgar', name: 'APGAR Score', category: 'neonatal' },
+      { id: 'gcs', name: 'Glasgow Coma Scale', category: 'neurology' },
+      { id: 'aldrete', name: 'Aldrete Score (PACU)', category: 'anesthesia' },
+      { id: 'esi', name: 'ESI Triage Level', category: 'er' },
+      { id: 'iol-srkt', name: 'IOL Power (SRK/T)', category: 'ophthalmology' },
+      { id: 'child-pugh', name: 'Child-Pugh Score', category: 'hepatology' },
+      { id: 'meld', name: 'MELD Score', category: 'hepatology' },
+      { id: 'cha2ds2-vasc', name: 'CHA2DS2-VASc', category: 'cardiology' },
+      { id: 'has-bled', name: 'HAS-BLED', category: 'cardiology' },
+      { id: 'curb65', name: 'CURB-65', category: 'pulmonology' },
+      { id: 'qsofa', name: 'qSOFA', category: 'sepsis' },
+      { id: 'wells-dvt', name: 'Wells DVT', category: 'hematology' },
+      { id: 'centor', name: 'Centor (Strep Pharyngitis)', category: 'ent' },
+      { id: 'rom', name: 'ROM Score (Range of Motion)', category: 'orthopedics' },
+      { id: 'ews', name: 'Modified Early Warning Score', category: 'critical-care' },
+      { id: 'cpb', name: 'CPB Timer Alert', category: 'perfusion' }
+    ];
+    const groups = {};
+    for (const c of list) {
+      (groups[c.category] = groups[c.category] || []).push({ id: c.id, name: c.name });
+    }
+    const categories = Object.keys(groups).sort().map(cat => ({
+      category: cat,
+      count: groups[cat].length,
+      calculators: groups[cat]
+    }));
+    res.json({
+      ok: true,
+      total_calculators: list.length,
+      total_categories: categories.length,
+      categories
+    });
+  });
+
   // 1. TBSA (Rule of Nines) - burns
   router.post('/tbsa', (req, res) => {
     const b = req.body || {};

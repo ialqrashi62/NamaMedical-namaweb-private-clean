@@ -247,6 +247,8 @@ if (process.env.REDIS_URL || process.env.REDIS_HOST) {
         });
         const store = new RedisStore({ client: redisClient, prefix: "nama_session:" });
         sessionStore = new FallbackSessionStore(store);
+        // Expose for /api/health diagnostics (no-op if Redis is down)
+        if (!app.locals.redisClient) app.locals.redisClient = redisClient;
     } catch (e) {
         console.warn('[SESSION WARNING] Redis dependencies or connection failed, falling back to MemoryStore:', e.message);
     }
@@ -971,14 +973,116 @@ app.post('/api/mfa/admin-reset', requireAuth, requireTenantAdmin({ action: 'BLOC
 });
 
 app.get('/api/health', async (req, res) => {
-    // Liveness + DB readiness: a lightweight SELECT 1 so the check reflects DB connectivity,
-    // not just process liveness. No detail leaked on failure. (No tenant context -> unscoped pool.)
+    // Liveness + DB readiness + diagnostics.
+    // Backwards-compatible: returns the original {status, db} shape plus optional
+    // diagnostic fields when the client sends `?detail=1` (used by the local
+    // sync script and ops dashboards). Never leaks secrets/PHI.
+    const startTime = process.hrtime.bigint();
+    const wantDetail = req.query.detail === '1' || req.query.detail === 'true';
+    const checks = { db: false, redis: false };
+    const meta = {};
     try {
-        await pool.query('SELECT 1');
-        return res.status(200).json({ status: 'UP', db: 'up' });
+        const t0 = Date.now();
+        const r = await pool.query('SELECT 1 AS ok, current_database() AS db, current_user AS usr, version() AS pg_version, now() AS server_time');
+        checks.db = true;
+        meta.db = {
+            roundtrip_ms: Date.now() - t0,
+            database: r.rows[0].db,
+            user: r.rows[0].usr,
+            pg_version: r.rows[0].pg_version ? r.rows[0].pg_version.split(' ').slice(0, 2).join(' ') : null,
+            server_time: r.rows[0].server_time
+        };
     } catch (e) {
-        return res.status(503).json({ status: 'DEGRADED', db: 'down' });
+        // swallow; reported via checks.db=false below
     }
+    // Redis check is best-effort: we don't fail the health if Redis is unreachable
+    // because sessions can fall back to MemoryStore (see session middleware).
+    // The redis client is defined inside the session middleware closure, so we
+    // can't reach it from here. Instead we attempt a no-op via the global
+    // `app.locals.redisClient` if it was exposed at boot.
+    try {
+        const t0 = Date.now();
+        const rc = res.app && res.app.locals && res.app.locals.redisClient;
+        if (rc && typeof rc.ping === 'function') {
+            await rc.ping();
+            checks.redis = true;
+            meta.redis = { roundtrip_ms: Date.now() - t0 };
+        } else {
+            meta.redis = { status: 'unknown', note: 'redis client not exposed via app.locals' };
+        }
+    } catch (e) {
+        meta.redis = { error: 'unreachable' };
+    }
+
+    const allUp = checks.db; // db is the only hard requirement
+    const elapsed_ms = Number(process.hrtime.bigint() - startTime) / 1e6;
+    const body = {
+        status: allUp ? 'UP' : 'DEGRADED',
+        db: checks.db ? 'up' : 'down',
+        redis: checks.redis ? 'up' : 'down',
+        uptime_seconds: Math.round(process.uptime()),
+        node_version: process.version,
+        pid: process.pid,
+        env: process.env.NODE_ENV || 'development',
+        timestamp: new Date().toISOString(),
+        elapsed_ms: Math.round(elapsed_ms * 100) / 100
+    };
+    if (wantDetail) {
+        body.meta = meta;
+    }
+    return res.status(allUp ? 200 : 503).json(body);
+});
+
+// New: GET /api/system/info
+// Public endpoint: deployment + build metadata. NO secrets, NO PHI, NO tenant data.
+// Safe to call without auth so that external monitors (Cloudflare, Hetzner, etc.) can
+// verify the deployed version matches the expected one.
+app.get('/api/system/info', (req, res) => {
+    // Count engines + AI orchestrators at request time (cheap, just file I/O once per process).
+    // We cache the counts in a module-level variable on first hit so we don't rescan
+    // the filesystem on every monitor poll.
+    if (!app.locals.systemCounts) {
+        const fs = require('fs');
+        const path = require('path');
+        const here = __dirname;
+        let engines = 0;
+        let aiOrchestrators = 0;
+        let specialtyStations = 0;
+        try {
+            for (const f of fs.readdirSync(here)) {
+                if (/^[a-z0-9_]+_engine\.js$/.test(f)) engines++;
+                if (/^ai_[a-z0-9_]+_orchestrator\.js$/.test(f)) aiOrchestrators++;
+                if (/_station\.js$/.test(f)) specialtyStations++;
+            }
+        } catch (e) { /* swallow */ }
+        app.locals.systemCounts = { engines, aiOrchestrators, specialtyStations, scanned_at: new Date().toISOString() };
+    }
+    res.json({
+        ok: true,
+        name: 'jumanaMedical ERP',
+        version: '2026.07.23-001',
+        node_version: process.version,
+        pid: process.pid,
+        env: process.env.NODE_ENV || 'development',
+        uptime_seconds: Math.round(process.uptime()),
+        platform: process.platform,
+        arch: process.arch,
+        counts: app.locals.systemCounts,
+        timestamp: new Date().toISOString(),
+        modules: {
+            engines: app.locals.systemCounts.engines,
+            ai_orchestrators: app.locals.systemCounts.aiOrchestrators,
+            specialty_stations: app.locals.systemCounts.specialtyStations
+        },
+        capabilities: {
+            rag: true,
+            multi_tenant: true,
+            phi_encryption: true,
+            idempotency: true,
+            audit_chain: true,
+            mfa: true
+        }
+    });
 });
 
 app.get('/api/auth/me', (req, res) => {
