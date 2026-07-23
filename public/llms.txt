@@ -1,0 +1,29 @@
+# jumanaMedical ERP - System Information
+
+This document provides a structured guide to the public features and modules of jumanaMedical ERP, a premium salla/saas platform for hospital management and electronic medical records.
+
+## System Profile
+- **Brand Name**: jumanaMedical ERP (جمانة الطبي)
+- **Domain**: https://jumanasoft.com/
+- **Type**: SaaS HIS / Hospital Information System & ERP
+- **Compliance**: Fully compliant with Saudi Arabia standards including ZATCA Phase 2 (e-invoicing), NPHIES insurance integration, CBAHI medical safety, and PDPL data privacy laws.
+
+## Public Core Routes
+- **Home**: https://jumanasoft.com/ - General branding, product features, module showcases, and regulatory compliance details.
+- **About Us**: https://jumanasoft.com/about/ - Information about our mission, vision, and regulatory compliance partners.
+- **Solutions**: https://jumanasoft.com/solutions/ - Overview of our HIS, EMR, billing, pharmacy, and LIS software solutions.
+- **Departments**: https://jumanasoft.com/departments/ - Detailed clinical departments and specialties supported.
+- **Technical Docs**: https://jumanasoft.com/docs/ - User guides, manuals, and technical integration documentations.
+- **FAQs**: https://jumanasoft.com/faq/ - Frequently asked questions about compliance and platform functionalities.
+- **Contact Us**: https://jumanasoft.com/contact/ - Inquiries and live demo request channels.
+
+## Key Medical & Financial Modules
+- **Reception**: Accession numbers generation, quick check-ins, and patient onboarding flow.
+- **Appointments**: Interactive scheduling calendar, filters, and priority queues.
+- **Doctor Station**: Integrated EMR panel, clinical actions, prescriptions, ICD-10 codification, and clinical decision support.
+- **Nursing**: Vital signs documentation, task managers, and nursing notes.
+- **Inventory**: Drug catalogs, stock alerts, and low stock warnings.
+- **Billing & Invoices**: ZATCA-compliant PDF generation, insurance integration, and payment states.
+
+## Excluded Private Modules (Noindex/Nofollow)
+- All administrative, super-admin, and internal client dashboards are disallowed in robots.txt and sitemap to preserve tenant isolation and data privacy.

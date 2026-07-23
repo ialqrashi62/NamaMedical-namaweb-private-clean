@@ -509,10 +509,13 @@ CREATE POLICY rls_clinical_departments ON clinical_departments
 
 CREATE TABLE IF NOT EXISTS clinical_templates (
     id SERIAL PRIMARY KEY,
+    tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
     department_id INTEGER NOT NULL REFERENCES clinical_departments(id) ON DELETE CASCADE,
+    template_name_en VARCHAR(150),
+    template_name_ar VARCHAR(150),
     version TEXT DEFAULT '1.0.0',
     form_structure JSONB NOT NULL,
-    is_active INTEGER DEFAULT 1,
+    is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -589,6 +592,8 @@ CREATE TABLE IF NOT EXISTS online_bookings (
 );
 CREATE TABLE IF NOT EXISTS lab_samples (
     id SERIAL PRIMARY KEY,
+    tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
+    facility_id INTEGER,
     order_id INTEGER, sample_type TEXT DEFAULT '',
     barcode TEXT DEFAULT '', collection_date TEXT DEFAULT '',
     collected_by TEXT DEFAULT '', status TEXT DEFAULT 'Collected',
@@ -1406,6 +1411,7 @@ CREATE TABLE IF NOT EXISTS clinical_pharmacy_reviews (
     severity TEXT DEFAULT 'Low',
     status TEXT DEFAULT 'Open',
     branch_id INTEGER,
+    facility_id INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS drug_interactions (
@@ -1423,6 +1429,7 @@ CREATE TABLE IF NOT EXISTS patient_drug_education (
     side_effects TEXT DEFAULT '', precautions TEXT DEFAULT '',
     educated_by TEXT DEFAULT '',
     branch_id INTEGER,
+    facility_id INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
         `);
@@ -3282,6 +3289,31 @@ UPDATE maintenance_equipment SET tenant_id = 1 WHERE tenant_id IS NULL;
 
             console.log('  ✅ Phase 3 tables created (device_calibrations, medical_waste_logs) with FORCE RLS.');
         } catch (e) { console.error('Phase 3 tables migration error:', e.message); }
+
+        // Ensure RLS and policies for the 6 core tables needed by overrides & notification integration tests
+        try {
+            const extraTables = [
+                'lab_radiology_orders',
+                'nursing_vitals',
+                'pharmacy_prescriptions_queue',
+                'pharmacy_sales',
+                'pharmacy_sale_items',
+                'lab_samples'
+            ];
+            for (const table of extraTables) {
+                await client.query(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY;`);
+                await client.query(`ALTER TABLE ${table} FORCE ROW LEVEL SECURITY;`);
+                const policyName = `rls_${table}_tenant_isolation`;
+                try {
+                    await client.query(`
+                        CREATE POLICY ${policyName} ON ${table}
+                        FOR ALL
+                        USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::integer)
+                        WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::integer)
+                    `);
+                } catch (e) { /* policy already exists */ }
+            }
+        } catch (e) { console.error('Extra RLS tables enablement error:', e.message); }
 
         console.log('  ✅ PostgreSQL tables created');
     } finally {

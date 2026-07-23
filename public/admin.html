@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>لوحة التحكم الإدارية — Nama Admin</title>
+  <meta name="robots" content="noindex, nofollow" />
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap');
 
@@ -740,6 +741,9 @@
     <button class="tab" onclick="switchTab('facility')" id="tabFacility">
       🏥 نوع المنشأة
     </button>
+    <button class="tab" onclick="switchTab('security')" id="tabSecurity">
+      🛡️ إعدادات الأمان
+    </button>
   </div>
 
   <!-- CONTENT -->
@@ -753,7 +757,7 @@
         <button class="btn btn-primary" onclick="showAddUserModal()">➕ إضافة مستخدم</button>
       </div>
       <div style="overflow-x:auto;border-radius:12px;border:1px solid var(--border)">
-        <table class="data-table" id="usersTable">
+        <table class="data-table" id="userTable">
           <thead>
             <tr>
               <th>#</th>
@@ -803,6 +807,44 @@
       <div style="margin-top:24px;text-align:center">
         <button class="btn btn-primary" onclick="saveFacilityType()" style="padding:12px 40px;font-size:16px">💾 حفظ نوع
           المنشأة</button>
+      </div>
+    </div>
+
+    <!-- TAB 4: SECURITY SETTINGS -->
+    <div class="tab-content" id="contentSecurity">
+      <h3 style="margin-bottom:8px;font-size:18px">🛡️ إعدادات الأمان وحماية البيانات</h3>
+      <p style="color:var(--text3);margin-bottom:24px;font-size:14px">إدارة سياسات الأمان المتقدمة وعزل البيانات وتشفيرها.</p>
+
+      <div style="display:grid;grid-template-columns:1fr;gap:20px;max-width:600px">
+
+        <div class="perm-item" style="display:flex;justify-content:space-between;align-items:center;padding:16px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;cursor:default">
+          <div style="text-align:right">
+            <strong style="display:block;font-size:15px;color:var(--text);margin-bottom:4px">عزل بيانات المستأجرين (RLS)</strong>
+            <span style="font-size:12px;color:var(--text3)">تفعيل سياسة عزل السجلات الطبية على مستوى قاعدة البيانات لمنع تسريب البيانات.</span>
+          </div>
+          <input type="checkbox" id="rlsToggle" style="width:20px;height:20px;accent-color:var(--primary);cursor:pointer">
+        </div>
+
+        <div class="perm-item" style="display:flex;justify-content:space-between;align-items:center;padding:16px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;cursor:default">
+          <div style="text-align:right">
+            <strong style="display:block;font-size:15px;color:var(--text);margin-bottom:4px">التحقق الثنائي (MFA)</strong>
+            <span style="font-size:12px;color:var(--text3)">فرض التحقق الثنائي لكافة الأطباء ومستخدمي النظام لحماية الحسابات.</span>
+          </div>
+          <input type="checkbox" id="mfaToggle" style="width:20px;height:20px;accent-color:var(--primary);cursor:pointer">
+        </div>
+
+        <div class="perm-item" style="display:flex;justify-content:space-between;align-items:center;padding:16px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;cursor:default">
+          <div style="text-align:right">
+            <strong style="display:block;font-size:15px;color:var(--text);margin-bottom:4px">تشفير البيانات الحساسة (Envelope Encryption)</strong>
+            <span style="font-size:12px;color:var(--text3)">تشفير السجلات الطبية وبيانات الهوية باستخدام مفاتيح تشفير ديناميكية.</span>
+          </div>
+          <input type="checkbox" id="encryptionToggle" style="width:20px;height:20px;accent-color:var(--primary);cursor:pointer">
+        </div>
+
+      </div>
+
+      <div style="margin-top:24px;text-align:center">
+        <button class="btn btn-primary" onclick="saveSecuritySettings()" style="padding:12px 40px;font-size:16px">💾 حفظ إعدادات الأمان</button>
       </div>
     </div>
 

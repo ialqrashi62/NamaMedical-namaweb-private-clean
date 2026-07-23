@@ -4,6 +4,14 @@ Allow: /index.html$
 Allow: /css/
 Allow: /js/
 Allow: /img/
+Allow: /about/
+Allow: /solutions/
+Allow: /departments/
+Allow: /docs/
+Allow: /faq/
+Allow: /contact/
+Allow: /privacy/
+Allow: /terms/
 Disallow: /login.html
 Disallow: /admin.html
 Disallow: /super-admin/
@@ -11,4 +19,4 @@ Disallow: /api/
 Disallow: /uploads/
 Disallow: /consent-forms/
 
-Sitemap: https://www.jumanasoft.com/sitemap.xml
+Sitemap: https://jumanasoft.com/sitemap.xml

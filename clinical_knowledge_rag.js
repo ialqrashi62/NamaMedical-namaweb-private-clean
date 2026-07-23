@@ -5,6 +5,8 @@
  * on REAL[] vector embeddings without requiring external extensions like pgvector.
  */
 const { pool } = require('./db_postgres');
+const llmClient = require('./llm_client');
+const { CLINICAL_SYSTEM_PROMPTS } = require('./clinical_prompts');
 
 /**
  * Indexes a clinical guideline chunk into the vector database.
@@ -80,23 +82,22 @@ async function askClinicalCopilot(tenantId, question, queryEmbedding, department
     // 1. Retrieve clinical context from RAG
     const contexts = await searchKnowledge(tenantId, queryEmbedding, departmentId, 2);
 
-    // 2. Generate response (Mocking the LLM integration for deterministic test behavior)
-    let answer = '';
-    let citations = [];
-
-    if (contexts.length > 0) {
-        const topMatch = contexts[0];
-        citations = contexts.map(c => ({
-            id: c.id,
-            source: c.metadata?.source || 'Local Guidelines',
-            chapter: c.metadata?.chapter || 'General Protocols'
-        }));
-
-        // Build a highly tailored clinical answer using retrieved chunks
-        answer = `Based on clinical guidelines for ${topMatch.metadata?.source || 'Cardiology'} (Chapter: ${topMatch.metadata?.chapter || 'Protocols'}): ${topMatch.content}`;
-    } else {
-        answer = 'No clinical guidelines matching your query were found in the knowledge base.';
+    // 2. Generate response using live LLM with RAG context
+    const contextText = contexts.map(c => `[Source: ${c.metadata?.source || 'Unknown'}, Chapter: ${c.metadata?.chapter || 'General'}]\\n${c.content}`).join('\\n\\n');
+    const userPrompt = `Question: ${question}\\n\\nContext from Clinical Guidelines:\\n${contextText}`;
+    
+    try {
+        answer = await llmClient.generateResponse(CLINICAL_SYSTEM_PROMPTS.GENERAL_COPILOT, userPrompt);
+    } catch (err) {
+        console.error('[RAG] LLM Generation Error:', err);
+        answer = 'An error occurred while generating the clinical response. Please check the system logs.';
     }
+
+    citations = contexts.map(c => ({
+        id: c.id,
+        source: c.metadata?.source || 'Local Guidelines',
+        chapter: c.metadata?.chapter || 'General Protocols'
+    }));
 
     return {
         question,

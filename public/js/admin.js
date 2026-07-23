@@ -93,6 +93,7 @@ const ROLES = ['Admin','Doctor','Nurse','Pharmacist','Lab Technician','Radiologi
   document.getElementById('userAvatar').textContent = currentUser.name.charAt(0);
   await loadUsers();
   await loadFacilityType();
+  await loadSecuritySettings();
   renderFacilityCards();
 })();
 
@@ -100,8 +101,10 @@ const ROLES = ['Admin','Doctor','Nurse','Pharmacist','Lab Technician','Radiologi
 function switchTab(tab) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-  document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
-  document.getElementById('content' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
+  const tabBtn = document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1));
+  const tabContent = document.getElementById('content' + tab.charAt(0).toUpperCase() + tab.slice(1));
+  if (tabBtn) tabBtn.classList.add('active');
+  if (tabContent) tabContent.classList.add('active');
 }
 
 // ===== TOAST =====
@@ -172,29 +175,31 @@ function showAddUserModal(user) {
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `<div class="modal">
     <h3>${isEdit ? '✏️ تعديل مستخدم' : '➕ إضافة مستخدم جديد'}</h3>
-    <div class="form-grid">
-      <div class="form-group"><label>الاسم الكامل</label><input class="form-input" id="muName" value="${isEdit ? escapeHTML(user.display_name || '') : ''}"></div>
-      <div class="form-group"><label>اسم المستخدم</label><input class="form-input" id="muUsername" value="${isEdit ? escapeHTML(user.username || '') : ''}"></div>
-      <div class="form-group"><label>كلمة المرور ${isEdit ? '(اتركها فارغة للإبقاء)' : ''}</label><input type="password" class="form-input" id="muPassword" placeholder="${isEdit ? '••••••' : 'كلمة المرور'}"></div>
-      <div class="form-group"><label>الدور</label><select class="form-input" id="muRole" onchange="toggleDoctorFields()">
-        ${ROLES.map(r => `<option value="${r}" ${isEdit && user.role === r ? 'selected' : ''}>${r}</option>`).join('')}
-      </select></div>
-      <div class="form-group" id="muSpecDiv" style="display:${isEdit && user.role === 'Doctor' ? 'flex' : 'none'}"><label>التخصص</label><input class="form-input" id="muSpec" value="${isEdit ? escapeHTML(user.speciality || '') : ''}"></div>
-      <div class="form-group" id="muCommDiv" style="display:${isEdit && user.role === 'Doctor' ? 'flex' : 'none'}">
-        <label>العمولة</label>
-        <div style="display:flex;gap:8px">
-          <select class="form-input" id="muCommType" style="width:120px">
-            <option value="percentage" ${isEdit && user.commission_type === 'percentage' ? 'selected' : ''}>نسبة %</option>
-            <option value="fixed" ${isEdit && user.commission_type === 'fixed' ? 'selected' : ''}>ثابت</option>
-          </select>
-          <input type="number" class="form-input" id="muCommValue" value="${isEdit ? user.commission_value || 0 : 0}" step="0.1" min="0">
+    <form id="userForm" onsubmit="event.preventDefault(); saveUser(${isEdit ? user.id : 'null'});">
+      <div class="form-grid">
+        <div class="form-group"><label>الاسم الكامل</label><input class="form-input" id="muName" value="${isEdit ? escapeHTML(user.display_name || '') : ''}"></div>
+        <div class="form-group"><label>اسم المستخدم</label><input class="form-input" id="muUsername" value="${isEdit ? escapeHTML(user.username || '') : ''}"></div>
+        <div class="form-group"><label>كلمة المرور ${isEdit ? '(اتركها فارغة للإبقاء)' : ''}</label><input type="password" class="form-input" id="muPassword" placeholder="${isEdit ? '••••••' : 'كلمة المرور'}"></div>
+        <div class="form-group"><label>الدور</label><select class="form-input" id="muRole" onchange="toggleDoctorFields()">
+          ${ROLES.map(r => `<option value="${r}" ${isEdit && user.role === r ? 'selected' : ''}>${r}</option>`).join('')}
+        </select></div>
+        <div class="form-group" id="muSpecDiv" style="display:${isEdit && user.role === 'Doctor' ? 'flex' : 'none'}"><label>التخصص</label><input class="form-input" id="muSpec" value="${isEdit ? escapeHTML(user.speciality || '') : ''}"></div>
+        <div class="form-group" id="muCommDiv" style="display:${isEdit && user.role === 'Doctor' ? 'flex' : 'none'}">
+          <label>العمولة</label>
+          <div style="display:flex;gap:8px">
+            <select class="form-input" id="muCommType" style="width:120px">
+              <option value="percentage" ${isEdit && user.commission_type === 'percentage' ? 'selected' : ''}>نسبة %</option>
+              <option value="fixed" ${isEdit && user.commission_type === 'fixed' ? 'selected' : ''}>ثابت</option>
+            </select>
+            <input type="number" class="form-input" id="muCommValue" value="${isEdit ? user.commission_value || 0 : 0}" step="0.1" min="0">
+          </div>
         </div>
       </div>
-    </div>
-    <div style="display:flex;gap:12px;margin-top:20px">
-      <button class="btn btn-primary" onclick="saveUser(${isEdit ? user.id : 'null'})" style="flex:1">💾 ${isEdit ? 'تحديث' : 'إضافة'}</button>
-      <button class="btn btn-outline" onclick="this.closest('.modal-overlay').remove()" style="flex:1">إلغاء</button>
-    </div>
+      <div style="display:flex;gap:12px;margin-top:20px">
+        <button type="submit" class="btn btn-primary" style="flex:1">💾 ${isEdit ? 'تحديث' : 'إضافة'}</button>
+        <button type="button" class="btn btn-outline" onclick="this.closest('.modal-overlay').remove()" style="flex:1">إلغاء</button>
+      </div>
+    </form>
   </div>`;
   overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
   document.body.appendChild(overlay);
@@ -357,6 +362,27 @@ window.saveFacilityType = async () => {
     showToast('تم حفظ نوع المنشأة ✅ — سيتم تحديث الأقسام في النظام');
     renderFacilityCards();
   } catch (e) { showToast('خطأ في الحفظ', 'error'); }
+};
+
+// ===== SECURITY SETTINGS =====
+window.loadSecuritySettings = async () => {
+  try {
+    const settings = await API.get('/api/settings');
+    document.getElementById('rlsToggle').checked = settings.rls_enabled === 'true' || settings.rls_enabled === true || settings.rls_enabled === 1 || settings.rls_enabled === '1';
+    document.getElementById('mfaToggle').checked = settings.mfa_enabled === 'true' || settings.mfa_enabled === true || settings.mfa_enabled === 1 || settings.mfa_enabled === '1';
+    document.getElementById('encryptionToggle').checked = settings.encryption_enabled === 'true' || settings.encryption_enabled === true || settings.encryption_enabled === 1 || settings.encryption_enabled === '1';
+  } catch (e) { console.error('Error loading security settings:', e); }
+};
+
+window.saveSecuritySettings = async () => {
+  try {
+    const rls_enabled = document.getElementById('rlsToggle').checked;
+    const mfa_enabled = document.getElementById('mfaToggle').checked;
+    const encryption_enabled = document.getElementById('encryptionToggle').checked;
+
+    await API.put('/api/settings', { rls_enabled, mfa_enabled, encryption_enabled });
+    showToast('تم حفظ إعدادات الأمان وحماية البيانات بنجاح ✅');
+  } catch (e) { showToast('خطأ في حفظ إعدادات الأمان', 'error'); }
 };
 
 // ===== LOGOUT =====

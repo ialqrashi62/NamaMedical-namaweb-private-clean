@@ -92,11 +92,11 @@ async function runTests() {
     });
 
     server.stdout.on('data', (data) => {
-        // console.log('SERVER OUT:', data.toString().trim());
+        console.log('SERVER OUT:', data.toString().trim());
     });
 
     server.stderr.on('data', (data) => {
-        // console.error('SERVER ERR:', data.toString().trim());
+        console.error('SERVER ERR:', data.toString().trim());
     });
 
     // Wait for server to boot

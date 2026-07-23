@@ -107,7 +107,7 @@ async function runTests() {
 
         // Insert payer
         await client.query(
-            'INSERT INTO insurance_companies (id, name_ar, name_en) VALUES ($1, $2, $3)',
+            'INSERT INTO insurance_companies (id, name_ar, name_en, tenant_id) VALUES ($1, $2, $3, 1)',
             [payerId, 'شركة تأمين تجريبية', 'Test Insurance Co']
         );
 

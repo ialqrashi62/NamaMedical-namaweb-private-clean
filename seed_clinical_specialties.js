@@ -134,11 +134,11 @@ async function seed() {
         // 1. Insert Departments
         for (const dept of DEPARTMENTS) {
             await client.query(
-                `INSERT INTO clinical_departments (tenant_id, code, name_en, name_ar)
-                 VALUES (1, $1, $2, $3)
+                `INSERT INTO clinical_departments (tenant_id, code, name_en, name_ar, category)
+                 VALUES (1, $1, $2, $3, $4)
                  ON CONFLICT (tenant_id, code) DO UPDATE 
-                 SET name_en = EXCLUDED.name_en, name_ar = EXCLUDED.name_ar`,
-                [dept.code, dept.name_en, dept.name_ar]
+                 SET name_en = EXCLUDED.name_en, name_ar = EXCLUDED.name_ar, category = EXCLUDED.category`,
+                [dept.code, dept.name_en, dept.name_ar, dept.category || 'General']
             );
         }
         console.log(`✓ Seeded ${DEPARTMENTS.length} clinical departments.`);
