@@ -27,6 +27,20 @@ const RS = require('./route_schemas');                      // accurate non-brea
 const { validatePasswordPolicy } = require('./password_policy');
 // E1 Doctor Station (additive): pure CDS engine + clinical routes (problems/SOAP/CPOE).
 const cds = require('./cds');
+// ===== Phase 3 Week Bundle: AI Orchestrators + LangChain shim + clinical prompts =====
+// Monkey-patch `langchain.LangChain.execute` so the 13 ai_*_orchestrator.js files
+// (cardiology, critical, derm, diagnostics, endocrine, gastro, infectious, nephrology,
+// obgyn_peds, oncology, pulmonology, rheuma, surgery) can use the LLMClient when keys
+// are configured and a deterministic RAG-grounded fallback otherwise. No behavior change
+// at runtime when LLM_API_KEY is unset — orchestrators remain callable.
+try {
+    const langchain = require('langchain');
+    const shim = require('./ai_langchain_shim');
+    langchain.LangChain = shim.LangChain;
+} catch (e) {
+    console.warn('[AI] langchain shim not applied:', e.message);
+}
+const aiLangChainShim = require('./ai_langchain_shim');
 const { mountClinicalRoutes } = require('./clinical_cpoe');
 // E6 Nursing / MAR (additive): pure clinical-scoring engine (Morse/Braden/NEWS/Pain).
 const nursingScores = require('./nursing_scores');
@@ -4431,7 +4445,7 @@ app.post('/api/clinical/ai/ask', requireAuth, requireRole('doctor', 'nursing'), 
             return res.status(400).json({ error: 'question and query_embedding are required' });
         }
         if (!Array.isArray(query_embedding)) return res.status(400).json({ error: 'query_embedding must be an array' });
-        
+
         const RAG = require('./clinical_knowledge_rag');
         const response = await RAG.askClinicalCopilot(
             tenantId,
@@ -4443,6 +4457,72 @@ app.post('/api/clinical/ai/ask', requireAuth, requireRole('doctor', 'nursing'), 
     } catch (e) {
         res.status(500).json({ error: 'Server error' });
     }
+});
+
+// ===== Phase 3 Week Bundle: 13 AI Orchestrator endpoints (RAG + LLM shim) =====
+// Each route requireAuth + requireRole(doctor/nursing) + requireTenantScope. tenant_id is
+// stamped from the session (never from the body). The LLM call goes through ai_langchain_shim:
+// live when LLM_API_KEY is set, deterministic RAG-grounded fallback otherwise.
+const AI_ORCH_ROLE = requireRole('doctor', 'nursing');
+function _aiWrap(name, fn) {
+    return async (req, res) => {
+        try {
+            const { tenantId, facilityId } = getRequestTenantContext(req);
+            const out = await fn({
+                ...req.body,
+                tenant_id: tenantId,
+                facility_id: facilityId,
+                actor: { id: req.session.user?.id, name: req.session.user?.display_name || req.session.user?.name },
+            });
+            logAudit(req.session.user?.id, req.session.user?.display_name, 'AI_ORCHESTRATOR', 'AI',
+                `Orchestrator ${name} called by user #${req.session.user?.id}`, req.ip);
+            res.json({ ok: true, function: name, result: out });
+        } catch (e) {
+            res.status(e.statusCode || 500).json({ error: e.message || 'Server error' });
+        }
+    };
+}
+
+// Lazy requires — orchestrators are constructed on each call; this avoids pulling in
+// every vector store at boot (and keeps the AI route table declarative).
+function _aiOrch(name) { return require('./' + name); }
+
+app.post('/api/ai/cardiology/analyze-ecg',  requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('analyzeECG',          (b) => _aiOrch('ai_cardiology_orchestrator').analyzeECG(b, b.ecgReport || b.report || '')));
+app.post('/api/ai/cardiology/predict-hf',   requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('predictHFRisk',       (b) => _aiOrch('ai_cardiology_orchestrator').predictHFRisk(b.patientId || b.patient_id)));
+app.post('/api/ai/critical/predict-det',    requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('predictDeterioration',(b) => _aiOrch('ai_critical_orchestrator').predictDeterioration(b, b.vitals || b)));
+app.post('/api/ai/critical/optimize-vent', requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('optimizeVentilation', (b) => _aiOrch('ai_critical_orchestrator').optimizeVentilation(b.patientId || b.patient_id, b.bloodGas || b.blood_gas || null)));
+app.post('/api/ai/derm/analyze-lesion',    requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('analyzeLesion',       (b) => _aiOrch('ai_derm_orchestrator').analyzeLesion(b, b.lesion || b)));
+app.post('/api/ai/diagnostics/scan',        requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('analyzeScan',         (b) => _aiOrch('ai_diagnostics_orchestrator').analyzeScan(b, b.scan || b)));
+app.post('/api/ai/diagnostics/lab-trends',  requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('analyzeLabTrends',    (b) => _aiOrch('ai_diagnostics_orchestrator').analyzeLabTrends(b.patientId || b.patient_id)));
+app.post('/api/ai/endocrine/glucose',      requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('predictGlucoseTrend', (b) => _aiOrch('ai_endocrine_orchestrator').predictGlucoseTrend(b, b.glucoseLogs || b.logs || [])));
+app.post('/api/ai/gastro/endoscopy',       requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('analyzeEndoscopy',    (b) => _aiOrch('ai_gastro_orchestrator').analyzeEndoscopy(b, b.findings || b)));
+app.post('/api/ai/gastro/liver-risk',      requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('predictLiverRisk',    (b) => _aiOrch('ai_gastro_orchestrator').predictLiverRisk(b.patientId || b.patient_id)));
+app.post('/api/ai/infectious/antibiotic',  requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('suggestAntibiotic',   (b) => _aiOrch('ai_infectious_orchestrator').suggestAntibiotic(b, b.culture || b.cultureResults || {})));
+app.post('/api/ai/nephrology/biopsy',      requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('analyzeBiopsy',       (b) => _aiOrch('ai_nephrology_orchestrator').analyzeBiopsy(b, b.biopsy || b)));
+app.post('/api/ai/nephrology/gfr-trend',   requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('predictGFRTrend',     (b) => _aiOrch('ai_nephrology_orchestrator').predictGFRTrend(b.patientId || b.patient_id)));
+app.post('/api/ai/obgyn-peds/fetal',       requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('analyzeFetalAnomaly', (b) => _aiOrch('ai_obgyn_peds_orchestrator').analyzeFetalAnomaly(b, b.scan || b)));
+app.post('/api/ai/obgyn-peds/neonatal',    requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('predictNeonatalOutcome',(b) => _aiOrch('ai_obgyn_peds_orchestrator').predictNeonatalOutcome(b.patientId || b.patient_id)));
+app.post('/api/ai/oncology/genomics',      requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('analyzeGenomics',     (b) => _aiOrch('ai_oncology_orchestrator').analyzeGenomics(b, b.genomics || b)));
+app.post('/api/ai/pulmonology/pft',        requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('analyzePFT',          (b) => _aiOrch('ai_pulmonology_orchestrator').analyzePFT(b, b.pft || b)));
+app.post('/api/ai/pulmonology/sleep-apnea',requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('predictSleepApnea',   (b) => _aiOrch('ai_pulmonology_orchestrator').predictSleepApnea(b.patientId || b.patient_id)));
+app.post('/api/ai/rheuma/autoimmune',      requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('analyzeAutoimmuneCluster',(b) => _aiOrch('ai_rheuma_orchestrator').analyzeAutoimmuneCluster(b, b.serology || b)));
+app.post('/api/ai/surgery/recovery',       requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('predictRecovery',     (b) => _aiOrch('ai_surgery_orchestrator').predictRecovery(b)));
+app.post('/api/ai/surgery/report',         requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('generateSurgicalReport',(b) => _aiOrch('ai_surgery_orchestrator').generateSurgicalReport(b)));
+
+// AI gateway status (read-only) — exposes which LLM provider/model is configured without keys.
+app.get('/api/ai/status', requireAuth, AI_ORCH_ROLE, requireTenantScope, async (req, res) => {
+    try {
+        const provider = process.env.LLM_PROVIDER || 'openai';
+        const model = process.env.LLM_MODEL || 'gpt-4-turbo';
+        const has_key = !!process.env.LLM_API_KEY;
+        res.json({
+            ok: true,
+            provider, model,
+            live: has_key,
+            shim: 'ai_langchain_shim',
+            orchestrators: 13,
+        });
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
 app.post('/api/clinical/records', requireAuth, requireRole('patients'), async (req, res, next) => {
