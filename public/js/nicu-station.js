@@ -12,8 +12,8 @@ const NICUStation = {
   <header class="flex justify-between items-center mb-6">
     <h1 class="text-2xl font-bold text-slate-800">${tr('NICU Command Center', 'مركز قيادة حضانة الأطفال')}</h1>
     <div class="flex gap-2">
-      <button onclick="NICUStation.openAPGAR()" class="stitch-btn-primary px-4 py-2 bg-fuchsia-700 text-white rounded-lg shadow-sm hover:bg-fuchsia-800">${tr('APGAR Score', 'APGAR')}</button>
-      <button onclick="NICUStation.openGrowth()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100">${tr('Growth Chart', 'مخطط النمو')}</button>
+      <button onclick="NICUStation.openAPGAR()" class="stitch-btn-primary px-4 py-2 bg-fuchsia-700 text-white rounded-lg shadow-sm hover:bg-fuchsia-800"<button aria-label="${tr('APGAR Score', 'APGAR')}" type="button" onclick="NICUStation.openAPGAR()" class="stitch-btn-primary px-4 py-2 bg-fuchsia-700 text-white rounded-lg shadow-sm hover:bg-fuchsia-800">${tr('APGAR Score', 'APGAR')}</button>
+      <button onclick="NICUStation.openGrowth()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100"<button aria-label="${tr('Growth Chart', 'مخطط النمو')}" type="button" onclick="NICUStation.openGrowth()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100">${tr('Growth Chart', 'مخطط النمو')}</button>
     </div>
   </header>
   <div class="grid grid-cols-12 gap-6">
@@ -34,9 +34,9 @@ const NICUStation = {
     <div class="col-span-6 space-y-6">
       <div class="stitch-card p-6 bg-white rounded-xl shadow-sm border border-slate-200 min-h-[500px]">
         <div class="flex border-b border-slate-200 mb-6">
-          <button class="px-4 py-2 border-b-2 border-fuchsia-700 text-fuchsia-700 font-medium">${tr('Incubator Monitor', 'مراقبة الحاضنة')}</button>
-          <button class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('TPN', 'التغذية الوريدية')}</button>
-          <button class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Mother-Baby', 'أم - طفل')}</button>
+          <button class="px-4 py-2 border-b-2 border-fuchsia-700 text-fuchsia-700 font-medium"<button aria-label="${tr('Incubator Monitor', 'مراقبة الحاضنة')}" type="button" class="px-4 py-2 border-b-2 border-fuchsia-700 text-fuchsia-700 font-medium">${tr('Incubator Monitor', 'مراقبة الحاضنة')}</button>
+          <button class="px-4 py-2 text-slate-500 hover:text-slate-800"<button aria-label="${tr('TPN', 'التغذية الوريدية')}" type="button" class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('TPN', 'التغذية الوريدية')}</button>
+          <button class="px-4 py-2 text-slate-500 hover:text-slate-800"<button aria-label="${tr('Mother-Baby', 'أم - طفل')}" type="button" class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Mother-Baby', 'أم - طفل')}</button>
         </div>
         <div id="nicu-workspace" class="space-y-4">
           <div class="p-8 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">${tr('No active neonate. Open APGAR to begin.', 'لا يوجد مولود نشط. افتح APGAR للبدء.')}</div>
@@ -64,7 +64,6 @@ const NICUStation = {
   </div>
 </div>`;
     },
-    openAPGAR: () => alert('APGAR (POST /api/nicu/admit)'),
-    openGrowth: () => alert('Growth (POST /api/nicu/growth)')
-};
+    openAPGAR: () => Modal.open({ title: "APGAR (POST /api/nicu/admit)", body: "<p style=\"font-size:14px;color:#334155\">APGAR (POST /api/nicu/admit)</p><div style=\"background:#f1f5f9;border-radius:6px;padding:10px;font-size:12px;color:#475569;margin-top:10px\"><strong>HTTP:</strong> API &nbsp;&nbsp;<strong>Endpoint:</strong> <code>/api/nicu/admit</code></div><p style=\"font-size:13px;color:#64748b;margin-top:10px\">This action will be wired to the live backend. Configure Department Mappings to enable persistent capture.</p>", primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true }),
+    openGrowth: () => Modal.open({ title: "Growth (POST /api/nicu/growth)", body: "<p style=\"font-size:14px;color:#334155\">Growth (POST /api/nicu/growth)</p><div style=\"background:#f1f5f9;border-radius:6px;padding:10px;font-size:12px;color:#475569;margin-top:10px\"><strong>HTTP:</strong> API &nbsp;&nbsp;<strong>Endpoint:</strong> <code>/api/nicu/growth</code></div><p style=\"font-size:13px;color:#64748b;margin-top:10px\">This action will be wired to the live backend. Configure Department Mappings to enable persistent capture.</p>", primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true })};
 if (typeof window !== 'undefined') window.NICUStation = NICUStation;

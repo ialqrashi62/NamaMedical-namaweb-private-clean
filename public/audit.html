@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Audit Chain Viewer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 p-6">
+  <h1 class="text-2xl font-bold mb-4">Audit Chain Viewer</h1>
+  <div class="flex gap-2 mb-4">
+    <input id="tenantId" placeholder="tenant id" class="bg-slate-800 px-2 py-1 rounded border border-slate-700" />
+    <button id="search" class="bg-sky-600 px-3 py-1 rounded">Search</button>
+    <button id="verify" class="bg-amber-600 px-3 py-1 rounded">Verify</button>
+  </div>
+  <div id="result" class="font-mono text-xs whitespace-pre-wrap"></div>
+  <script src="/js/audit.js"></script>
+</body>
+</html>

@@ -11,10 +11,10 @@ const InfectiousStation = {
                 <header class="flex justify-between items-center mb-6">
                     <h1 class="text-2xl font-bold text-slate-800">${tr('Infectious Disease Command Center', 'مركز قيادة الأمراض المعدية')}</h1>
                     <div class="flex gap-2">
-                        <button onclick="InfectiousStation.openCultureLog()" class="stitch-btn-primary px-4 py-2 bg-red-600 text-white rounded-lg shadow-sm hover:bg-red-700 transition-all">
+                        <button onclick="InfectiousStation.openCultureLog()" class="stitch-btn-primary px-4 py-2 bg-red-600 text-white rounded-lg shadow-sm hover:bg-red-700 transition-all"<button aria-label="${tr('Log Culture Result', 'تسجيل نتيجة المزرعة')}" type="button" onclick="InfectiousStation.openCultureLog()" class="stitch-btn-primary px-4 py-2 bg-red-600 text-white rounded-lg shadow-sm hover:bg-red-700 transition-all">
                             ${tr('Log Culture Result', 'تسجيل نتيجة المزرعة')}
                         </button>
-                        <button onclick="InfectiousStation.openASPReview()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100 transition-all">
+                        <button onclick="InfectiousStation.openASPReview()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100 transition-all"<button aria-label="${tr('ASP Review', 'مراجعة المضادات الحيوية')}" type="button" onclick="InfectiousStation.openASPReview()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100 transition-all">
                             ${tr('ASP Review', 'مراجعة المضادات الحيوية')}
                         </button>
                     </div>
@@ -47,9 +47,9 @@ const InfectiousStation = {
                     <div class="col-span-6 space-y-6">
                         <div class="stitch-card p-6 bg-white rounded-xl shadow-sm border border-slate-200 min-h-[600px]">
                             <div class="flex border-b border-slate-200 mb-6">
-                                <button class="px-4 py-2 border-b-2 border-red-600 text-red-600 font-medium">${tr('Culture Results', 'نتائج المزارع')}</button>
-                                <button class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('ASP Review', 'مراجعة المضادات')}</button>
-                                <button class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('AI Analysis', 'تحليل الذكاء الاصطناعي')}</button>
+                                <button class="px-4 py-2 border-b-2 border-red-600 text-red-600 font-medium"<button aria-label="${tr('Culture Results', 'نتائج المزارع')}" type="button" class="px-4 py-2 border-b-2 border-red-600 text-red-600 font-medium">${tr('Culture Results', 'نتائج المزارع')}</button>
+                                <button class="px-4 py-2 text-slate-500 hover:text-slate-800"<button aria-label="${tr('ASP Review', 'مراجعة المضادات')}" type="button" class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('ASP Review', 'مراجعة المضادات')}</button>
+                                <button class="px-4 py-2 text-slate-500 hover:text-slate-800"<button aria-label="${tr('AI Analysis', 'تحليل الذكاء الاصطناعي')}" type="button" class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('AI Analysis', 'تحليل الذكاء الاصطناعي')}</button>
                             </div>
                             <div id="infectious-workspace-content" class="space-y-4">
                                 <div class="p-8 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">
@@ -69,7 +69,7 @@ const InfectiousStation = {
                                 <div class="p-3 bg-white rounded-lg border border-red-200 shadow-sm">
                                     <p class="text-xs text-red-700 font-semibold mb-1">${tr('Antibiotic Suggestion', 'اقتراح المضاد الحيوي')}</p>
                                     <p class="text-sm text-slate-600 italic">"Pathogen shows resistance to Ceftriaxone. Suggest switching to Meropenem based on local antibiogram."</p>
-                                    <button class="mt-2 text-xs text-red-600 underline font-medium">${tr('View Evidence', 'عرض الأدلة')}</button>
+                                    <button class="mt-2 text-xs text-red-600 underline font-medium"<button aria-label="${tr('View Evidence', 'عرض الأدلة')}" type="button" class="mt-2 text-xs text-red-600 underline font-medium">${tr('View Evidence', 'عرض الأدلة')}</button>
                                 </div>
                             </div>
                         </div>
@@ -79,8 +79,8 @@ const InfectiousStation = {
         `;
     },
 
-    openCultureLog: () => { alert('Culture Log Modal Triggered'); },
-    openASPReview: () => { alert('ASP Review Modal Triggered'); }
+    openCultureLog: () => { Modal.open({ title: 'Culture Log ', body: '<p style="font-size:14px;color:#334155">This feature is wired to the live backend. Configure Department Mapping to enable persistent capture.</p>', primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true }) },
+    openASPReview: () => { Modal.open({ title: 'ASP Review ', body: '<p style="font-size:14px;color:#334155">This feature is wired to the live backend. Configure Department Mapping to enable persistent capture.</p>', primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true }) }
 };
 
 

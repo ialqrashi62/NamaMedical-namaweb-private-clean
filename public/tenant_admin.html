@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Tenant Admin</title>
+<script src="https://cdn.tailwindcss.com"></script></head>
+<body class="bg-slate-900 text-slate-100 p-6">
+<h1 class="text-2xl font-bold mb-4">Tenant Admin</h1>
+<form id="onb" class="flex gap-2 mb-4">
+<input id="t" placeholder="tenant id" class="bg-slate-800 px-2 py-1 rounded" />
+<input id="e" placeholder="admin email" class="bg-slate-800 px-2 py-1 rounded" />
+<button class="bg-sky-600 px-3 py-1 rounded">Create</button>
+</form>
+<pre id="out" class="font-mono text-xs"></pre>
+<script>
+function escapeHTML(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+document.getElementById('onb').onsubmit = async (e) => {
+  e.preventDefault();
+  const t = escapeHTML(document.getElementById('t').value);
+  const em = escapeHTML(document.getElementById('e').value);
+  const r = await fetch('/api/v4/tenant/create', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ tenantId: t, adminEmail: em }) });
+  document.getElementById('out').textContent = await r.text();
+};
+</script>
+</body>
+</html>

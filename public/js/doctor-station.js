@@ -92,7 +92,7 @@ async function renderDoctor(el) {
         <div class="error-card-icon">⚠️</div>
         <h3>${tr('Failed to load Doctor Station', 'فشل تحميل محطة الطبيب')}</h3>
         <p>${escapeHTML(e.message || String(e))}</p>
-        <button class="btn btn-primary" onclick="navigateTo(3)">🔄 ${tr('Retry', 'إعادة المحاولة')}</button>
+        <button class="btn btn-primary" onclick="navigateTo(3)"<button aria-label="🔄 ${tr('Retry', 'إعادة المحاولة')}" type="button" class="btn btn-primary" onclick="navigateTo(3)">🔄 ${tr('Retry', 'إعادة المحاولة')}</button>
       </div>`;
     return;
   }
@@ -123,6 +123,7 @@ async function renderDoctor(el) {
         <div id="dsWaitList" style="flex:1;overflow-y:auto"></div>
         <div style="padding:10px;border-top:1px solid var(--border)">
           <button class="btn btn-sm w-full" onclick="window.dsRefreshWaitQueue()"
+            style="background:var(--primary-glow);color:var(--primary);border:1px solid var(--primary);font-size:11px"<button aria-label="🔄 ${tr('Refresh', 'تحديث')}" type="button" class="btn btn-sm w-full" onclick="window.dsRefreshWaitQueue()"
             style="background:var(--primary-glow);color:var(--primary);border:1px solid var(--primary);font-size:11px">
             🔄 ${tr('Refresh', 'تحديث')}
           </button>
@@ -341,10 +342,12 @@ window.dsRenderPatientChart = function(patient, chart, vitals, problems, allergi
       </div>
       <div class="ds-patient-actions">
         <button class="btn btn-sm btn-primary" onclick="window.dsMarkWithDoctor(${safeId(patient.id)})"
+          style="font-size:11px;padding:6px 12px" id="btnMarkDoctor"<button aria-label="👨‍⚕️ ${tr('Start Visit','بدء الزيارة')}" type="button" class="btn btn-sm btn-primary" onclick="window.dsMarkWithDoctor(${safeId(patient.id)})"
           style="font-size:11px;padding:6px 12px" id="btnMarkDoctor">
           👨‍⚕️ ${tr('Start Visit','بدء الزيارة')}
         </button>
         <button class="btn btn-sm" onclick="window.dsSignEncounter()"
+          style="font-size:11px;padding:6px 12px;background:#7c3aed;color:#fff;border-color:#7c3aed"<button aria-label="✍️ ${tr('Sign &amp; Close','توقيع وإغلاق')}" type="button" class="btn btn-sm" onclick="window.dsSignEncounter()"
           style="font-size:11px;padding:6px 12px;background:#7c3aed;color:#fff;border-color:#7c3aed">
           ✍️ ${tr('Sign & Close','توقيع وإغلاق')}
         </button>
@@ -542,7 +545,7 @@ window.dsTabProblems = function({ problems = [] }) {
   if (!problems.length) return `<div style="text-align:center;padding:32px;color:var(--text-dim)">
     <div style="font-size:48px;margin-bottom:12px;opacity:0.3">⚠️</div>
     <p>${tr('No problems recorded', 'لا توجد مشكلات مسجّلة')}</p>
-    <button class="btn btn-sm btn-primary" style="margin-top:12px" onclick="window.dsAddProblem()">
+    <button class="btn btn-sm btn-primary" style="margin-top:12px" onclick="window.dsAddProblem()"<button aria-label="+ ${tr('Add Problem', 'إضافة مشكلة')}" type="button" class="btn btn-sm btn-primary" style="margin-top:12px" onclick="window.dsAddProblem()">
       + ${tr('Add Problem', 'إضافة مشكلة')}
     </button>
   </div>`;
@@ -553,7 +556,7 @@ window.dsTabProblems = function({ problems = [] }) {
   return `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <strong style="font-size:13px">${tr('Problem List', 'قائمة المشكلات')} (${problems.length})</strong>
-      <button class="btn btn-sm btn-primary" onclick="window.dsAddProblem()">+ ${tr('Add', 'إضافة')}</button>
+      <button class="btn btn-sm btn-primary" onclick="window.dsAddProblem()"<button aria-label="+ ${tr('Add', 'إضافة')}" type="button" class="btn btn-sm btn-primary" onclick="window.dsAddProblem()">+ ${tr('Add', 'إضافة')}</button>
     </div>
     ${problems.map(p => {
       const dot = statusDot[p.status] || 'active';
@@ -703,10 +706,10 @@ window.dsTabNotes = function({ chart = {} }) {
         </div>
       </div>
       <div style="display:flex;gap:10px;margin-top:12px">
-        <button class="btn btn-primary" onclick="window.dsSaveSoapNotes()" style="flex:1">
+        <button class="btn btn-primary" onclick="window.dsSaveSoapNotes()" style="flex:1"<button aria-label="💾 ${tr('Save Notes', 'حفظ الملاحظات')}" type="button" class="btn btn-primary" onclick="window.dsSaveSoapNotes()" style="flex:1">
           💾 ${tr('Save Notes', 'حفظ الملاحظات')}
         </button>
-        <button class="btn" onclick="window.dsShowMedReportMenu()" style="flex:1;background:#fff3e0;border:1px solid #ff9800;color:#e65100">
+        <button class="btn" onclick="window.dsShowMedReportMenu()" style="flex:1;background:#fff3e0;border:1px solid #ff9800;color:#e65100"<button aria-label="🖨️ ${tr('Print Report', 'طباعة تقرير')}" type="button" class="btn" onclick="window.dsShowMedReportMenu()" style="flex:1;background:#fff3e0;border:1px solid #ff9800;color:#e65100">
           🖨️ ${tr('Print Report', 'طباعة تقرير')}
         </button>
       </div>
@@ -769,10 +772,10 @@ window.dsShowMedReportMenu = function() {
   modal.innerHTML = `<div style="background:var(--bg-card);border-radius:16px;padding:24px;width:360px;text-align:center">
     <h3 style="margin:0 0 16px;color:var(--primary)">🖨️ ${tr('Print Report', 'طباعة تقرير')}</h3>
     <div style="display:flex;flex-direction:column;gap:10px">
-      <button class="btn btn-primary" onclick="showMedicalReportForm('sick_leave');this.closest('.modal-overlay,.fixed').remove()">🏥 ${tr('Sick Leave', 'إجازة مرضية')}</button>
-      <button class="btn btn-secondary" onclick="showMedicalReportForm('medical_report');this.closest('.modal-overlay,.fixed').remove()">📋 ${tr('Medical Report', 'تقرير طبي')}</button>
-      <button class="btn" onclick="showMedicalReportForm('fitness');this.closest('.modal-overlay,.fixed').remove()" style="background:#e8f5e9;border:1px solid #2e7d32;color:#2e7d32">✅ ${tr('Fitness Certificate', 'شهادة لياقة')}</button>
-      <button class="btn btn-danger" onclick="this.closest('.fixed').remove()">✕ ${tr('Cancel', 'إلغاء')}</button>
+      <button class="btn btn-primary" onclick="showMedicalReportForm('sick_leave');this.closest('.modal-overlay,.fixed').remove()"<button aria-label="🏥 ${tr('Sick Leave', 'إجازة مرضية')}" type="button" class="btn btn-primary" onclick="showMedicalReportForm('sick_leave');this.closest('.modal-overlay,.fixed').remove()">🏥 ${tr('Sick Leave', 'إجازة مرضية')}</button>
+      <button class="btn btn-secondary" onclick="showMedicalReportForm('medical_report');this.closest('.modal-overlay,.fixed').remove()"<button aria-label="📋 ${tr('Medical Report', 'تقرير طبي')}" type="button" class="btn btn-secondary" onclick="showMedicalReportForm('medical_report');this.closest('.modal-overlay,.fixed').remove()">📋 ${tr('Medical Report', 'تقرير طبي')}</button>
+      <button class="btn" onclick="showMedicalReportForm('fitness');this.closest('.modal-overlay,.fixed').remove()" style="background:#e8f5e9;border:1px solid #2e7d32;color:#2e7d32"<button aria-label="✅ ${tr('Fitness Certificate', 'شهادة لياقة')}" type="button" class="btn" onclick="showMedicalReportForm('fitness');this.closest('.modal-overlay,.fixed').remove()" style="background:#e8f5e9;border:1px solid #2e7d32;color:#2e7d32">✅ ${tr('Fitness Certificate', 'شهادة لياقة')}</button>
+      <button class="btn btn-danger" onclick="this.closest('.fixed').remove()"<button aria-label="✕ ${tr('Cancel', 'إلغاء')}" type="button" class="btn btn-danger" onclick="this.closest('.fixed').remove()">✕ ${tr('Cancel', 'إلغاء')}</button>
     </div>
   </div>`;
   modal.classList.add('fixed');
@@ -812,7 +815,7 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
           <label style="font-size:11px;font-weight:700">${tr('Notes', 'ملاحظات')}</label>
           <textarea class="form-input" id="dsNotes" rows="2" placeholder="${tr('Clinical notes...', 'ملاحظات سريرية...')}"></textarea>
         </div>
-        <button class="btn btn-primary w-full" onclick="window.dsSaveRecord()" style="height:36px;font-size:12px">
+        <button class="btn btn-primary w-full" onclick="window.dsSaveRecord()" style="height:36px;font-size:12px"<button aria-label="💾 ${tr('Save Diagnosis', 'حفظ التشخيص')}" type="button" class="btn btn-primary w-full" onclick="window.dsSaveRecord()" style="height:36px;font-size:12px">
           💾 ${tr('Save Diagnosis', 'حفظ التشخيص')}
         </button>
       </div>
@@ -833,6 +836,8 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
         </div>
         <div id="dsRxCdsAlerts"></div>
         <button class="btn btn-success w-full" id="dsSendRxBtn"
+          onclick="window.dsSendPrescription(${pid})" 
+          style="height:36px;font-size:12px;display:${window._DS.rxItems.length ? 'flex' : 'none'};align-items:center;justify-content:center;gap:8px"<button aria-label="📤 ${tr('Send to Pharmacy', 'إرسال للصيدلية')} ${window._DS.rxItems.length}" type="button" class="btn btn-success w-full" id="dsSendRxBtn"
           onclick="window.dsSendPrescription(${pid})" 
           style="height:36px;font-size:12px;display:${window._DS.rxItems.length ? 'flex' : 'none'};align-items:center;justify-content:center;gap:8px">
           📤 ${tr('Send to Pharmacy', 'إرسال للصيدلية')} <span id="dsRxCount" class="ds-tab-badge">${window._DS.rxItems.length}</span>
@@ -874,6 +879,7 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
           <input class="form-input" id="dsLabNote" placeholder="${tr('Reason for order...', 'سبب الطلب...')}">
         </div>
         <button class="btn w-full" onclick="window.dsOrderLab(${pid})"
+          style="height:36px;font-size:12px;background:#0ea5e9;color:#fff;border:none"<button aria-label="🔬 ${tr('Order Lab', 'طلب تحليل')}" type="button" class="btn w-full" onclick="window.dsOrderLab(${pid})"
           style="height:36px;font-size:12px;background:#0ea5e9;color:#fff;border:none">
           🔬 ${tr('Order Lab', 'طلب تحليل')}
         </button>
@@ -919,6 +925,7 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
           <input class="form-input" id="dsRadNote" placeholder="${tr('Clinical reason...', 'السبب السريري...')}">
         </div>
         <button class="btn w-full" onclick="window.dsOrderRadiology(${pid})"
+          style="height:36px;font-size:12px;background:#7c3aed;color:#fff;border:none"<button aria-label="📡 ${tr('Order Radiology', 'طلب أشعة')}" type="button" class="btn w-full" onclick="window.dsOrderRadiology(${pid})"
           style="height:36px;font-size:12px;background:#7c3aed;color:#fff;border:none">
           📡 ${tr('Order Radiology', 'طلب أشعة')}
         </button>
@@ -955,6 +962,7 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
           <textarea class="form-input" id="dsRefNote" rows="2" placeholder="${tr('Clinical reason for referral...', 'سبب التحويل...')}"></textarea>
         </div>
         <button class="btn w-full" onclick="window.dsOrderReferral(${pid})"
+          style="height:36px;font-size:12px;background:#16a34a;color:#fff;border:none"<button aria-label="🏥 ${tr('Send Referral', 'إرسال التحويل')}" type="button" class="btn w-full" onclick="window.dsOrderReferral(${pid})"
           style="height:36px;font-size:12px;background:#16a34a;color:#fff;border:none">
           🏥 ${tr('Send Referral', 'إرسال التحويل')}
         </button>
@@ -989,6 +997,7 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
           </select>
         </div>
         <button class="btn w-full" onclick="window.dsOrderDiet(${pid})"
+          style="height:36px;font-size:12px;background:#16a34a;color:#fff;border:none"<button aria-label="🥗 ${tr('Order Diet', 'طلب الحمية')}" type="button" class="btn w-full" onclick="window.dsOrderDiet(${pid})"
           style="height:36px;font-size:12px;background:#16a34a;color:#fff;border:none">
           🥗 ${tr('Order Diet', 'طلب الحمية')}
         </button>
@@ -1027,6 +1036,7 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
           <input class="form-input" id="dsIvAdditive" placeholder="${tr('e.g. KCl 20mEq, MgSO4...', 'مثال: KCl 20mEq')}">
         </div>
         <button class="btn w-full" onclick="window.dsOrderIV(${pid})"
+          style="height:36px;font-size:12px;background:#0369a1;color:#fff;border:none"<button aria-label="💉 ${tr('Order IV Fluids', 'طلب سوائل وريدية')}" type="button" class="btn w-full" onclick="window.dsOrderIV(${pid})"
           style="height:36px;font-size:12px;background:#0369a1;color:#fff;border:none">
           💉 ${tr('Order IV Fluids', 'طلب سوائل وريدية')}
         </button>
@@ -1059,6 +1069,7 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
           <input class="form-input" id="dsNursingNote" placeholder="${tr('Specify if needed...', 'حدد إن لزم...')}">
         </div>
         <button class="btn w-full" onclick="window.dsOrderNursing(${pid})"
+          style="height:36px;font-size:12px;background:#7c3aed;color:#fff;border:none"<button aria-label="🩺 ${tr('Issue Nursing Order', 'إصدار أمر تمريض')}" type="button" class="btn w-full" onclick="window.dsOrderNursing(${pid})"
           style="height:36px;font-size:12px;background:#7c3aed;color:#fff;border:none">
           🩺 ${tr('Issue Nursing Order', 'إصدار أمر تمريض')}
         </button>
@@ -1087,10 +1098,10 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
           <textarea class="form-input" id="dsConsentNote" rows="2" placeholder="${tr('Procedure, risks explained, or consent notes...', 'الإجراء، المخاطر المشروحة، أو ملاحظات الإقرار...')}"></textarea>
         </div>
         <div class="ds-order-actions-grid">
-          <button class="btn btn-primary" onclick="window.dsCreateConsentFromStation(${pid})" style="height:36px;font-size:12px">
+          <button class="btn btn-primary" onclick="window.dsCreateConsentFromStation(${pid})" style="height:36px;font-size:12px"<button aria-label="📜 ${tr('Create', 'إنشاء')}" type="button" class="btn btn-primary" onclick="window.dsCreateConsentFromStation(${pid})" style="height:36px;font-size:12px">
             📜 ${tr('Create', 'إنشاء')}
           </button>
-          <button class="btn" onclick="window.dsSwitchTab('consents')" style="height:36px;font-size:12px">
+          <button class="btn" onclick="window.dsSwitchTab('consents')" style="height:36px;font-size:12px"<button aria-label="📋 ${tr('Registry', 'السجل')}" type="button" class="btn" onclick="window.dsSwitchTab('consents')" style="height:36px;font-size:12px">
             📋 ${tr('Registry', 'السجل')}
           </button>
         </div>
@@ -1100,6 +1111,7 @@ window.dsRenderOrdersPanel = function(patient, records = []) {
     <!-- Sign & Close -->
     <div style="padding:12px 0">
       <button class="btn w-full" onclick="window.dsSignEncounter()"
+        style="background:linear-gradient(135deg,#7c3aed,#0369a1);color:#fff;border:none;height:44px;font-size:13px;font-weight:700;border-radius:12px"<button aria-label="✍️ ${tr('Sign &amp; Close Encounter', 'توقيع وإغلاق الزيارة')}" type="button" class="btn w-full" onclick="window.dsSignEncounter()"
         style="background:linear-gradient(135deg,#7c3aed,#0369a1);color:#fff;border:none;height:44px;font-size:13px;font-weight:700;border-radius:12px">
         ✍️ ${tr('Sign & Close Encounter', 'توقيع وإغلاق الزيارة')}
       </button>
@@ -1198,7 +1210,7 @@ window.dsAddRxItem = function(id, nameAr, nameEn, generic, price) {
           <div class="ds-cds-alert-title">${tr('ALLERGY ALERT', 'تنبيه حساسية')}: ${escapeHTML(nameAr || nameEn)}</div>
           <div class="ds-cds-alert-desc">${tr('Patient has recorded allergy to:', 'المريض لديه حساسية مسجّلة من:')} ${escapeHTML(allergyMatch.allergen)}</div>
         </div>
-        <button class="ds-cds-alert-dismiss" onclick="this.parentElement.remove()">✕</button>
+        <button class="ds-cds-alert-dismiss" onclick="this.parentElement.remove()"<button aria-label="✕" type="button" class="ds-cds-alert-dismiss" onclick="this.parentElement.remove()">✕</button>
       </div>`;
     }
     // Still allow override but warn
@@ -1235,7 +1247,7 @@ window.dsRenderRxItems = function() {
     <div style="background:var(--surface-container,#f8fafc);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <strong style="font-size:12px">💊 ${escapeHTML(item.nameAr || item.nameEn)}</strong>
-        <button class="ds-rx-remove" onclick="window.dsRemoveRxItem(${idx})">✕</button>
+        <button class="ds-rx-remove" onclick="window.dsRemoveRxItem(${idx})"<button aria-label="✕" type="button" class="ds-rx-remove" onclick="window.dsRemoveRxItem(${idx})">✕</button>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
         <div>
@@ -1416,7 +1428,7 @@ window.dsTabConsents = async function(container) {
         <select class="form-input" id="dsConsentTemplate" style="height:34px;font-size:12px">
           ${templates.map(t => `<option value="${escapeHTML(t.type || '')}">${escapeHTML(isArabic ? (t.title_ar || t.title || '') : (t.title || t.title_ar || ''))}</option>`).join('')}
         </select>
-        <button class="btn btn-primary" onclick="window.dsCreateConsentFromStation(${safeId(pid)}, 'dsConsentTemplate')" style="height:34px;font-size:12px">
+        <button class="btn btn-primary" onclick="window.dsCreateConsentFromStation(${safeId(pid)}, 'dsConsentTemplate')" style="height:34px;font-size:12px"<button aria-label="📜 ${tr('Create Consent', 'إنشاء إقرار')}" type="button" class="btn btn-primary" onclick="window.dsCreateConsentFromStation(${safeId(pid)}, 'dsConsentTemplate')" style="height:34px;font-size:12px">
           📜 ${tr('Create Consent', 'إنشاء إقرار')}
         </button>
       </div>
@@ -1438,8 +1450,8 @@ window.dsTabConsents = async function(container) {
               </div>
               <span class="ds-consent-status ${isSigned ? 'signed' : 'pending'}">${isSigned ? tr('Signed', 'موقع') : tr('Pending', 'بانتظار التوقيع')}</span>
               <div class="ds-consent-actions">
-                ${!isSigned ? `<button class="btn btn-sm btn-primary" onclick="window.dsOpenConsentSignModal(${safeId(f.id)})">✍️ ${tr('Sign', 'توقيع')}</button>` : ''}
-                <button class="btn btn-sm" onclick="window.printConsentForm ? window.printConsentForm(${safeId(f.id)}) : window.dsOpenConsentSignModal(${safeId(f.id)})">🖨️ ${tr('Print', 'طباعة')}</button>
+                ${!isSigned ? `<button class="btn btn-sm btn-primary" onclick="window.dsOpenConsentSignModal(${safeId(f.id)})"<button aria-label="✍️ ${tr('Sign', 'توقيع')}" type="button" class="btn btn-sm btn-primary" onclick="window.dsOpenConsentSignModal(${safeId(f.id)})">✍️ ${tr('Sign', 'توقيع')}</button>` : ''}
+                <button class="btn btn-sm" onclick="window.printConsentForm ? window.printConsentForm(${safeId(f.id)}) : window.dsOpenConsentSignModal(${safeId(f.id)})"<button aria-label="🖨️ ${tr('Print', 'طباعة')}" type="button" class="btn btn-sm" onclick="window.printConsentForm ? window.printConsentForm(${safeId(f.id)}) : window.dsOpenConsentSignModal(${safeId(f.id)})">🖨️ ${tr('Print', 'طباعة')}</button>
               </div>
             </div>`;
         }).join('')}
@@ -1461,7 +1473,7 @@ window.dsOpenConsentSignModal = async function(formId) {
     <div class="ds-consent-modal-card">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
         <strong style="font-size:15px">✍️ ${escapeHTML(isArabic ? (form.form_title_ar || form.form_title || '') : (form.form_title || form.form_title_ar || ''))}</strong>
-        <button class="btn btn-sm" onclick="this.closest('.ds-consent-modal').remove()">✕</button>
+        <button class="btn btn-sm" onclick="this.closest('.ds-consent-modal').remove()"<button aria-label="✕" type="button" class="btn btn-sm" onclick="this.closest('.ds-consent-modal').remove()">✕</button>
       </div>
       <div class="ds-consent-preview">
         <p style="white-space:pre-wrap;margin:0">${escapeHTML(form.content || '')}</p>
@@ -1474,11 +1486,11 @@ window.dsOpenConsentSignModal = async function(formId) {
       <canvas id="dsConsentSigCanvas" width="560" height="180" class="ds-consent-canvas"></canvas>
       <div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:10px">
         <input class="form-input" id="dsConsentWitness" placeholder="${tr('Witness name', 'اسم الشاهد')}">
-        <button class="btn" onclick="window.dsClearConsentSignature()" style="height:38px">${tr('Clear', 'مسح')}</button>
+        <button class="btn" onclick="window.dsClearConsentSignature()" style="height:38px"<button aria-label="${tr('Clear', 'مسح')}" type="button" class="btn" onclick="window.dsClearConsentSignature()" style="height:38px">${tr('Clear', 'مسح')}</button>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
-        <button class="btn" onclick="this.closest('.ds-consent-modal').remove()">${tr('Cancel', 'إلغاء')}</button>
-        <button class="btn btn-primary" onclick="window.dsSignConsentFromStation(${safeId(formId)})">✍️ ${tr('Sign Consent', 'توقيع الإقرار')}</button>
+        <button class="btn" onclick="this.closest('.ds-consent-modal').remove()"<button aria-label="${tr('Cancel', 'إلغاء')}" type="button" class="btn" onclick="this.closest('.ds-consent-modal').remove()">${tr('Cancel', 'إلغاء')}</button>
+        <button class="btn btn-primary" onclick="window.dsSignConsentFromStation(${safeId(formId)})"<button aria-label="✍️ ${tr('Sign Consent', 'توقيع الإقرار')}" type="button" class="btn btn-primary" onclick="window.dsSignConsentFromStation(${safeId(formId)})">✍️ ${tr('Sign Consent', 'توقيع الإقرار')}</button>
       </div>
     </div>
   `;
@@ -1705,10 +1717,10 @@ window.dsSignEncounter = function() {
       <input type="password" class="ds-pin-input" id="dsPinInput" maxlength="6" inputmode="numeric"
         placeholder="● ● ● ●" oninput="this.value=this.value.replace(/\D/g,'')">
       <div style="display:flex;gap:10px;margin-top:8px">
-        <button class="btn btn-primary" onclick="window.dsConfirmSign(${encId})" style="flex:1;height:44px;font-size:14px;font-weight:700">
+        <button class="btn btn-primary" onclick="window.dsConfirmSign(${encId})" style="flex:1;height:44px;font-size:14px;font-weight:700"<button aria-label="✅ ${tr('Sign Now', 'توقيع الآن')}" type="button" class="btn btn-primary" onclick="window.dsConfirmSign(${encId})" style="flex:1;height:44px;font-size:14px;font-weight:700">
           ✅ ${tr('Sign Now', 'توقيع الآن')}
         </button>
-        <button class="btn" onclick="this.closest('.fixed-modal').remove()" style="flex:1;height:44px">
+        <button class="btn" onclick="this.closest('.fixed-modal').remove()" style="flex:1;height:44px"<button aria-label="${tr('Cancel', 'إلغاء')}" type="button" class="btn" onclick="this.closest('.fixed-modal').remove()" style="flex:1;height:44px">
           ${tr('Cancel', 'إلغاء')}
         </button>
       </div>
@@ -1772,8 +1784,8 @@ window.dsAddProblem = function() {
       </select></div>
     <div class="form-group mb-12"><label>${tr('Onset Date', 'تاريخ البداية')}</label><input type="date" class="form-input" id="dpOnset"></div>
     <div style="display:flex;gap:10px">
-      <button class="btn btn-primary" style="flex:1" onclick="window.dsSubmitProblem(${pid})">💾 ${tr('Save', 'حفظ')}</button>
-      <button class="btn btn-secondary" style="flex:1" onclick="this.closest('.fixed-p').remove()">${tr('Cancel', 'إلغاء')}</button>
+      <button class="btn btn-primary" style="flex:1" onclick="window.dsSubmitProblem(${pid})"<button aria-label="💾 ${tr('Save', 'حفظ')}" type="button" class="btn btn-primary" style="flex:1" onclick="window.dsSubmitProblem(${pid})">💾 ${tr('Save', 'حفظ')}</button>
+      <button class="btn btn-secondary" style="flex:1" onclick="this.closest('.fixed-p').remove()"<button aria-label="${tr('Cancel', 'إلغاء')}" type="button" class="btn btn-secondary" style="flex:1" onclick="this.closest('.fixed-p').remove()">${tr('Cancel', 'إلغاء')}</button>
     </div>
   </div>`;
   modal.classList.add('fixed-p');
@@ -1956,7 +1968,7 @@ window.dsTabHistoryExt = async function(container) {
     <div style="margin-bottom:16px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <strong style="font-size:12px;color:var(--text-dim);text-transform:uppercase">👤 ${tr('Social History', 'التاريخ الاجتماعي')}</strong>
-        <button class="btn btn-sm" style="font-size:10px;padding:4px 8px" onclick="window.dsEditSocialHistory(${pid})">✏️ ${tr('Edit', 'تعديل')}</button>
+        <button class="btn btn-sm" style="font-size:10px;padding:4px 8px" onclick="window.dsEditSocialHistory(${pid})"<button aria-label="✏️ ${tr('Edit', 'تعديل')}" type="button" class="btn btn-sm" style="font-size:10px;padding:4px 8px" onclick="window.dsEditSocialHistory(${pid})">✏️ ${tr('Edit', 'تعديل')}</button>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         ${[['smoking_status', tr('Smoking', 'التدخين'), smokingMap[social.smoking_status] || social.smoking_status || '-'],
@@ -1976,7 +1988,7 @@ window.dsTabHistoryExt = async function(container) {
     <div style="margin-bottom:16px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <strong style="font-size:12px;color:var(--text-dim);text-transform:uppercase">👨‍👩‍👦 ${tr('Family History', 'التاريخ العائلي')} (${family.length})</strong>
-        <button class="btn btn-sm" style="font-size:10px;padding:4px 8px" onclick="window.dsAddFamilyHistory(${pid})">+ ${tr('Add', 'إضافة')}</button>
+        <button class="btn btn-sm" style="font-size:10px;padding:4px 8px" onclick="window.dsAddFamilyHistory(${pid})"<button aria-label="+ ${tr('Add', 'إضافة')}" type="button" class="btn btn-sm" style="font-size:10px;padding:4px 8px" onclick="window.dsAddFamilyHistory(${pid})">+ ${tr('Add', 'إضافة')}</button>
       </div>
       ${family.length ? family.map(f => `
         <div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
@@ -2042,8 +2054,8 @@ window.dsEditSocialHistory = function(pid) {
         <option value="Daily">${tr('Daily', 'يومياً')}</option>
       </select></div>
     <div style="display:flex;gap:10px">
-      <button class="btn btn-primary" style="flex:1" onclick="window.dsSaveSocialHistory(${pid})">💾 ${tr('Save', 'حفظ')}</button>
-      <button class="btn btn-secondary" style="flex:1" onclick="this.closest('[style*=fixed]').remove()">${tr('Cancel', 'إلغاء')}</button>
+      <button class="btn btn-primary" style="flex:1" onclick="window.dsSaveSocialHistory(${pid})"<button aria-label="💾 ${tr('Save', 'حفظ')}" type="button" class="btn btn-primary" style="flex:1" onclick="window.dsSaveSocialHistory(${pid})">💾 ${tr('Save', 'حفظ')}</button>
+      <button class="btn btn-secondary" style="flex:1" onclick="this.closest('[style*=fixed]').remove()"<button aria-label="${tr('Cancel', 'إلغاء')}" type="button" class="btn btn-secondary" style="flex:1" onclick="this.closest('[style*=fixed]').remove()">${tr('Cancel', 'إلغاء')}</button>
     </div>
   </div>`;
   document.body.appendChild(modal);
@@ -2077,8 +2089,8 @@ window.dsAddFamilyHistory = function(pid) {
     <div class="form-group mb-8"><label>${tr('Condition', 'التشخيص')}</label><input class="form-input" id="fhCondition" placeholder="${tr('e.g. DM, HTN, Cancer', 'مثال: سكري, ضغط')}"></div>
     <div class="form-group mb-12"><label>ICD-10</label><input class="form-input" id="fhIcd" placeholder="E11, I10..."></div>
     <div style="display:flex;gap:10px">
-      <button class="btn btn-primary" style="flex:1" onclick="window.dsSaveFamilyHistory(${pid})">💾 ${tr('Save', 'حفظ')}</button>
-      <button class="btn btn-secondary" style="flex:1" onclick="this.closest('[style*=fixed]').remove()">${tr('Cancel', 'إلغاء')}</button>
+      <button class="btn btn-primary" style="flex:1" onclick="window.dsSaveFamilyHistory(${pid})"<button aria-label="💾 ${tr('Save', 'حفظ')}" type="button" class="btn btn-primary" style="flex:1" onclick="window.dsSaveFamilyHistory(${pid})">💾 ${tr('Save', 'حفظ')}</button>
+      <button class="btn btn-secondary" style="flex:1" onclick="this.closest('[style*=fixed]').remove()"<button aria-label="${tr('Cancel', 'إلغاء')}" type="button" class="btn btn-secondary" style="flex:1" onclick="this.closest('[style*=fixed]').remove()">${tr('Cancel', 'إلغاء')}</button>
     </div>
   </div>`;
   document.body.appendChild(modal);

@@ -12,8 +12,8 @@ const LabStation = {
   <header class="flex justify-between items-center mb-6">
     <h1 class="text-2xl font-bold text-slate-800">${tr('Lab Command Center', 'مركز قيادة المختبر')}</h1>
     <div class="flex gap-2">
-      <button onclick="LabStation.openResultEntry()" class="stitch-btn-primary px-4 py-2 bg-teal-700 text-white rounded-lg shadow-sm hover:bg-teal-800">${tr('Enter Result', 'إدخال نتيجة')}</button>
-      <button onclick="LabStation.openCriticalValues()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100">${tr('Critical Values', 'القيم الحرجة')}</button>
+      <button onclick="LabStation.openResultEntry()" class="stitch-btn-primary px-4 py-2 bg-teal-700 text-white rounded-lg shadow-sm hover:bg-teal-800"<button aria-label="${tr('Enter Result', 'إدخال نتيجة')}" type="button" onclick="LabStation.openResultEntry()" class="stitch-btn-primary px-4 py-2 bg-teal-700 text-white rounded-lg shadow-sm hover:bg-teal-800">${tr('Enter Result', 'إدخال نتيجة')}</button>
+      <button onclick="LabStation.openCriticalValues()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100"<button aria-label="${tr('Critical Values', 'القيم الحرجة')}" type="button" onclick="LabStation.openCriticalValues()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100">${tr('Critical Values', 'القيم الحرجة')}</button>
     </div>
   </header>
   <div class="grid grid-cols-12 gap-6">
@@ -35,9 +35,9 @@ const LabStation = {
     <div class="col-span-6 space-y-6">
       <div class="stitch-card p-6 bg-white rounded-xl shadow-sm border border-slate-200 min-h-[500px]">
         <div class="flex border-b border-slate-200 mb-6">
-          <button class="px-4 py-2 border-b-2 border-teal-700 text-teal-700 font-medium">${tr('Result Entry', 'إدخال النتائج')}</button>
-          <button class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Validation', 'اعتماد')}</button>
-          <button class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('QC', 'مراقبة الجودة')}</button>
+          <button class="px-4 py-2 border-b-2 border-teal-700 text-teal-700 font-medium"<button aria-label="${tr('Result Entry', 'إدخال النتائج')}" type="button" class="px-4 py-2 border-b-2 border-teal-700 text-teal-700 font-medium">${tr('Result Entry', 'إدخال النتائج')}</button>
+          <button class="px-4 py-2 text-slate-500 hover:text-slate-800"<button aria-label="${tr('Validation', 'اعتماد')}" type="button" class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Validation', 'اعتماد')}</button>
+          <button class="px-4 py-2 text-slate-500 hover:text-slate-800"<button aria-label="${tr('QC', 'مراقبة الجودة')}" type="button" class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('QC', 'مراقبة الجودة')}</button>
         </div>
         <div id="lab-workspace" class="space-y-4">
           <div class="p-8 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">${tr('No active specimen. Open Result Entry to begin.', 'لا توجد عينة نشطة. افتح إدخال النتائج للبدء.')}</div>
@@ -65,7 +65,6 @@ const LabStation = {
   </div>
 </div>`;
     },
-    openResultEntry: () => alert('Result entry (POST /api/lab/result)'),
-    openCriticalValues: () => alert('Critical values (GET /api/lab/critical-values)')
-};
+    openResultEntry: () => Modal.open({ title: "Result entry (POST /api/lab/result)", body: "<p style=\"font-size:14px;color:#334155\">Result entry (POST /api/lab/result)</p><div style=\"background:#f1f5f9;border-radius:6px;padding:10px;font-size:12px;color:#475569;margin-top:10px\"><strong>HTTP:</strong> API &nbsp;&nbsp;<strong>Endpoint:</strong> <code>/api/lab/result</code></div><p style=\"font-size:13px;color:#64748b;margin-top:10px\">This action will be wired to the live backend. Configure Department Mappings to enable persistent capture.</p>", primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true }),
+    openCriticalValues: () => Modal.open({ title: "Critical values (GET /api/lab/critical-values)", body: "<p style=\"font-size:14px;color:#334155\">Critical values (GET /api/lab/critical-values)</p><div style=\"background:#f1f5f9;border-radius:6px;padding:10px;font-size:12px;color:#475569;margin-top:10px\"><strong>HTTP:</strong> API &nbsp;&nbsp;<strong>Endpoint:</strong> <code>/api/lab/critical-values</code></div><p style=\"font-size:13px;color:#64748b;margin-top:10px\">This action will be wired to the live backend. Configure Department Mappings to enable persistent capture.</p>", primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true })};
 if (typeof window !== 'undefined') window.LabStation = LabStation;

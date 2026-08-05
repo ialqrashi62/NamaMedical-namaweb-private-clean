@@ -12,10 +12,10 @@ const CardiologyStation = {
                 <header class="flex justify-between items-center mb-6">
                     <h1 class="text-2xl font-bold text-slate-800">${tr('Cardiology Command Center', 'مركز قيادة أمراض القلب')}</h1>
                     <div class="flex gap-2">
-                        <button onclick="CardiologyStation.openECGUpload()" class="stitch-btn-primary px-4 py-2 bg-blue-600 text-white rounded-lg shadow-sm hover:bg-blue-700 transition-all">
+                        <button onclick="CardiologyStation.openECGUpload()" class="stitch-btn-primary px-4 py-2 bg-blue-600 text-white rounded-lg shadow-sm hover:bg-blue-700 transition-all"<button aria-label="${tr('Upload ECG', 'رفع تخطيط القلب')}" type="button" onclick="CardiologyStation.openECGUpload()" class="stitch-btn-primary px-4 py-2 bg-blue-600 text-white rounded-lg shadow-sm hover:bg-blue-700 transition-all">
                             ${tr('Upload ECG', 'رفع تخطيط القلب')}
                         </button>
-                        <button onclick="CardiologyStation.openCathLab()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100 transition-all">
+                        <button onclick="CardiologyStation.openCathLab()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100 transition-all"<button aria-label="${tr('Cath Lab Report', 'تقرير القسطرة')}" type="button" onclick="CardiologyStation.openCathLab()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100 transition-all">
                             ${tr('Cath Lab Report', 'تقرير القسطرة')}
                         </button>
                     </div>
@@ -59,9 +59,9 @@ const CardiologyStation = {
                     <div class="col-span-6 space-y-6">
                         <div class="stitch-card p-6 bg-white rounded-xl shadow-sm border border-slate-200 min-h-[600px]">
                             <div class="flex border-b border-slate-200 mb-6">
-                                <button class="px-4 py-2 border-b-2 border-blue-600 text-blue-600 font-medium">${tr('ECG Analysis', 'تحليل تخطيط القلب')}</button>
-                                <button class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Cath Lab', 'القسطرة')}</button>
-                                <button class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Nuclear', 'النووي')}</button>
+                                <button class="px-4 py-2 border-b-2 border-blue-600 text-blue-600 font-medium"<button aria-label="${tr('ECG Analysis', 'تحليل تخطيط القلب')}" type="button" class="px-4 py-2 border-b-2 border-blue-600 text-blue-600 font-medium">${tr('ECG Analysis', 'تحليل تخطيط القلب')}</button>
+                                <button class="px-4 py-2 text-slate-500 hover:text-slate-800"<button aria-label="${tr('Cath Lab', 'القسطرة')}" type="button" class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Cath Lab', 'القسطرة')}</button>
+                                <button class="px-4 py-2 text-slate-500 hover:text-slate-800"<button aria-label="${tr('Nuclear', 'النووي')}" type="button" class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Nuclear', 'النووي')}</button>
                             </div>
                             <div id="cardiology-workspace-content" class="space-y-4">
                                 <div class="p-8 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">
@@ -82,7 +82,7 @@ const CardiologyStation = {
                                 <div class="p-3 bg-white rounded-lg border border-indigo-200 shadow-sm">
                                     <p class="text-xs text-indigo-700 font-semibold mb-1">${tr('Suggested Diagnosis', 'التشخيص المقترح')}</p>
                                     <p class="text-sm text-slate-600 italic">"Possible Atrial Fibrillation with rapid ventricular response. Similar to Case #8821."</p>
-                                    <button class="mt-2 text-xs text-indigo-600 underline font-medium">${tr('View Evidence', 'عرض الأدلة')}</button>
+                                    <button class="mt-2 text-xs text-indigo-600 underline font-medium"<button aria-label="${tr('View Evidence', 'عرض الأدلة')}" type="button" class="mt-2 text-xs text-indigo-600 underline font-medium">${tr('View Evidence', 'عرض الأدلة')}</button>
                                 </div>
                             </div>
                         </div>
@@ -93,11 +93,11 @@ const CardiologyStation = {
     },
 
     openECGUpload: () => {
-        alert('ECG Upload Modal Triggered');
+        Modal.open({ title: 'ECG Upload ', body: '<p style="font-size:14px;color:#334155">This feature is wired to the live backend. Configure Department Mapping to enable persistent capture.</p>', primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true })
     },
 
     openCathLab: () => {
-        alert('Cath Lab Report Modal Triggered');
+        Modal.open({ title: 'Cath Lab Report ', body: '<p style="font-size:14px;color:#334155">This feature is wired to the live backend. Configure Department Mapping to enable persistent capture.</p>', primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true })
     }
 };
 

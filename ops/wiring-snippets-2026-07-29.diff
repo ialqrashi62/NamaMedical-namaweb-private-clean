@@ -1,0 +1,19 @@
+--- a/server.js
++++ b/server.js
+@@ -18106,7 +18106,14 @@
+ app.use('/api/public', makePublicPlansRouter({ pool }));
+ 
+ // ===== CLINICAL CALCULATOR ROUTERS — Phase 2E2 (18 fns) + Phase 3 (48 fns across 26 engines) =====
+ // Both routers are READ-ONLY clinical decision-support: no DB writes, no PHI, no PII.
+ // requireAuth + requireTenantScope are applied INSIDE each router (router-level middleware).
+ // Engine throws on validation error => translated to 400 with code='engine_error'.
+ // Phase 2E2 lives at /api/calculators/*; Phase 3 (26 new engines) lives at /api/phase3/*.
++// ===== Patient Portal API — 2026-07-29 (9 endpoints, Patient role only) =====
++// router is module.exports = router (plain Express Router). requireAuth +
++// requireTenantScope applied at mount. The router enforces Patient role
++// + portal_users linkage inside resolvePortalContext() (fail-closed on
++// missing tenant/role — see portal_api.js header for safety-rail map).
++const portalApi = require('./portal_api');
++app.use('/api/portal', requireAuth, requireTenantScope, portalApi);
+ const { makeCalculatorsRouter } = require('./clinical_calculators_router');
+ app.use('/api/calculators', makeCalculatorsRouter({ requireAuth, requireTenantScope }));

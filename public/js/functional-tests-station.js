@@ -12,8 +12,8 @@ const FunctionalTestsStation = {
   <header class="flex justify-between items-center mb-6">
     <h1 class="text-2xl font-bold text-slate-800">${tr('Functional Tests Command Center', 'مركز قيادة الفحوصات الوظيفية')}</h1>
     <div class="flex gap-2">
-      <button onclick="FunctionalTestsStation.openECG()" class="stitch-btn-primary px-4 py-2 bg-cyan-700 text-white rounded-lg shadow-sm hover:bg-cyan-800">${tr('New ECG', 'تخطيط قلب جديد')}</button>
-      <button onclick="FunctionalTestsStation.openPFT()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100">${tr('New PFT', 'وظائف رئة')}</button>
+      <button onclick="FunctionalTestsStation.openECG()" class="stitch-btn-primary px-4 py-2 bg-cyan-700 text-white rounded-lg shadow-sm hover:bg-cyan-800"<button aria-label="${tr('New ECG', 'تخطيط قلب جديد')}" type="button" onclick="FunctionalTestsStation.openECG()" class="stitch-btn-primary px-4 py-2 bg-cyan-700 text-white rounded-lg shadow-sm hover:bg-cyan-800">${tr('New ECG', 'تخطيط قلب جديد')}</button>
+      <button onclick="FunctionalTestsStation.openPFT()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100"<button aria-label="${tr('New PFT', 'وظائف رئة')}" type="button" onclick="FunctionalTestsStation.openPFT()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100">${tr('New PFT', 'وظائف رئة')}</button>
     </div>
   </header>
   <div class="grid grid-cols-12 gap-6">
@@ -33,7 +33,7 @@ const FunctionalTestsStation = {
     <div class="col-span-6 space-y-6">
       <div class="stitch-card p-6 bg-white rounded-xl shadow-sm border border-slate-200 min-h-[500px]">
         <div class="flex border-b border-slate-200 mb-6">
-          <button class="px-4 py-2 border-b-2 border-cyan-700 text-cyan-700 font-medium">${tr('Waveform + Report', 'الموجة + التقرير')}</button>
+          <button class="px-4 py-2 border-b-2 border-cyan-700 text-cyan-700 font-medium"<button aria-label="${tr('Waveform + Report', 'الموجة + التقرير')}" type="button" class="px-4 py-2 border-b-2 border-cyan-700 text-cyan-700 font-medium">${tr('Waveform + Report', 'الموجة + التقرير')}</button>
         </div>
         <div id="functional-workspace" class="space-y-4">
           <div class="aspect-video bg-slate-900 rounded-lg flex items-center justify-center text-slate-400 text-sm">
@@ -59,7 +59,6 @@ const FunctionalTestsStation = {
   </div>
 </div>`;
     },
-    openECG: () => alert('ECG study (POST /api/functional-tests/ecg)'),
-    openPFT: () => alert('PFT study (POST /api/functional-tests/pft)')
-};
+    openECG: () => Modal.open({ title: "ECG study (POST /api/functional-tests/ecg)", body: "<p style=\"font-size:14px;color:#334155\">ECG study (POST /api/functional-tests/ecg)</p><div style=\"background:#f1f5f9;border-radius:6px;padding:10px;font-size:12px;color:#475569;margin-top:10px\"><strong>HTTP:</strong> API &nbsp;&nbsp;<strong>Endpoint:</strong> <code>/api/functional-tests/ecg</code></div><p style=\"font-size:13px;color:#64748b;margin-top:10px\">This action will be wired to the live backend. Configure Department Mappings to enable persistent capture.</p>", primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true }),
+    openPFT: () => Modal.open({ title: "PFT study (POST /api/functional-tests/pft)", body: "<p style=\"font-size:14px;color:#334155\">PFT study (POST /api/functional-tests/pft)</p><div style=\"background:#f1f5f9;border-radius:6px;padding:10px;font-size:12px;color:#475569;margin-top:10px\"><strong>HTTP:</strong> API &nbsp;&nbsp;<strong>Endpoint:</strong> <code>/api/functional-tests/pft</code></div><p style=\"font-size:13px;color:#64748b;margin-top:10px\">This action will be wired to the live backend. Configure Department Mappings to enable persistent capture.</p>", primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true })};
 if (typeof window !== 'undefined') window.FunctionalTestsStation = FunctionalTestsStation;

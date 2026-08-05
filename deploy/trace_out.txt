@@ -1,0 +1,26 @@
+500 <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Internal Server Error</pre>
+</body>
+</html>
+
+[TAILING] Tailing last 200 lines for [nama-medical-erp] process (change the value with --lines option)
+/root/.pm2/logs/nama-medical-erp-out.log last 200 lines:
+/root/.pm2/logs/nama-medical-erp-error.log last 200 lines:
+TypeError: Cannot read properties of undefined (reading 'stack')
+    at handle (/var/www/namaweb/node_modules/express/lib/router/index.js:153:20)
+    at Layer.handle [as handle_request] (/var/www/namaweb/node_modules/express/lib/router/layer.js:95:5)
+    at trim_prefix (/var/www/namaweb/node_modules/express/lib/router/index.js:328:13)
+    at /var/www/namaweb/node_modules/express/lib/router/index.js:286:9
+    at Function.process_params (/var/www/namaweb/node_modules/express/lib/router/index.js:346:12)
+    at next (/var/www/namaweb/node_modules/express/lib/router/index.js:280:10)
+    at _useMw (/var/www/namaweb/server.js:21899:3)
+    at Layer.handle [as handle_request] (/var/www/namaweb/node_modules/express/lib/router/layer.js:95:5)
+    at trim_prefix (/var/www/namaweb/node_modules/express/lib/router/index.js:328:13)
+    at /var/www/namaweb/node_modules/express/lib/router/index.js:286:9
+

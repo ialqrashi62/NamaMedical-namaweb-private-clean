@@ -1,0 +1,40 @@
+
+=== NamaMedical smoke ===
+
+  [OK]   Engine is abstract
+  [OK]   ExecutionContext fail-closed on missing tenant
+  [OK]   Redactor scrubs PHI
+  [OK]   RAG cross-tenant throws
+  [OK]   Drug safety: warfarin + fluconazole blocks
+  [OK]   Drug safety: pregnancy + warfarin blocks
+  [OK]   Drug safety: penicillin allergic + amoxicillin blocks
+  [OK]   HARD red flag blocks execute
+  [OK]   Audit redacts secrets
+  [OK]   Engine instances load for all 21 depts
+    [info] Loaded 159 dept engines
+  [OK]   Engine instantiation per dept works (>=158 incl. Tier-5 + Tier-6 workflows)
+  [OK]   Audit chain is hash-chained and tamper-evident
+  [OK]   RedFlagService merges default + custom rules
+  [OK]   Patient portal hash-chained ledger accepts patient consent
+  [OK]   Metrics counters and histograms serialize to Prometheus text
+  [OK]   StructuredLogger scrubs PHI keys + emits valid JSON
+  [OK]   Audit chain detects tampering
+  [OK]   Tenant presets: 16 facility types, each with min modules
+  [OK]   Tenant presets: apply + diff + assertCanMutate
+  [OK]   Hikma Atlas onboards a tertiary hospital with module preset
+  [OK]   Hikma Atlas rejects malformed tenant input
+{"ts":"2026-08-01T03:44:02.501Z","level":"info","service":"nphies-adapter","env":"sandbox","hostname":"DESKTOP-T70LUCJ","msg":"nphies.bundleClaim","tenantId":"T1","status":202,"sandbox":true}
+  [OK]   NPHIES adapter bundleClaim returns sandbox stub
+{"ts":"2026-08-01T03:44:02.502Z","level":"info","service":"zatca-adapter","env":"sandbox","hostname":"DESKTOP-T70LUCJ","msg":"zatca.sandbox.clearance","tenantId":"T1","invoiceNumber":"INV-001"}
+  [OK]   ZATCA sandbox clearance hashes + signs UBL invoice
+  [OK]   FHIR client sandbox returns stubs; transaction validates
+  [OK]   Mirth ingests HL7 ADT and yields FHIR Bundle
+  [OK]   CDSS knowledge corpus has tenant-safe dept-tagged chunks
+  [OK]   RAG production pipeline indexes corpus + answers tenant-scoped query
+  [OK]   RAG production cross-tenant guard throws RAG_TENANT_CROSS
+  [OK]   Rate limiter rejects over-quota per tenant+actor
+  [OK]   Rate limiter buckets are per-actor
+  [OK]   Owner permit verifier enforces structural integrity
+  [OK]   WebhookBus delivers + retries on failure + audit trails
+  [OK]   WebhookBus no-subscriber returns accepted=0 + audit
+  [OK]   Tracer creates child span inheriting traceId

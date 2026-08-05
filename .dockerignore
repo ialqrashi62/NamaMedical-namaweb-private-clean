@@ -1,0 +1,13 @@
+node_modules
+.git
+.env
+.env.local
+*.log
+.npm
+coverage
+.nyc_output
+dist
+build
+.vscode
+.idea
+namaweb/local_backups

@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nama-medical-erp
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ialqrashi62/namawab.git
+    targetRevision: main
+    path: namaweb/deploy/helm/nama-medical
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nama
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2

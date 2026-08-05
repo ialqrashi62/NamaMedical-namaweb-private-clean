@@ -12,8 +12,8 @@ const ICUStation = {
   <header class="flex justify-between items-center mb-6">
     <h1 class="text-2xl font-bold text-slate-800">${tr('ICU Command Center', 'مركز قيادة العناية المركزة')}</h1>
     <div class="flex gap-2">
-      <button onclick="ICUStation.openSepsisBundle()" class="stitch-btn-primary px-4 py-2 bg-rose-700 text-white rounded-lg shadow-sm hover:bg-rose-800">${tr('Sepsis Bundle', 'حزمة الإنتان')}</button>
-      <button onclick="ICUStation.openDailyGoals()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100">${tr('Daily Goals', 'أهداف يومية')}</button>
+      <button onclick="ICUStation.openSepsisBundle()" class="stitch-btn-primary px-4 py-2 bg-rose-700 text-white rounded-lg shadow-sm hover:bg-rose-800"<button aria-label="${tr('Sepsis Bundle', 'حزمة الإنتان')}" type="button" onclick="ICUStation.openSepsisBundle()" class="stitch-btn-primary px-4 py-2 bg-rose-700 text-white rounded-lg shadow-sm hover:bg-rose-800">${tr('Sepsis Bundle', 'حزمة الإنتان')}</button>
+      <button onclick="ICUStation.openDailyGoals()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100"<button aria-label="${tr('Daily Goals', 'أهداف يومية')}" type="button" onclick="ICUStation.openDailyGoals()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100">${tr('Daily Goals', 'أهداف يومية')}</button>
     </div>
   </header>
   <div class="grid grid-cols-12 gap-6">
@@ -36,9 +36,9 @@ const ICUStation = {
     <div class="col-span-6 space-y-6">
       <div class="stitch-card p-6 bg-white rounded-xl shadow-sm border border-slate-200 min-h-[500px]">
         <div class="flex border-b border-slate-200 mb-6">
-          <button class="px-4 py-2 border-b-2 border-rose-700 text-rose-700 font-medium">${tr('Bedside Monitor', 'مراقبة بجانب السرير')}</button>
-          <button class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Ventilator', 'جهاز التنفس')}</button>
-          <button class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Sepsis Checklist', 'قائمة الإنتان')}</button>
+          <button class="px-4 py-2 border-b-2 border-rose-700 text-rose-700 font-medium"<button aria-label="${tr('Bedside Monitor', 'مراقبة بجانب السرير')}" type="button" class="px-4 py-2 border-b-2 border-rose-700 text-rose-700 font-medium">${tr('Bedside Monitor', 'مراقبة بجانب السرير')}</button>
+          <button class="px-4 py-2 text-slate-500 hover:text-slate-800"<button aria-label="${tr('Ventilator', 'جهاز التنفس')}" type="button" class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Ventilator', 'جهاز التنفس')}</button>
+          <button class="px-4 py-2 text-slate-500 hover:text-slate-800"<button aria-label="${tr('Sepsis Checklist', 'قائمة الإنتان')}" type="button" class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Sepsis Checklist', 'قائمة الإنتان')}</button>
         </div>
         <div id="icu-workspace" class="space-y-4">
           <div class="p-8 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">${tr('No active patient. Open Sepsis Bundle to begin.', 'لا يوجد مريض نشط. افتح حزمة الإنتان للبدء.')}</div>
@@ -66,7 +66,6 @@ const ICUStation = {
   </div>
 </div>`;
     },
-    openSepsisBundle: () => alert('Sepsis bundle (POST /api/icu/sepsis-bundle)'),
-    openDailyGoals: () => alert('Daily goals (POST /api/icu/daily-goals)')
-};
+    openSepsisBundle: () => Modal.open({ title: "Sepsis bundle (POST /api/icu/sepsis-bundle)", body: "<p style=\"font-size:14px;color:#334155\">Sepsis bundle (POST /api/icu/sepsis-bundle)</p><div style=\"background:#f1f5f9;border-radius:6px;padding:10px;font-size:12px;color:#475569;margin-top:10px\"><strong>HTTP:</strong> API &nbsp;&nbsp;<strong>Endpoint:</strong> <code>/api/icu/sepsis-bundle</code></div><p style=\"font-size:13px;color:#64748b;margin-top:10px\">This action will be wired to the live backend. Configure Department Mappings to enable persistent capture.</p>", primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true }),
+    openDailyGoals: () => Modal.open({ title: "Daily goals (POST /api/icu/daily-goals)", body: "<p style=\"font-size:14px;color:#334155\">Daily goals (POST /api/icu/daily-goals)</p><div style=\"background:#f1f5f9;border-radius:6px;padding:10px;font-size:12px;color:#475569;margin-top:10px\"><strong>HTTP:</strong> API &nbsp;&nbsp;<strong>Endpoint:</strong> <code>/api/icu/daily-goals</code></div><p style=\"font-size:13px;color:#64748b;margin-top:10px\">This action will be wired to the live backend. Configure Department Mappings to enable persistent capture.</p>", primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true })};
 if (typeof window !== 'undefined') window.ICUStation = ICUStation;

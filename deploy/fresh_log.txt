@@ -1,0 +1,38 @@
+Use --update-env to update environment variables
+[PM2] Applying action restartProcessId on app [nama-medical-erp](ids: [ 0 ])
+[PM2] [nama-medical-erp](0) ✓
+┌────┬─────────────────────┬─────────────┬─────────┬─────────┬──────────┬────────┬──────┬───────────┬──────────┬──────────┬──────────┬──────────┐
+│ id │ name                │ namespace   │ version │ mode    │ pid      │ uptime │ ↺    │ status    │ cpu      │ mem      │ user     │ watching │
+├────┼─────────────────────┼─────────────┼─────────┼─────────┼──────────┼────────┼──────┼───────────┼──────────┼──────────┼──────────┼──────────┤
+│ 0  │ nama-medical-erp    │ default     │ 1.0.0   │ fork    │ 1409991  │ 3s     │ 458  │ online    │ 0%       │ 144.8mb  │ root     │ disabled │
+│ 3  │ nama-medical-pcc    │ default     │ 0.1.0   │ fork    │ 1287376  │ 3D     │ 170  │ online    │ 0%       │ 152.1mb  │ root     │ disabled │
+└────┴─────────────────────┴─────────────┴─────────┴─────────┴──────────┴────────┴──────┴───────────┴──────────┴──────────┴──────────┴──────────┘
+[engine-registry] failed to load ../engines/anes/initial_assessment.engine: Cannot find module '../engines/anes/initial_assessment.engine'
+[engine-registry] failed to load ../engines/icu/initial_assessment.engine: Cannot find module '../engines/icu/initial_assessment.engine'
+[engine-registry] failed to load ../engines/psyc/initial_assessment.engine: Cannot find module '../engines/psyc/initial_assessment.engine'
+[engine-registry] failed to load ../engines/card/initial_assessment.engine: Cannot find module '../engines/card/initial_assessment.engine'
+[engine-registry] failed to load ../engines/pulm/initial_assessment.engine: Cannot find module '../engines/pulm/initial_assessment.engine'
+[engine-registry] failed to load ../engines/gi/initial_assessment.engine: Cannot find module '../engines/gi/initial_assessment.engine'
+[engine-registry] failed to load ../engines/neph/initial_assessment.engine: Cannot find module '../engines/neph/initial_assessment.engine'
+[engine-registry] failed to load ../engines/onc/initial_assessment.engine: Cannot find module '../engines/onc/initial_assessment.engine'
+[engine-registry] failed to load ../engines/endo/initial_assessment.engine: Cannot find module '../engines/endo/initial_assessment.engine'
+[engine-registry] failed to load ../engines/id/initial_assessment.engine: Cannot find module '../engines/id/initial_assessment.engine'
+[engine-registry] failed to load ../engines/derm/initial_assessment.engine: Cannot find module '../engines/derm/initial_assessment.engine'
+[engine-registry] failed to load ../engines/rheum/initial_assessment.engine: Cannot find module '../engines/rheum/initial_assessment.engine'
+[engine-registry] failed to load ../engines/er/initial_assessment.engine: Cannot find module '../engines/er/initial_assessment.engine'
+[engine-registry] failed to load ../engines/obg/initial_assessment.engine: Cannot find module '../engines/obg/initial_assessment.engine'
+[engine-registry] failed to load ../engines/peds/initial_assessment.engine: Cannot find module '../engines/peds/initial_assessment.engine'
+[engine-registry] failed to load ../engines/surg/initial_assessment.engine: Cannot find module '../engines/surg/initial_assessment.engine'
+[engine-registry] failed to load ../engines/neuro/initial_assessment.engine: Cannot find module '../engines/neuro/initial_assessment.engine'
+[engine-registry] failed to load ../engines/ortho/initial_assessment.engine: Cannot find module '../engines/ortho/initial_assessment.engine'
+[engine-registry] failed to load ../engines/ophth/initial_assessment.engine: Cannot find module '../engines/ophth/initial_assessment.engine'
+[engine-registry] failed to load ../engines/ent/initial_assessment.engine: Cannot find module '../engines/ent/initial_assessment.engine'
+[engine-registry] failed to load ../engines/uro/initial_assessment.engine: Cannot find module '../engines/uro/initial_assessment.engine'
+[engine-registry] failed to load ../engines/anes/initial_assessment.engine: Cannot find module '../engines/anes/initial_assessment.engine'
+[engine-registry] failed to load ../engines/icu/initial_assessment.engine: Cannot find module '../engines/icu/initial_assessment.engine'
+[engine-registry] failed to load ../engines/psyc/initial_assessment.engine: Cannot find module '../engines/psyc/initial_assessment.engine'
+[mount] /mynama not mounted: Cannot find module './mynama/server'
+[mount] /mynama not mounted: AuditService is not a constructor
+[mount] /mynama not mounted: AuditService is not a constructor
+[mount] /mynama not mounted: AuditService is not a constructor
+[mount] /mynama not mounted: AuditService is not a constructor

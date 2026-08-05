@@ -1953,15 +1953,16 @@ CREATE TABLE IF NOT EXISTS cosmetic_followups (
             `).catch(err => console.error('Sequence sync error:', err.message));
 
             // Seed plans and plan_entitlements
-            const plansCount = (await client.query("SELECT COUNT(*) as cnt FROM plans")).rows[0].cnt;
-            if (parseInt(plansCount) === 0) {
-                const plans = [
-                    { key: 'free_trial', name_ar: 'فترة تجريبية', name_en: 'Free Trial', desc_ar: 'تجربة مجانية لمدة 14 يوماً', desc_en: '14-day free trial', curr: 'SAR', m_price: 0, y_price: 0, trial: 14, sort: 1, max_u: 3, max_b: 1, max_i: 100, mods: 'dashboard,patients,appointments,settings', support: 'basic', api: false, domain: false },
-                    { key: 'basic', name_ar: 'الباقة الأساسية', name_en: 'Basic Plan', desc_ar: 'للمستشفيات والعيادات الصغيرة', desc_en: 'For small clinics and hospitals', curr: 'SAR', m_price: 150, y_price: 1500, trial: 0, sort: 2, max_u: 10, max_b: 2, max_i: 1000, mods: 'dashboard,patients,appointments,nursing,billing,settings', support: 'standard', api: false, domain: false },
-                    { key: 'premium', name_ar: 'الباقة المتميزة', name_en: 'Premium Plan', desc_ar: 'للمراكز الطبية المتوسطة والكبيرة', desc_en: 'For medium to large medical centers', curr: 'SAR', m_price: 500, y_price: 5000, trial: 0, sort: 3, max_u: 50, max_b: 5, max_i: 5000, mods: 'dashboard,patients,appointments,nursing,lab,radiology,pharmacy,inventory,billing,settings', support: 'priority', api: true, domain: true },
-                    { key: 'enterprise', name_ar: 'باقة المنشآت الكبرى', name_en: 'Enterprise Plan', desc_ar: 'حلول متكاملة للمستشفيات والمجموعات الكبرى', desc_en: 'Complete solutions for large hospitals and groups', curr: 'SAR', m_price: 2000, y_price: 20000, trial: 0, sort: 4, max_u: null, max_b: null, max_i: null, mods: 'dashboard,patients,appointments,doctor,nursing,lab,radiology,pharmacy,inventory,invoices,accounts,finance,insurance,reports,messaging,settings,surgery,icu,emergency,inpatient,bloodbank,obgyn,antenatal,cssd,quality,infection,him,medical-records,pathology,hr,maintenance,api', support: 'enterprise', api: true, domain: true }
-                ];
-                for (const p of plans) {
+            // RAIL-11: fail-closed — always ensure new plan_keys exist (ON CONFLICT DO NOTHING)
+            const plans = [
+                { key: 'free_trial', name_ar: 'فترة تجريبية', name_en: 'Free Trial', desc_ar: 'تجربة مجانية لمدة 14 يوماً', desc_en: '14-day free trial', curr: 'SAR', m_price: 0, y_price: 0, trial: 14, sort: 1, max_u: 3, max_b: 1, max_i: 100, mods: 'dashboard,patients,appointments,settings', support: 'basic', api: false, domain: false },
+                { key: 'basic', name_ar: 'الباقة الأساسية', name_en: 'Basic Plan', desc_ar: 'للمستشفيات والعيادات الصغيرة', desc_en: 'For small clinics and hospitals', curr: 'SAR', m_price: 150, y_price: 1500, trial: 0, sort: 2, max_u: 10, max_b: 2, max_i: 1000, mods: 'dashboard,patients,appointments,nursing,billing,settings', support: 'standard', api: false, domain: false },
+                { key: 'premium', name_ar: 'الباقة المتميزة', name_en: 'Premium Plan', desc_ar: 'للمراكز الطبية المتوسطة والكبيرة', desc_en: 'For medium to large medical centers', curr: 'SAR', m_price: 500, y_price: 5000, trial: 0, sort: 3, max_u: 50, max_b: 5, max_i: 5000, mods: 'dashboard,patients,appointments,nursing,lab,radiology,pharmacy,inventory,billing,settings', support: 'priority', api: true, domain: true },
+                { key: 'enterprise', name_ar: 'باقة المنشآت الكبرى', name_en: 'Enterprise Plan', desc_ar: 'حلول متكاملة للمستشفيات والمجموعات الكبرى', desc_en: 'Complete solutions for large hospitals and groups', curr: 'SAR', m_price: 2000, y_price: 20000, trial: 0, sort: 4, max_u: null, max_b: null, max_i: null, mods: 'dashboard,patients,appointments,doctor,nursing,lab,radiology,pharmacy,inventory,invoices,accounts,finance,insurance,reports,messaging,settings,surgery,icu,emergency,inpatient,bloodbank,obgyn,antenatal,cssd,quality,infection,him,medical-records,pathology,hr,maintenance,api', support: 'enterprise', api: true, domain: true }
+            ];
+            for (const p of plans) {
+                const existing = (await client.query('SELECT id FROM plans WHERE plan_key = $1', [p.key])).rows[0];
+                if (!existing) {
                     const row = (await client.query(`
                         INSERT INTO plans (plan_key, name_ar, name_en, description_ar, description_en, currency, monthly_price, yearly_price, trial_days, sort_order)
                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id
@@ -1974,9 +1975,11 @@ CREATE TABLE IF NOT EXISTS cosmetic_followups (
             }
 
             // Default tenant plan assignment
+            // RAIL-11: fail-closed — only insert if plan_key exists
             await client.query(`
                 INSERT INTO tenant_plan_assignments (tenant_id, plan_key, assignment_source)
-                VALUES (1, 'premium', 'manual')
+                SELECT 1, 'premium', 'manual'
+                WHERE EXISTS (SELECT 1 FROM plans WHERE plan_key = 'premium')
                 ON CONFLICT DO NOTHING
             `);
 

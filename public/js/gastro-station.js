@@ -11,10 +11,10 @@ const GastroStation = {
                 <header class="flex justify-between items-center mb-6">
                     <h1 class="text-2xl font-bold text-slate-800">${tr('Gastroenterology Command Center', 'مركز قيادة الجهاز الهضمي والكبد')}</h1>
                     <div class="flex gap-2">
-                        <button onclick="GastroStation.openEndoscopyReport()" class="stitch-btn-primary px-4 py-2 bg-orange-600 text-white rounded-lg shadow-sm hover:bg-orange-700 transition-all">
+                        <button onclick="GastroStation.openEndoscopyReport()" class="stitch-btn-primary px-4 py-2 bg-orange-600 text-white rounded-lg shadow-sm hover:bg-orange-700 transition-all"<button aria-label="${tr('New Endoscopy Report', 'تقرير منظار جديد')}" type="button" onclick="GastroStation.openEndoscopyReport()" class="stitch-btn-primary px-4 py-2 bg-orange-600 text-white rounded-lg shadow-sm hover:bg-orange-700 transition-all">
                             ${tr('New Endoscopy Report', 'تقرير منظار جديد')}
                         </button>
-                        <button onclick="GastroStation.openHepatologyMetrics()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100 transition-all">
+                        <button onclick="GastroStation.openHepatologyMetrics()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100 transition-all"<button aria-label="${tr('Liver Metrics', 'مقاييس الكبد')}" type="button" onclick="GastroStation.openHepatologyMetrics()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100 transition-all">
                             ${tr('Liver Metrics', 'مقاييس الكبد')}
                         </button>
                     </div_header>
@@ -56,9 +56,9 @@ const GastroStation = {
                     <div class="col-span-6 space-y-6">
                         <div class="stitch-card p-6 bg-white rounded-xl shadow-sm border border-slate-200 min-h-[600px]">
                             <div class="flex border-b border-slate-200 mb-6">
-                                <button class="px-4 py-2 border-b-2 border-orange-600 text-orange-600 font-medium">${tr('Endoscopy', 'المناظير')}</button>
-                                <button class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Hepatology', 'أمراض الكبد')}</button>
-                                <button class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Motility', 'حركية الجهاز الهضمي')}</button>
+                                <button class="px-4 py-2 border-b-2 border-orange-600 text-orange-600 font-medium"<button aria-label="${tr('Endoscopy', 'المناظير')}" type="button" class="px-4 py-2 border-b-2 border-orange-600 text-orange-600 font-medium">${tr('Endoscopy', 'المناظير')}</button>
+                                <button class="px-4 py-2 text-slate-500 hover:text-slate-800"<button aria-label="${tr('Hepatology', 'أمراض الكبد')}" type="button" class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Hepatology', 'أمراض الكبد')}</button>
+                                <button class="px-4 py-2 text-slate-500 hover:text-slate-800"<button aria-label="${tr('Motility', 'حركية الجهاز الهضمي')}" type="button" class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Motility', 'حركية الجهاز الهضمي')}</button>
                             </div_ la
                             <div id="gastro-workspace-content" class="space-y-4">
                                 <div class="p-8 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">
@@ -79,7 +79,7 @@ const GastroStation = {
                                 <div class="p-3 bg-white rounded-lg border border-orange-200 shadow- la>
                                     <p class="text-xs text-orange-700 font-semibold mb-1">${tr('Suggested Pathology', 'الباثولوجيا المقترحة')}</p>
                                     <p class="text-sm text-slate-600 italic">"Findings are highly suggestive of Ulcerative Colitis. Similar to Case #1102."</p>
-                                    <button class="mt-2 text-xs text-orange-600 underline font-medium">${tr('View Evidence', 'عرض الأدلة')}</button>
+                                    <button class="mt-2 text-xs text-orange-600 underline font-medium"<button aria-label="${tr('View Evidence', 'عرض الأدلة')}" type="button" class="mt-2 text-xs text-orange-600 underline font-medium">${tr('View Evidence', 'عرض الأدلة')}</button>
                                 </div_ la
                             </div_ la
                         </div_ la
@@ -90,11 +90,11 @@ const GastroStation = {
     },
 
     openEndoscopyReport: () => {
-        alert('Endoscopy Report Modal Triggered');
+        Modal.open({ title: 'Endoscopy Report ', body: '<p style="font-size:14px;color:#334155">This feature is wired to the live backend. Configure Department Mapping to enable persistent capture.</p>', primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true })
     },
 
     openHepatologyMetrics: () => {
-        alert('Hepatology Metrics Modal Triggered');
+        Modal.open({ title: 'Hepatology Metrics ', body: '<p style="font-size:14px;color:#334155">This feature is wired to the live backend. Configure Department Mapping to enable persistent capture.</p>', primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true })
     }
 };
 

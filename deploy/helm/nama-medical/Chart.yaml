@@ -1,0 +1,22 @@
+apiVersion: v2
+name: nama-medical
+description: Hospital Enterprise Platform (production Helm chart)
+type: application
+version: 0.13.0
+appVersion: "13.0.0"
+keywords: [hospital, his, emr, saudi, ksa, hl7, fhir]
+home: https://jumanasoft.com
+sources:
+  - https://github.com/nama-medical/namaweb
+maintainers:
+  - name: NamaMedical Platform Team
+    email: platform@jumanasoft.com
+dependencies:
+  - name: postgresql
+    version: "12.x.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
+  - name: redis
+    version: "17.x.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled

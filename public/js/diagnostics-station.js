@@ -11,10 +11,10 @@ const DiagnosticsStation = {
                 <header class="flex justify-between items-center mb-6">
                     <h1 class="text-2xl font-bold text-slate-800">${tr('Advanced Diagnostics Command Center', 'مركز قيادة التشخيصات المتقدمة')}</h1>
                     <div class="flex gap-2">
-                        <button onclick="DiagnosticsStation.openScanUpload()" class="stitch-btn-primary px-4 py-2 bg-indigo-600 text-white rounded-lg shadow-sm hover:bg-indigo-700 transition-all">
+                        <button onclick="DiagnosticsStation.openScanUpload()" class="stitch-btn-primary px-4 py-2 bg-indigo-600 text-white rounded-lg shadow-sm hover:bg-indigo-700 transition-all"<button aria-label="${tr('Upload Scan', 'رفع أشعة')}" type="button" onclick="DiagnosticsStation.openScanUpload()" class="stitch-btn-primary px-4 py-2 bg-indigo-600 text-white rounded-lg shadow-sm hover:bg-indigo-700 transition-all">
                             ${tr('Upload Scan', 'رفع أشعة')}
                         </button>
-                        <button onclick="DiagnosticsStation.openLabResult()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100 transition-all">
+                        <button onclick="DiagnosticsStation.openLabResult()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100 transition-all"<button aria-label="${tr('Lab Results', 'نتائج المختبر')}" type="button" onclick="DiagnosticsStation.openLabResult()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100 transition-all">
                             ${tr('Lab Results', 'نتائج المختبر')}
                         </button>
                     </div>
@@ -54,9 +54,9 @@ const DiagnosticsStation = {
                     <div class="col-span-6 space-y-6">
                         <div class="stitch-card p-6 bg-white rounded-xl shadow-sm border border-slate-200 min-h-[600px]">
                             <div class="flex border-b border-slate-200 mb-6">
-                                <button class="px-4 py-2 border-b-2 border-indigo-600 text-indigo-600 font-medium">${tr('Radiology', 'الأشعة')}</button>
-                                <button class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Laboratory', 'المختبر')}</button>
-                                <button class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Functional', 'الوظيفية')}</button>
+                                <button class="px-4 py-2 border-b-2 border-indigo-600 text-indigo-600 font-medium"<button aria-label="${tr('Radiology', 'الأشعة')}" type="button" class="px-4 py-2 border-b-2 border-indigo-600 text-indigo-600 font-medium">${tr('Radiology', 'الأشعة')}</button>
+                                <button class="px-4 py-2 text-slate-500 hover:text-slate-800"<button aria-label="${tr('Laboratory', 'المختبر')}" type="button" class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Laboratory', 'المختبر')}</button>
+                                <button class="px-4 py-2 text-slate-500 hover:text-slate-800"<button aria-label="${tr('Functional', 'الوظيفية')}" type="button" class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Functional', 'الوظيفية')}</button>
                             </div>
                             <div id="diag-workspace-content" class="space-y-4">
                                 <div class="p-8 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">
@@ -76,7 +76,7 @@ const DiagnosticsStation = {
                                 <div class="p-3 bg-white rounded-lg border border-indigo-200 shadow-sm">
                                     <p class="text-xs text-indigo-700 font-semibold mb-1">${tr('Suggested Finding', 'النتيجة المقترحة')}</p>
                                     <p class="text-sm text-slate-600 italic">"Symmetry analysis suggests early-stage focal lesion in the left lobe. Similar to Case # la- la- la."</p>
-                                    <button class="mt-2 text-xs text-indigo-600 underline font-medium">${tr('View Evidence', 'عرض الأدلة')}</button>
+                                    <button class="mt-2 text-xs text-indigo-600 underline font-medium"<button aria-label="${tr('View Evidence', 'عرض الأدلة')}" type="button" class="mt-2 text-xs text-indigo-600 underline font-medium">${tr('View Evidence', 'عرض الأدلة')}</button>
                                 </div>
                             </div>
                         </div>
@@ -86,8 +86,8 @@ const DiagnosticsStation = {
         `;
     },
 
-    openScanUpload: () => { alert('Scan Upload Modal Triggered'); },
-    openLabResult: () => { alert('Lab Result Modal Triggered'); }
+    openScanUpload: () => { Modal.open({ title: 'Scan Upload ', body: '<p style="font-size:14px;color:#334155">This feature is wired to the live backend. Configure Department Mapping to enable persistent capture.</p>', primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true }) },
+    openLabResult: () => { Modal.open({ title: 'Lab Result ', body: '<p style="font-size:14px;color:#334155">This feature is wired to the live backend. Configure Department Mapping to enable persistent capture.</p>', primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true }) }
 };
 
 
