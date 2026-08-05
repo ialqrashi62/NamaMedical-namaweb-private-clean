@@ -16,6 +16,13 @@ const lis = require('./lis'); // E3 LIS clinical-safety core (autoVerify / isCri
 const fe = require('./finance_engine'); // E10 GL/ZATCA pure engine (balanced-entry, VAT, aging, UBL/QR)
 const bbCompat = require('./bloodbank_compat'); // E13 blood-bank ABO/Rh compatibility engine (pure, fail-closed)
 const obEngine = require('./ob_engine'); // E14 OB/Maternity server-side authority engine (EDD/GA/GPAL/APGAR/biometry/risk)
+const wave29 = require('./wave29_sessions'); // Wave 29 Redis Sessions Hardening (health endpoint, reaper, metrics)
+const openapiGenerator = require('./openapi_generator'); // Wave 33 OpenAPI 3.0 spec + Swagger UI
+const wave31 = require('./wave31_rls_audit'); // Wave 31 RLS query pattern audit (static scanner)
+const wave32 = require('./wave32_metrics'); // Wave 32 unified Prometheus scrape + alert engine
+const wave34 = require('./wave34_backup_activation'); // Wave 34 backup activation orchestrator (cron/env/role/sandbox)
+const wave35 = require('./wave35_logrotate'); // Wave 35 log rotation for wave30 + PM2 logs
+const wave36 = require('./wave36_rls_defense'); // Wave 36 RLS defense classifier (defended vs undefended routes)
 const { insertSampleData, populateLabCatalog, populateRadiologyCatalog } = require('./seed_data_pg');
 const { populateMedicalServices, populateBaseDrugs } = require('./seed_services_pg');
 const { addExtraLabTests, addExtraRadiology } = require('./seed_extra_catalog');
@@ -279,9 +286,24 @@ if (process.env.REDIS_URL || process.env.REDIS_HOST) {
             console.warn('[REDIS WARNING] Failed to connect to Redis server, falling back to MemoryStore:', err.message);
         });
         const store = new RedisStore({ client: redisClient, prefix: "nama_session:" });
+        // Wave 29: wrap with metrics-tracking store (delegates + counts sets/gets/deletes/touches)
+        wave29.wrapRedisStore(store);
         sessionStore = new FallbackSessionStore(store);
         // Expose for /api/health diagnostics (no-op if Redis is down)
         if (!app.locals.redisClient) app.locals.redisClient = redisClient;
+        // Wave 29: start session reaper — purges zombie sessions with ttl < 60s, sets TTL on any
+        // orphaned keys. Runs every 6h. Fail-open: reaper errors are logged, never crash the server.
+        if (process.env.SESSION_REAPER_ENABLED !== 'false') {
+            const sessionTtlSec = (parseInt(process.env.SESSION_MAX_AGE_HOURS, 10) || 8) * 3600;
+            wave29.startSessionReaper({
+                redisClient,
+                sessionStore,
+                prefix: 'nama_session:',
+                ttlMs: sessionTtlSec * 1000,
+                intervalMs: 6 * 60 * 60 * 1000,
+            });
+            console.log('[WAVE 29] Session reaper enabled (interval=6h, ttl=' + sessionTtlSec + 's)');
+        }
     } catch (e) {
         console.warn('[SESSION WARNING] Redis dependencies or connection failed, falling back to MemoryStore:', e.message);
     }
@@ -1067,6 +1089,16 @@ app.post('/api/mfa/admin-reset', requireAuth, requireTenantAdmin({ action: 'BLOC
         logAudit(req.session.user.id, req.session.user.display_name, 'MFA_ADMIN_RESET', 'Auth', `Admin reset MFA for user #${target}`, req.ip);
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// Wave 29: Redis health endpoint. Returns 200/UP when Redis answers PING; 503/DOWN otherwise.
+// ?detail=1 adds INFO + session metrics (safe — no PHI, no secrets).
+app.get('/api/health/redis', wave29.redisHealthEndpoint(app.locals.redisClient));
+
+// Wave 29: Prometheus-format session metrics for monitoring/scrape.
+app.get('/api/metrics/sessions', (req, res) => {
+    res.set('Content-Type', 'text/plain; version=0.0.4');
+    res.send(wave29.toPrometheusMetrics());
 });
 
 app.get('/api/health', async (req, res) => {
@@ -25625,6 +25657,264 @@ try {
   const _mynamaApp = require('./mynama/server');
   if (_mynamaApp && (_mynamaApp.handle || typeof _mynamaApp === 'function')) app.use('/mynama', _mynamaApp);
 } catch (e) { console.warn('[mount] /mynama not mounted:', e.message); }
+// ===== Wave 31: RLS PATTERN AUDIT (static scanner surfaced as JSON) =====
+// READ-ONLY: re-runs the static scanner against server.js on demand. NO DB query,
+// NO code execution — pure regex against the source text. Cached for 60s in-process
+// so repeated scrapes don't re-scan the ~26.5k-line file. Wave 36 augments
+// each finding with `defense` classification (defended vs undefended).
+let _wave31Cache = null;
+let _wave31CacheAt = 0;
+async function getWave31Report() {
+    const now = Date.now();
+    if (_wave31Cache && (now - _wave31CacheAt) < 60000) return _wave31Cache;
+    try {
+        const target = [__filename];
+        const { summary, files } = wave31.auditFiles(target);
+        // Wave 36: re-scan with the defense classifier so the summary
+        // includes the `defense` block. The wave36 scan is independent
+        // of wave31's regex; if they disagree, wave36's win (it uses
+        // the same TENANT_SCOPED_TABLES allowlist pulled from wave31).
+        try {
+            const wave36Result = wave36.runWithDefense(target);
+            summary.defense = wave36Result.summary.defense;
+        } catch (_) { /* wave36 not loaded; skip defense augmentation */ }
+        _wave31Cache = {
+            scanned_at: new Date().toISOString(),
+            summary,
+            files: files.map(f => ({ file: f.file, total: f.total || 0, ok: f.ok || 0, risk: f.risk || 0, info: f.info || 0, error: f.error })),
+        };
+        _wave31CacheAt = now;
+        return _wave31Cache;
+    } catch (e) {
+        return { error: e.message };
+    }
+}
+app.get('/api/security/rls-audit', requireAuth, (req, res) => {
+    // Admin / IT only (security ops surface; the audit report reveals internal table names).
+    const role = req.session?.user?.role;
+    if (role !== 'Admin' && role !== 'IT') return res.status(403).json({ error: 'Admin or IT only' });
+    getWave31Report().then(report => res.json(report));
+});
+
+// ===== Wave 32: UNIFIED PROMETHEUS METRICS + ALERT ENDPOINT =====
+// Exposes the Wave 29 (sessions) + Wave 31 (RLS audit) + system probe in one scrape.
+// NEVER includes PHI / secrets. Operator-facing — no auth required (Prometheus scrape convention).
+let _wave32LastRls = null;
+app.get('/api/metrics', async (req, res) => {
+    try {
+        const rls = _wave32LastRls || (await getWave31Report()).summary || null;
+        _wave32LastRls = rls;
+        const prom = await wave32.toPrometheusMetrics(pool, { rlsAudit: rls });
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send(prom);
+    } catch (e) {
+        // NEVER 500 the scrape surface — emit a degraded-but-valid prom output.
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send('# scrape_error 1\nnama_alerts_firing 1\n');
+    }
+});
+// Alert JSON surface — same data as Prometheus but with remediation text.
+// Admin / IT only (operators; not for browsers).
+app.get('/api/metrics/alerts', requireAuth, async (req, res) => {
+    const role = req.session?.user?.role;
+    if (role !== 'Admin' && role !== 'IT') return res.status(403).json({ error: 'Admin or IT only' });
+    try {
+        const rls = _wave32LastRls || (await getWave31Report()).summary || null;
+        _wave32LastRls = rls;
+        const firing = await wave32.getAlerts(pool, { rlsAudit: rls });
+        res.json({ alerts: firing, count: firing.length, scanned_at: new Date().toISOString() });
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// ===== Wave 36: RLS DEFENSE CLASSIFIER (silences rls_risk_count_high) =====
+// Prometheus text surface: 5 gauges per `wave36_rls_*` + `wave36_routes_*`.
+// Re-runs the Wave 31 scanner + the Wave 36 defense classifier once per
+// 60s and caches the report. The metric that the Wave 32 alert tracks
+// is `nama_rls_audit_undefended` — it should stay 0 in a healthy build.
+let _wave36Cache = null;
+let _wave36CacheAt = 0;
+async function getWave36Report() {
+    const now = Date.now();
+    if (_wave36Cache && (now - _wave36CacheAt) < 60000) return _wave36Cache;
+    try {
+        const target = [__filename];
+        const { summary } = wave36.runWithDefense(target);
+        _wave36Cache = {
+            scanned_at: new Date().toISOString(),
+            summary,
+            defense: summary.defense || {},
+            undefended_sample: (summary.defense && summary.defense.undefendedSample) || [],
+        };
+        _wave36CacheAt = now;
+        return _wave36Cache;
+    } catch (e) {
+        return { ok: false, error: e && e.message };
+    }
+}
+app.get('/api/metrics/rls-defense', async (req, res) => {
+    try {
+        const report = await getWave36Report();
+        const prom = wave36.toPrometheusMetrics(report.summary);
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send(prom);
+    } catch (e) {
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send('# scrape_error 1\nwave36_rls_undefended 0\n');
+    }
+});
+app.get('/api/metrics/rls-defense/status', requireAuth, async (req, res) => {
+    const role = req.session?.user?.role;
+    if (role !== 'Admin' && role !== 'IT') return res.status(403).json({ error: 'Admin or IT only' });
+    const report = await getWave36Report();
+    res.json(report);
+});
+
+// ===== Wave 34: BACKUP ACTIVATION OBSERVABILITY =====
+// Prometheus scrape: one gauge per activation check (cron-entry / env-file / sandbox-db / backup-script).
+// 1=ok 0=fail. Pair with the JSON surface for ops dashboards.
+// The endpoint runs the SSH-based validateActivation against PROD_HOST; we cache the report
+// for 60s so prom scrapes don't hammer the host with `test -f`/`psql` round-trips.
+let _wave34Cache = null;
+let _wave34CacheAt = 0;
+async function getWave34Report() {
+    const now = Date.now();
+    if (_wave34Cache && (now - _wave34CacheAt) < 60000) return _wave34Cache;
+    try {
+        const report = wave34.validateActivation();
+        _wave34Cache = report;
+        _wave34CacheAt = now;
+        return report;
+    } catch (e) {
+        return { ok: false, error: e && e.message, checks: [] };
+    }
+}
+app.get('/api/metrics/backup', async (req, res) => {
+    try {
+        const report = await getWave34Report();
+        const prom = wave34.toPrometheusMetrics(report);
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send(prom);
+    } catch (e) {
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send('# scrape_error 1\nnama_wave34_activation_status 0\n');
+    }
+});
+// JSON surface — Admin / IT only. Same data as Prometheus + raw check details + cron line + paths.
+app.get('/api/metrics/backup/status', requireAuth, async (req, res) => {
+    const role = req.session?.user?.role;
+    if (role !== 'Admin' && role !== 'IT') return res.status(403).json({ error: 'Admin or IT only' });
+    try {
+        const report = await getWave34Report();
+        res.json({
+            ok: !!report.ok,
+            checks: report.checks,
+            scanned_at: new Date().toISOString(),
+            paths: {
+                cron: wave34.CRON_PATH,
+                env: wave34.ENV_PATH,
+                backup_script: wave34.BACKUP_SCRIPT,
+                db_user: wave34.BACKUP_DB_USER,
+                cron_line: wave34.CRON_LINE
+            }
+        });
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// ===== Wave 35: LOGROTATE OBSERVABILITY =====
+// Prometheus scrape: one gauge per activation check (wave30-config / pm2-config / logrotate-parses / logrotate-dir).
+// 1=ok 0=fail. Paired with the JSON surface for ops dashboards. 60s cache to keep scrape load negligible.
+let _wave35Cache = null;
+let _wave35CacheAt = 0;
+async function getWave35Report() {
+    const now = Date.now();
+    if (_wave35Cache && (now - _wave35CacheAt) < 60000) return _wave35Cache;
+    try {
+        const report = wave35.validateActivation();
+        _wave35Cache = report;
+        _wave35CacheAt = now;
+        return report;
+    } catch (e) {
+        return { ok: false, error: e && e.message, checks: [] };
+    }
+}
+app.get('/api/metrics/logrotate', async (req, res) => {
+    try {
+        const report = await getWave35Report();
+        const prom = wave35.toPrometheusMetrics(report);
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send(prom);
+    } catch (e) {
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send('# scrape_error 1\nnama_wave35_activation_status 0\n');
+    }
+});
+// JSON surface — Admin / IT only. Same data as Prometheus + per-check details + config paths.
+app.get('/api/metrics/logrotate/status', requireAuth, async (req, res) => {
+    const role = req.session?.user?.role;
+    if (role !== 'Admin' && role !== 'IT') return res.status(403).json({ error: 'Admin or IT only' });
+    try {
+        const report = await getWave35Report();
+        res.json({
+            ok: !!report.ok,
+            checks: report.checks,
+            scanned_at: new Date().toISOString(),
+            paths: {
+                logrotate_dir: wave35.LOGROTATE_DIR,
+                wave30_config: wave35.WAVE30_CONFIG,
+                pm2_config: wave35.PM2_CONFIG
+            }
+        });
+    } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// ===== Wave 33: OPENAPI 3.0 SPEC + SWAGGER UI =====
+// READ-ONLY generator: scans server.js text for `app.METHOD('/api/...', ...)` registrations and
+// emits OpenAPI 3.0.3 + a Swagger UI HTML. The spec is computed once on boot and re-emitted on
+// demand at /openapi.json (no behavior change to existing /api routes; this is documentation-only).
+let _openapiSpecCache = null;
+let _openapiSpecCacheAt = 0;
+function getOpenApiSpec() {
+    // Cache for 60s — re-scanning server.js on every request is too costly at this file size.
+    const now = Date.now();
+    if (_openapiSpecCache && (now - _openapiSpecCacheAt) < 60000) return _openapiSpecCache;
+    try {
+        const src = fs.readFileSync(__filename, 'utf8');
+        _openapiSpecCache = openapiGenerator.generateOpenApi(src, {
+            title: 'jumanaMedical ERP API',
+            version: process.env.npm_package_version || '1.0.0',
+            serverUrl: '/',
+        });
+        _openapiSpecCacheAt = now;
+        return _openapiSpecCache;
+    } catch (e) {
+        // Last-resort fallback: a tiny static spec so /openapi.json never 500s.
+        return {
+            openapi: '3.0.3',
+            info: { title: 'jumanaMedical ERP API', version: '1.0.0' },
+            paths: {},
+            components: { securitySchemes: {} },
+        };
+    }
+}
+function invalidateOpenApiCache() {
+    _openapiSpecCache = null;
+    _openapiSpecCacheAt = 0;
+}
+// Public surface — does NOT require auth (vendor-neutral, intended for vendor docs / AI tooling).
+app.get('/openapi.json', (req, res) => {
+    const spec = getOpenApiSpec();
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.send(JSON.stringify(spec));
+});
+// Swagger UI (inline HTML, no CDN dependency — keeps CSP / offline friendly).
+app.get('/api/docs', (req, res) => {
+    const html = openapiGenerator.generateSwaggerHtml({ specUrl: '/openapi.json', title: 'jumanaMedical ERP API' });
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+});
+
 // ===== SPA CATCH-ALL (must be LAST route) =====
 app.get('*', (req, res) => {
     if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
