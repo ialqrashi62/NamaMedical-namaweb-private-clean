@@ -25,6 +25,7 @@ const wave35 = require('./wave35_logrotate'); // Wave 35 log rotation for wave30
 const wave36 = require('./wave36_rls_defense'); // Wave 36 RLS defense classifier (defended vs undefended routes)
 const wave37 = require('./wave37_redis_metric'); // Wave 37 Redis metric ping helper (silences redis_down)
 const wave38 = require('./wave38_audit_chain'); // Wave 38 audit chain integrity checker (BYPASSRLS)
+const wave39 = require('./wave39_csp'); // Wave 39 CSP report persistence + metric
 const { insertSampleData, populateLabCatalog, populateRadiologyCatalog } = require('./seed_data_pg');
 const { populateMedicalServices, populateBaseDrugs } = require('./seed_services_pg');
 const { addExtraLabTests, addExtraRadiology } = require('./seed_extra_catalog');
@@ -182,7 +183,7 @@ const cspReportLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, standardHeade
 app.post('/api/csp-report',
     cspReportLimiter,
     express.json({ type: ['application/csp-report', 'application/reports+json', 'application/json'], limit: '16kb' }),
-    (req, res) => {
+    async (req, res) => {
         try {
             const r = (req.body && (req.body['csp-report'] || req.body)) || {};
             const summary = {
@@ -191,6 +192,19 @@ app.post('/api/csp-report',
                 blocked: String(r['blocked-uri'] || r.blockedURL || '').slice(0, 200)
             };
             console.warn('[CSP-REPORT]', JSON.stringify(summary));
+            // Wave 39: persist + tenant stamp. The current tenant (if any)
+            // comes from AsyncLocalStorage; we never block on a failed
+            // insert -- the operator-visible console line is the fallback.
+            try {
+                const tenantId = (typeof getCurrentTenantId === 'function') ? getCurrentTenantId() : null;
+                await wave39.persistCspReport(
+                    pool,
+                    r,
+                    req.ip || '',
+                    String(req.headers['user-agent'] || '').slice(0, 250),
+                    tenantId
+                );
+            } catch (_e) { /* persistence is best-effort */ }
         } catch (e) { /* ignore malformed report */ }
         res.status(204).end();
     });
@@ -25818,6 +25832,42 @@ app.get('/api/metrics/audit-chain', async (req, res) => {
         res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
         res.send('# scrape_error 1\nwave38_audit_chain_gaps_total 0\n');
     }
+});
+
+// ===== Wave 39: CSP REPORT PERSISTENCE + METRIC =====
+// Persists every /api/csp-report body to csp_reports (RLS-scoped to the
+// caller's tenant). Caches a 60s summary for the Prometheus scrape +
+// the Admin/IT JSON endpoint.
+let _wave39Cache = null;
+let _wave39CacheAt = 0;
+async function getWave39Report() {
+    const now = Date.now();
+    if (_wave39Cache && (now - _wave39CacheAt) < 60000) return _wave39Cache;
+    try {
+        const summary = await wave39.summarizeCspReports(pool);
+        _wave39Cache = { scanned_at: new Date().toISOString(), summary };
+        _wave39CacheAt = now;
+        return _wave39Cache;
+    } catch (e) {
+        return { scanned_at: new Date().toISOString(), summary: { total: 0, last24h: 0, last1h: 0 }, error: e.message };
+    }
+}
+app.get('/api/metrics/csp', async (req, res) => {
+    try {
+        const report = await getWave39Report();
+        const prom = wave39.toPrometheusMetrics(report.summary);
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send(prom);
+    } catch (e) {
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send('# scrape_error 1\nnama_csp_reports_total 0\n');
+    }
+});
+app.get('/api/security/csp-reports', requireAuth, async (req, res) => {
+    const role = req.session?.user?.role;
+    if (role !== 'Admin' && role !== 'IT') return res.status(403).json({ error: 'Admin or IT only' });
+    const report = await getWave39Report();
+    res.json(report);
 });
 
 // ===== Wave 34: BACKUP ACTIVATION OBSERVABILITY =====
