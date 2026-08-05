@@ -458,7 +458,8 @@ function requireRole(...modules) {
     return (req, res, next) => {
         if (!req.session || !req.session.user) {
             const clientIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress || req.ip;
-            logAudit(null, 'Anonymous', 'BLOCKED_AUTHORIZATION', 'Auth', `Unauthenticated access to route requiring modules [${modules.join(', ')}]`, clientIp);
+            // Anonymous block: pre-tenant event — land in tenant 0 system audit trail.
+            logAudit(null, 'Anonymous', 'BLOCKED_AUTHORIZATION', 'Auth', `Unauthenticated access to route requiring modules [${modules.join(', ')}]`, clientIp, { allowAnon: true });
             return res.status(401).json({ error: 'Unauthorized' });
         }
         const role = req.session.user.role;
@@ -466,7 +467,10 @@ function requireRole(...modules) {
         if (perms === '*') return next(); // Admin
         if (perms && modules.some(m => perms.includes(m))) return next();
         const clientIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress || req.ip;
-        logAudit(req.session.user.id, req.session.user.display_name, 'BLOCKED_AUTHORIZATION', 'Auth', `Blocked role ${role} from route requiring modules [${modules.join(', ')}]`, clientIp);
+        // Authenticated block: also pre-tenant (the user has a session but not yet
+        // bound to a tenant context). Land in tenant 0 system audit trail rather
+        // than silently dropping the row.
+        logAudit(req.session.user.id, req.session.user.display_name, 'BLOCKED_AUTHORIZATION', 'Auth', `Blocked role ${role} from route requiring modules [${modules.join(', ')}]`, clientIp, { allowAnon: true });
         res.status(403).json({ error: 'Access denied' });
     };
 }
