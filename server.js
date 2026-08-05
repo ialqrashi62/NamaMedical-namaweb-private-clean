@@ -24,6 +24,7 @@ const wave34 = require('./wave34_backup_activation'); // Wave 34 backup activati
 const wave35 = require('./wave35_logrotate'); // Wave 35 log rotation for wave30 + PM2 logs
 const wave36 = require('./wave36_rls_defense'); // Wave 36 RLS defense classifier (defended vs undefended routes)
 const wave37 = require('./wave37_redis_metric'); // Wave 37 Redis metric ping helper (silences redis_down)
+const wave38 = require('./wave38_audit_chain'); // Wave 38 audit chain integrity checker (BYPASSRLS)
 const { insertSampleData, populateLabCatalog, populateRadiologyCatalog } = require('./seed_data_pg');
 const { populateMedicalServices, populateBaseDrugs } = require('./seed_services_pg');
 const { addExtraLabTests, addExtraRadiology } = require('./seed_extra_catalog');
@@ -25706,11 +25707,14 @@ app.get('/api/security/rls-audit', requireAuth, (req, res) => {
 // Exposes the Wave 29 (sessions) + Wave 31 (RLS audit) + system probe in one scrape.
 // NEVER includes PHI / secrets. Operator-facing — no auth required (Prometheus scrape convention).
 let _wave32LastRls = null;
+let _wave32LastChain = null;
 app.get('/api/metrics', async (req, res) => {
     try {
         const rls = _wave32LastRls || (await getWave31Report()).summary || null;
         _wave32LastRls = rls;
-        const prom = await wave32.toPrometheusMetrics(pool, { rlsAudit: rls });
+        const chain = _wave32LastChain || (await getWave38Report());
+        _wave32LastChain = chain;
+        const prom = await wave32.toPrometheusMetrics(pool, { rlsAudit: rls, auditChain: chain });
         res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
         res.send(prom);
     } catch (e) {
@@ -25727,7 +25731,9 @@ app.get('/api/metrics/alerts', requireAuth, async (req, res) => {
     try {
         const rls = _wave32LastRls || (await getWave31Report()).summary || null;
         _wave32LastRls = rls;
-        const firing = await wave32.getAlerts(pool, { rlsAudit: rls });
+        const chain = _wave32LastChain || (await getWave38Report());
+        _wave32LastChain = chain;
+        const firing = await wave32.getAlerts(pool, { rlsAudit: rls, auditChain: chain });
         res.json({ alerts: firing, count: firing.length, scanned_at: new Date().toISOString() });
     } catch (e) {
         res.status(500).json({ error: 'Server error' });
@@ -25775,6 +25781,43 @@ app.get('/api/metrics/rls-defense/status', requireAuth, async (req, res) => {
     if (role !== 'Admin' && role !== 'IT') return res.status(403).json({ error: 'Admin or IT only' });
     const report = await getWave36Report();
     res.json(report);
+});
+
+// ===== Wave 38: AUDIT CHAIN INTEGRITY CHECKER (BYPASSRLS) =====
+// Surfaces ALL audit_trail chain gaps across every tenant (not just the
+// app-role-visible subset). Runs the wave38 runner via localExec against
+// prod (which sources /etc/default/wave30.env → BYPASSRLS backup role).
+// Caches for 60s so the JSON surface doesn't hammer psql.
+let _wave38Cache = null;
+let _wave38CacheAt = 0;
+async function getWave38Report() {
+    const now = Date.now();
+    if (_wave38Cache && (now - _wave38CacheAt) < 60000) return _wave38Cache;
+    try {
+        const report = await wave38.runAuditChainCheck({ local: true });
+        _wave38Cache = report;
+        _wave38CacheAt = now;
+        return report;
+    } catch (e) {
+        return { scannedAt: new Date().toISOString(), gaps: [], perTenant: [], error: e && e.message };
+    }
+}
+app.get('/api/security/audit-chain', requireAuth, async (req, res) => {
+    const role = req.session?.user?.role;
+    if (role !== 'Admin' && role !== 'IT') return res.status(403).json({ error: 'Admin or IT only' });
+    const report = await getWave38Report();
+    res.json(report);
+});
+app.get('/api/metrics/audit-chain', async (req, res) => {
+    try {
+        const report = await getWave38Report();
+        const prom = wave38.toPrometheusMetrics(report);
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send(prom);
+    } catch (e) {
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send('# scrape_error 1\nwave38_audit_chain_gaps_total 0\n');
+    }
 });
 
 // ===== Wave 34: BACKUP ACTIVATION OBSERVABILITY =====

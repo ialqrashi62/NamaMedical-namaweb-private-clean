@@ -41,9 +41,13 @@ test('evaluateAlerts: legacy rls_risk_count_high is no longer in RULES (Wave 36)
         'old alert must be removed (replaced by rls_undefended_risk_present)');
 });
 
-test('evaluateAlerts: audit_chain_gap fires when > 0', () => {
-    const firing = evaluateAlerts({ dbUp: true, uptime: 600, auditChainGaps: 1 });
-    assert.ok(firing.some(a => a.id === 'audit_chain_gap'));
+test('evaluateAlerts: audit_chain_gap fires when auditChainGapsTotal > 0 (Wave 38)', () => {
+    const none = evaluateAlerts({ dbUp: true, uptime: 600, auditChainGapsTotal: 0 });
+    const some = evaluateAlerts({ dbUp: true, uptime: 600, auditChainGapsTotal: 1 });
+    assert.ok(!none.some(a => a.id === 'audit_chain_gap'),
+        'must NOT fire when auditChainGapsTotal=0');
+    assert.ok(some.some(a => a.id === 'audit_chain_gap'),
+        'must fire when auditChainGapsTotal>0 (operator-visible count)');
 });
 
 test('evaluateAlerts: process_uptime_low fires when uptime < 60', () => {

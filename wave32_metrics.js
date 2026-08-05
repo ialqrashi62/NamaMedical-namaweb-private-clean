@@ -58,9 +58,12 @@ const RULES = [
     {
         id: 'audit_chain_gap',
         severity: 'critical',
-        title: 'Audit chain integrity gap detected',
-        check: (probe) => (probe.auditChainGaps || 0) > 0,
-        remediation: 'Run `node audit_chain_check.js` and inspect audit_trail gaps. Restore from a known-good dump if needed.',
+        title: 'Audit chain integrity gap detected (Wave 38 BYPASSRLS scan)',
+        // Wave 38: the inline app-role query misses gaps in tenants outside
+        // the current session's GUC. We now route the alert through the
+        // wave38 operator tool which uses the BYPASSRLS backup role.
+        check: (probe) => (probe.auditChainGapsTotal || 0) > 0,
+        remediation: 'Run `node wave38_audit_chain.js` and inspect audit_trail gaps. Each gap row carries tenant_id + chain_idx + row_hash. Restore from a known-good dump if needed.',
     },
     {
         id: 'session_reaper_lagging',
@@ -106,8 +109,8 @@ function evaluateAlerts(probe) {
 /**
  * Compose the full Prometheus scrape output (Wave 29 + Wave 31 + Wave 32).
  */
-async function toPrometheusMetrics(pool, { rlsAudit } = {}) {
-    const probe = await probeSystem(pool, { rlsAudit });
+async function toPrometheusMetrics(pool, { rlsAudit, auditChain } = {}) {
+    const probe = await probeSystem(pool, { rlsAudit, auditChain });
     const lines = [];
     lines.push('# HELP process_uptime_seconds Process uptime in seconds');
     lines.push('# TYPE process_uptime_seconds gauge');
@@ -130,6 +133,13 @@ async function toPrometheusMetrics(pool, { rlsAudit } = {}) {
     lines.push('# HELP nama_audit_chain_gaps Number of broken hash-chain links in audit_trail');
     lines.push('# TYPE nama_audit_chain_gaps gauge');
     lines.push(`nama_audit_chain_gaps ${probe.auditChainGaps || 0}`);
+    // Wave 38: also surface the operator-visible BYPASSRLS total so
+    // dashboards can pick the most precise metric.
+    if (typeof probe.auditChainGapsTotal === 'number') {
+        lines.push('# HELP nama_audit_chain_gaps_total Operator-visible chain gaps (BYPASSRLS)');
+        lines.push('# TYPE nama_audit_chain_gaps_total gauge');
+        lines.push(`nama_audit_chain_gaps_total ${probe.auditChainGapsTotal}`);
+    }
     // Wave 29 counters (session metrics) — already in prom format.
     lines.push(wave29Prom());
     // Wave 31 counters (RLS audit summary).
@@ -171,7 +181,7 @@ async function toPrometheusMetrics(pool, { rlsAudit } = {}) {
 /**
  * Best-effort system probe. NEVER throws; a probe failure surfaces as a degraded metric.
  */
-async function probeSystem(pool, { rlsAudit } = {}) {
+async function probeSystem(pool, { rlsAudit, auditChain } = {}) {
     const probe = {
         uptime: process.uptime(),
         rss: process.memoryUsage ? process.memoryUsage().rss : 0,
@@ -180,7 +190,11 @@ async function probeSystem(pool, { rlsAudit } = {}) {
         redisUp: false,
         redisConfigured: !!process.env.REDIS_URL || !!process.env.REDIS_HOST,
         redisErrors: 0,
-        auditChainGaps: 0,
+        // Wave 38: prefer the operator-visible count (BYPASSRLS sees
+        // every tenant). Fall back to the inline app-role count if no
+        // chain report was passed in.
+        auditChainGaps: auditChain && typeof auditChain.gaps !== 'undefined' ? auditChain.gaps.length : 0,
+        auditChainGapsTotal: auditChain && typeof auditChain.gaps !== 'undefined' ? auditChain.gaps.length : 0,
         firingAlerts: 0,
         lastReapAt: null,
     };
