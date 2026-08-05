@@ -28,6 +28,7 @@ const wave38 = require('./wave38_audit_chain'); // Wave 38 audit chain integrity
 const wave39 = require('./wave39_csp'); // Wave 39 CSP report persistence + metric
 const wave40 = require('./wave40_audit_resilience'); // Wave 40 audit trail resilience counters
 const wave41 = require('./wave41_dr_drill'); // Wave 41 DR drill hardening + metrics
+const wave42 = require('./wave42_process_lifecycle'); // Wave 42 process lifecycle observability
 const { insertSampleData, populateLabCatalog, populateRadiologyCatalog } = require('./seed_data_pg');
 const { populateMedicalServices, populateBaseDrugs } = require('./seed_services_pg');
 const { addExtraLabTests, addExtraRadiology } = require('./seed_extra_catalog');
@@ -15012,10 +15013,14 @@ async function startServer() {
         } else {
             console.log('[DB INFO] Skipping demo seed + catalog population.');
         }
-        app.listen(PORT, () => {
+        // Wave 42: install process lifecycle handlers (unhandledRejection,
+        // uncaughtException, SIGTERM, SIGINT). Captures the http server below
+        // so graceful shutdown can close it. Idempotent — safe to call once.
+        const _server = app.listen(PORT, () => {
             console.log(`\n  ✅ jumanaMedical Web is running!`);
             console.log(`  🌐 Open: http://localhost:${PORT}`);
             console.log(`  📦 Database: PostgreSQL (nama_medical_web)\n`);
+            wave42.install({ logAudit, pool, httpServer: _server });
         });
     } catch (err) {
         console.error('  ❌ Failed to start:', err.message);
@@ -25953,6 +25958,26 @@ app.get('/api/security/dr-drill', requireAuth, async (req, res) => {
     if (role !== 'Admin' && role !== 'IT') return res.status(403).json({ error: 'Admin or IT only' });
     const report = await getWave41Report();
     res.json(report);
+});
+
+// ===== Wave 42: PROCESS LIFECYCLE METRICS =====
+// Exposes counters for unhandledRejection / uncaughtException / SIGTERM / SIGINT.
+// Each PM2 worker has its own counter set (PM2 cluster spawns a fresh Node process
+// per worker; counters reset on restart).
+app.get('/api/metrics/process', async (req, res) => {
+    try {
+        const prom = wave42.toPrometheusMetrics();
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send(prom);
+    } catch (e) {
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send('# scrape_error 1\nnama_process_unhandled_rejections_total 0\n');
+    }
+});
+app.get('/api/security/process', requireAuth, async (req, res) => {
+    const role = req.session?.user?.role;
+    if (role !== 'Admin' && role !== 'IT') return res.status(403).json({ error: 'Admin or IT only' });
+    res.json(wave42.getCounters());
 });
 
 // ===== Wave 34: BACKUP ACTIVATION OBSERVABILITY =====
