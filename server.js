@@ -23,6 +23,7 @@ const wave32 = require('./wave32_metrics'); // Wave 32 unified Prometheus scrape
 const wave34 = require('./wave34_backup_activation'); // Wave 34 backup activation orchestrator (cron/env/role/sandbox)
 const wave35 = require('./wave35_logrotate'); // Wave 35 log rotation for wave30 + PM2 logs
 const wave36 = require('./wave36_rls_defense'); // Wave 36 RLS defense classifier (defended vs undefended routes)
+const wave37 = require('./wave37_redis_metric'); // Wave 37 Redis metric ping helper (silences redis_down)
 const { insertSampleData, populateLabCatalog, populateRadiologyCatalog } = require('./seed_data_pg');
 const { populateMedicalServices, populateBaseDrugs } = require('./seed_services_pg');
 const { addExtraLabTests, addExtraRadiology } = require('./seed_extra_catalog');
@@ -100,6 +101,11 @@ const compression = require('compression');
 const app = express();
 app.set('trust proxy', 1);
 app.use(compression());
+
+// Wave 37: register the app handle once so metrics modules (wave32) can find
+// `app.locals.redisClient` (and any future locals) without a circular
+// require on this file. Idempotent; safe to call at boot.
+wave37.setGlobalApp(app);
 const PORT = process.env.PORT || 3000;
 
 // Security Middleware

@@ -121,6 +121,12 @@ async function toPrometheusMetrics(pool, { rlsAudit } = {}) {
     lines.push('# HELP nama_redis_up 1 if Redis is connected, 0 otherwise (0 + configured=fallback)');
     lines.push('# TYPE nama_redis_up gauge');
     lines.push(`nama_redis_up ${probe.redisUp ? 1 : 0}`);
+    // Wave 37: roundtrip latency for the redis PING (in ms).
+    if (typeof probe.redisLatencyMs === 'number') {
+        lines.push('# HELP nama_redis_ping_ms Latency of the redis PING in milliseconds');
+        lines.push('# TYPE nama_redis_ping_ms gauge');
+        lines.push(`nama_redis_ping_ms ${probe.redisLatencyMs}`);
+    }
     lines.push('# HELP nama_audit_chain_gaps Number of broken hash-chain links in audit_trail');
     lines.push('# TYPE nama_audit_chain_gaps gauge');
     lines.push(`nama_audit_chain_gaps ${probe.auditChainGaps || 0}`);
@@ -203,12 +209,17 @@ async function probeSystem(pool, { rlsAudit } = {}) {
         } catch (_) { probe.dbUp = false; }
     }
     // Redis check: app.locals.redisClient.ping() if exposed.
+    // Wave 37: routed through the wave37_redis_metric helper so the same
+    // lookup (global.__nama_app, registered app, env hint) is reused across
+    // any future probes. Resolves to `null` cleanly if the client was never
+    // exposed (e.g. REDIS_URL not configured).
     try {
-        const rc = (global.__nama_app && global.__nama_app.locals && global.__nama_app.locals.redisClient) || null;
-        if (rc && typeof rc.ping === 'function') {
-            await rc.ping();
-            probe.redisUp = true;
-        }
+        const w37 = require('./wave37_redis_metric');
+        const client = w37.resolveRedisClient();
+        const result = await w37.probeRedis(client);
+        probe.redisUp = !!result.ok;
+        probe.redisLatencyMs = result.latencyMs;
+        probe.redisProbeReason = result.reason;
     } catch (_) { probe.redisUp = false; }
     // Evaluate alerts.
     const firing = evaluateAlerts(probe);
