@@ -26,6 +26,7 @@ const wave36 = require('./wave36_rls_defense'); // Wave 36 RLS defense classifie
 const wave37 = require('./wave37_redis_metric'); // Wave 37 Redis metric ping helper (silences redis_down)
 const wave38 = require('./wave38_audit_chain'); // Wave 38 audit chain integrity checker (BYPASSRLS)
 const wave39 = require('./wave39_csp'); // Wave 39 CSP report persistence + metric
+const wave40 = require('./wave40_audit_resilience'); // Wave 40 audit trail resilience counters
 const { insertSampleData, populateLabCatalog, populateRadiologyCatalog } = require('./seed_data_pg');
 const { populateMedicalServices, populateBaseDrugs } = require('./seed_services_pg');
 const { addExtraLabTests, addExtraRadiology } = require('./seed_extra_catalog');
@@ -520,6 +521,7 @@ async function logAudit(userId, userName, action, module, details, ip, opts) {
         const params = [userId, userName || '', action || '', module || '', details || '', ip || ''];
         let sql;
         if (typeof tid === 'number' || (typeof tid === 'string' && /^\d+$/.test(String(tid)))) {
+            wave40.inc('audit_call_branch_tenant'); // Wave 40: count branch-1 invocations
             const tenantIdInt = parseInt(tid, 10);
             // Wave 21: tamper-evident per-tenant hash chain. Compute prev_hash + row_hash
             // BEFORE the INSERT so we can write both atomically. The hash is SHA-256 over
@@ -554,22 +556,39 @@ async function logAudit(userId, userName, action, module, details, ip, opts) {
             sql = 'INSERT INTO audit_trail (user_id, username, action, module, new_values, ip_address, tenant_id, prev_hash, row_hash, chain_idx) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)';
             params.push(tenantIdInt, prevHash, rowHash, newChainIdx);
         } else if (allowAnon) {
-            // Cross-tenant admin events (e.g. provisioning). Wrap in a savepoint so the
-            // SET LOCAL doesn't leak; the RLS policy requires tenant_id, so we provide
-            // a special sentinel tenant (id=0 if it exists; otherwise fall back to NULL
-            // + a permissive bypass only for the owner role).
-            sql = 'INSERT INTO audit_trail (user_id, username, action, module, new_values, ip_address) VALUES ($1,$2,$3,$4,$5,$6)';
-            await pool.query("SET LOCAL app.tenant_id = '0'"); // tenant 0 = system/admin context
-            await pool.query(sql, params);
+            wave40.inc('audit_call_branch_anon'); // Wave 40: count branch-2 invocations
+            // Cross-tenant admin events (e.g. LOGIN before tenant binding, provisioning).
+            // audit_trail.tenant_id has NO DEFAULT and is NOT NULL, so we must pass
+            // tenant_id=0 (the system sentinel — see tenants.id=0 in wave40 DDL).
+            // RLS with_check requires tenant_id = current_setting('app.tenant_id')::int,
+            // so we wrap SET LOCAL + INSERT in a transaction (SET LOCAL is a no-op
+            // outside a transaction). The FK to tenants(id) is satisfied by tenant 0.
+            sql = 'INSERT INTO audit_trail (user_id, username, action, module, new_values, ip_address, tenant_id) VALUES ($1,$2,$3,$4,$5,$6,0)';
+            const client = await pool.connect();
+            try {
+                await client.query('BEGIN');
+                await client.query("SET LOCAL app.tenant_id = '0'");
+                await client.query(sql, params);
+                await client.query('COMMIT');
+            } catch (e) {
+                try { await client.query('ROLLBACK'); } catch (_) {}
+                throw e;
+            } finally {
+                client.release();
+            }
             return;
         } else {
+            wave40.inc('audit_call_branch_nocontext'); // Wave 40: count branch-3 invocations
             // No tenant context: fall back to the GUC set on the session. If the session
             // has SET app.tenant_id, the INSERT will succeed and the DEFAULT (current_setting)
             // will populate tenant_id. Otherwise RLS rejects the row.
             sql = 'INSERT INTO audit_trail (user_id, username, action, module, new_values, ip_address) VALUES ($1,$2,$3,$4,$5,$6)';
         }
         await pool.query(sql, params);
-    } catch (e) { console.error('Audit log error:', e.message); }
+    } catch (e) {
+        wave40.recordError(e && e.message); // Wave 40: classify + count error
+        console.error('Audit log error:', e.message);
+    }
 }
 
 // ===== SaaS Batch 2: unified Auth/RBAC guards (one tested source of truth; behavior-preserving) =====
@@ -908,7 +927,10 @@ async function establishSession(req, user, clientIp) {
     };
     activeUserSessions.set(user.id, req.sessionID);
     await pool.query('UPDATE system_users SET last_ip=$1 WHERE id=$2', [clientIp, user.id]).catch(() => { });
-    logAudit(user.id, user.display_name, 'LOGIN', 'Auth', `User logged in as ${user.role}`, clientIp);
+    // LOGIN is a pre-tenant event (the AsyncLocalStorage hasn't bound a tenant
+    // for this request yet). Pass allowAnon so the row lands in tenant 0
+    // (system audit trail) instead of being silently dropped by RLS.
+    logAudit(user.id, user.display_name, 'LOGIN', 'Auth', `User logged in as ${user.role}`, clientIp, { allowAnon: true });
 }
 
 // A2 MFA — RFC-6238 TOTP via built-in crypto (no external dependency); secrets are never logged
@@ -25868,6 +25890,26 @@ app.get('/api/security/csp-reports', requireAuth, async (req, res) => {
     if (role !== 'Admin' && role !== 'IT') return res.status(403).json({ error: 'Admin or IT only' });
     const report = await getWave39Report();
     res.json(report);
+});
+
+// ===== Wave 40: AUDIT TRAIL RESILIENCE COUNTERS =====
+// Exposes the in-process counters from `logAudit()` to Prometheus + a JSON
+// surface for Admin/IT. Three branches are counted (tenant, anon, nocontext)
+// plus error classifications (rls, other).
+app.get('/api/metrics/audit-log', async (req, res) => {
+    try {
+        const prom = wave40.toPrometheusMetrics();
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send(prom);
+    } catch (e) {
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send('# scrape_error 1\nnama_audit_log_calls_total 0\n');
+    }
+});
+app.get('/api/security/audit-log', requireAuth, async (req, res) => {
+    const role = req.session?.user?.role;
+    if (role !== 'Admin' && role !== 'IT') return res.status(403).json({ error: 'Admin or IT only' });
+    res.json(wave40.getCounters());
 });
 
 // ===== Wave 34: BACKUP ACTIVATION OBSERVABILITY =====
