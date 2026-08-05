@@ -30,6 +30,7 @@ const wave40 = require('./wave40_audit_resilience'); // Wave 40 audit trail resi
 const wave41 = require('./wave41_dr_drill'); // Wave 41 DR drill hardening + metrics
 const wave42 = require('./wave42_process_lifecycle'); // Wave 42 process lifecycle observability
 const wave43 = require('./wave43_error_handler'); // Wave 43 Express error middleware + metrics
+const wave44 = require('./wave44_http_request_metrics'); // Wave 44 HTTP request metrics middleware
 const { insertSampleData, populateLabCatalog, populateRadiologyCatalog } = require('./seed_data_pg');
 const { populateMedicalServices, populateBaseDrugs } = require('./seed_services_pg');
 const { addExtraLabTests, addExtraRadiology } = require('./seed_extra_catalog');
@@ -227,6 +228,12 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// ===== Wave 44: HTTP REQUEST METRICS =====
+// Registered EARLY so it observes every request (including ones that error out).
+// Tracks in-flight requests, per-method / per-status-class / per-path counters,
+// and average duration. Must come BEFORE all routes.
+app.use(wave44.makeHttpMetricsMiddleware());
 class FallbackSessionStore extends session.Store {
     constructor(redisStore) {
         super();
@@ -26130,6 +26137,21 @@ app.get('/api/docs', (req, res) => {
 // `app.get('*')` fallback below (which returns 404 JSON for any /api path
 // not previously matched). Express matches by registration order, so
 // specific routes MUST come before the wildcard.
+app.get('/api/metrics/http', async (req, res) => {
+    try {
+        const prom = wave44.toPrometheusMetrics();
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send(prom);
+    } catch (e) {
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send('# scrape_error 1\nnama_http_requests_total 0\n');
+    }
+});
+app.get('/api/security/http', requireAuth, async (req, res) => {
+    const role = req.session?.user?.role;
+    if (role !== 'Admin' && role !== 'IT') return res.status(403).json({ error: 'Admin or IT only' });
+    res.json(wave44.getCounters());
+});
 app.get('/api/metrics/errors', async (req, res) => {
     try {
         const prom = wave43.toPrometheusMetrics();
