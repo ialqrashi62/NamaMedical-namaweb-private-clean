@@ -29,6 +29,7 @@ const wave39 = require('./wave39_csp'); // Wave 39 CSP report persistence + metr
 const wave40 = require('./wave40_audit_resilience'); // Wave 40 audit trail resilience counters
 const wave41 = require('./wave41_dr_drill'); // Wave 41 DR drill hardening + metrics
 const wave42 = require('./wave42_process_lifecycle'); // Wave 42 process lifecycle observability
+const wave43 = require('./wave43_error_handler'); // Wave 43 Express error middleware + metrics
 const { insertSampleData, populateLabCatalog, populateRadiologyCatalog } = require('./seed_data_pg');
 const { populateMedicalServices, populateBaseDrugs } = require('./seed_services_pg');
 const { addExtraLabTests, addExtraRadiology } = require('./seed_extra_catalog');
@@ -26124,10 +26125,38 @@ app.get('/api/docs', (req, res) => {
     res.send(html);
 });
 
+// ===== Wave 43: METRICS ENDPOINTS =====
+// Registered BEFORE the SPA catch-all so they aren't intercepted by the
+// `app.get('*')` fallback below (which returns 404 JSON for any /api path
+// not previously matched). Express matches by registration order, so
+// specific routes MUST come before the wildcard.
+app.get('/api/metrics/errors', async (req, res) => {
+    try {
+        const prom = wave43.toPrometheusMetrics();
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send(prom);
+    } catch (e) {
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send('# scrape_error 1\nnama_errors_total 0\n');
+    }
+});
+app.get('/api/security/errors', requireAuth, async (req, res) => {
+    const role = req.session?.user?.role;
+    if (role !== 'Admin' && role !== 'IT') return res.status(403).json({ error: 'Admin or IT only' });
+    res.json(wave43.getCounters());
+});
+
 // ===== SPA CATCH-ALL (must be LAST route) =====
 app.get('*', (req, res) => {
     if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
+
+// ===== Wave 43: EXPRESS ERROR MIDDLEWARE =====
+// 4-arg error middleware catches any error passed via next(err) and any
+// thrown error in async handlers. Registered AFTER all routes (incl. the
+// SPA catch-all above) so it sees all errors. Must be the LAST registered
+// middleware.
+app.use(wave43.makeErrorMiddleware({ logAudit }));
 
 startServer();
