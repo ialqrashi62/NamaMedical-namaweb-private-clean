@@ -27,6 +27,7 @@ const wave37 = require('./wave37_redis_metric'); // Wave 37 Redis metric ping he
 const wave38 = require('./wave38_audit_chain'); // Wave 38 audit chain integrity checker (BYPASSRLS)
 const wave39 = require('./wave39_csp'); // Wave 39 CSP report persistence + metric
 const wave40 = require('./wave40_audit_resilience'); // Wave 40 audit trail resilience counters
+const wave41 = require('./wave41_dr_drill'); // Wave 41 DR drill hardening + metrics
 const { insertSampleData, populateLabCatalog, populateRadiologyCatalog } = require('./seed_data_pg');
 const { populateMedicalServices, populateBaseDrugs } = require('./seed_services_pg');
 const { addExtraLabTests, addExtraRadiology } = require('./seed_extra_catalog');
@@ -25914,6 +25915,44 @@ app.get('/api/security/audit-log', requireAuth, async (req, res) => {
     const role = req.session?.user?.role;
     if (role !== 'Admin' && role !== 'IT') return res.status(403).json({ error: 'Admin or IT only' });
     res.json(wave40.getCounters());
+});
+
+// ===== Wave 41: DR DRILL HARDENING METRICS =====
+// Parses /var/backups/nama-medical/dr-restore.log + checks if wave30_backup.sh
+// has been patched to exclude pg_stat_statements. Exposes Prometheus gauges
+// so dashboards/alerts can chart DR drill freshness, success, and restored count.
+let _wave41Cache = null;
+let _wave41CacheAt = 0;
+const WAVE41_LOG_PATH = '/var/backups/nama-medical/dr-restore.log';
+const WAVE41_SCRIPT_PATH = '/usr/local/bin/wave30_backup.sh';
+async function getWave41Report() {
+    const now = Date.now();
+    if (_wave41Cache && (now - _wave41CacheAt) < 60000) return _wave41Cache;
+    try {
+        const summary = wave41.summarize({ logPath: WAVE41_LOG_PATH });
+        _wave41Cache = { scanned_at: new Date().toISOString(), summary };
+        _wave41CacheAt = now;
+        return _wave41Cache;
+    } catch (e) {
+        return { scanned_at: new Date().toISOString(), summary: null, error: e.message };
+    }
+}
+app.get('/api/metrics/dr-drill', async (req, res) => {
+    try {
+        const report = await getWave41Report();
+        const prom = wave41.toPrometheusMetrics(report.summary || {});
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send(prom);
+    } catch (e) {
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send('# scrape_error 1\nnama_dr_drill_last_success 0\n');
+    }
+});
+app.get('/api/security/dr-drill', requireAuth, async (req, res) => {
+    const role = req.session?.user?.role;
+    if (role !== 'Admin' && role !== 'IT') return res.status(403).json({ error: 'Admin or IT only' });
+    const report = await getWave41Report();
+    res.json(report);
 });
 
 // ===== Wave 34: BACKUP ACTIVATION OBSERVABILITY =====
