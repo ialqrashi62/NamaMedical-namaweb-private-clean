@@ -1,0 +1,2 @@
+ls: cannot access '/var/www/namaweb/mynama/': No such file or directory
+cat: /var/www/namaweb/mynama/server.js: No such file or directory

@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>NamaMedical — All Stations Visual Test</title>
+  <link rel="stylesheet" href="/css/tailwind-compiled.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 24px; background: #f8fafc; }
+    .station-card { transition: all 0.2s; cursor: pointer; }
+    .station-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
+    iframe { border: 0; width: 100%; height: 600px; background: white; }
+  </style>
+</head>
+<body>
+  <div class="max-w-7xl mx-auto">
+    <header class="mb-6">
+      <h1 class="text-3xl font-bold text-slate-900">NamaMedical — All Stations</h1>
+      <p class="text-slate-600">Visual test page for all 30 clinical stations. Click any card to open the station.</p>
+      <div class="mt-2 flex gap-2">
+        <button id="loadAll" class="px-3 py-1 text-sm bg-slate-700 text-white rounded">Load All Stations</button>
+        <button id="testModals" class="px-3 py-1 text-sm bg-sky-600 text-white rounded">Test All Modal Types</button>
+        <button id="applyLang" class="px-3 py-1 text-sm bg-emerald-600 text-white rounded">Switch to Arabic</button>
+      </div>
+    </header>
+
+    <div id="stations" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-6"></div>
+
+    <div id="viewer" class="bg-white rounded-lg shadow" style="display:none">
+      <div class="px-4 py-2 border-b flex items-center justify-between">
+        <h2 id="viewerTitle" class="text-lg font-semibold">Station Viewer</h2>
+        <button id="closeViewer" class="text-sm text-slate-500 hover:text-slate-900">Close</button>
+      </div>
+      <iframe id="viewerFrame"></iframe>
+    </div>
+  </div>
+
+  <script src="/js/modal.js?v=20260801_2"></script>
+  <script src="/js/station-snippets.js?v=20260801_1"></script>
+  <script src="/js/station-builder.js?v=20260801_1"></script>
+  <script>
+    const stations = [
+      { code: 'CAR', name: 'Cardiology', file: 'cardiology-station.js' },
+      { code: 'ER', name: 'Emergency', file: 'er-station.js' },
+      { code: 'OBG', name: 'ObGYN', file: 'obgyn-peds-station.js' },
+      { code: 'ICU', name: 'ICU', file: 'icu-station.js' },
+      { code: 'NICU', name: 'NICU', file: 'nicu-station.js' },
+      { code: 'PEDS', name: 'Pediatrics', file: 'obgyn-peds-station.js' },
+      { code: 'ONC', name: 'Oncology', file: 'oncology-station.js' },
+      { code: 'ORTHO', name: 'Orthopedics', file: 'orthopedics-station.js' },
+      { code: 'NEURO', name: 'Neurology', file: 'neurosurgery-station.js' },
+      { code: 'PSYCH', name: 'Psychiatry', file: 'doctor-station.js' },
+      { code: 'DERM', name: 'Dermatology', file: 'derm-station.js' },
+      { code: 'ENT', name: 'ENT', file: 'ent-station.js' },
+      { code: 'OPHTH', name: 'Ophthalmology', file: 'ophthalmology-station.js' },
+      { code: 'PULM', name: 'Pulmonology', file: 'pulmonology-station.js' },
+      { code: 'GI', name: 'Gastroenterology', file: 'gastro-station.js' },
+      { code: 'NEPH', name: 'Nephrology', file: 'nephrology-station.js' },
+      { code: 'ENDO', name: 'Endocrinology', file: 'endocrine-station.js' },
+      { code: 'INF', name: 'Infectious Disease', file: 'infectious-station.js' },
+      { code: 'RHEUM', name: 'Rheumatology', file: 'rheuma-station.js' },
+      { code: 'LAB', name: 'Laboratory', file: 'lab-station.js' },
+      { code: 'RAD', name: 'Radiology', file: 'radiology-station.js' },
+      { code: 'ANES', name: 'Anesthesia', file: 'anesthesia-station.js' },
+      { code: 'SURG', name: 'Surgery', file: 'surgery-station.js' },
+      { code: 'CRIT', name: 'Critical Care', file: 'critical-station.js' },
+      { code: 'DIAG', name: 'Diagnostics', file: 'diagnostics-station.js' },
+      { code: 'FUNC', name: 'Functional Tests', file: 'functional-tests-station.js' },
+      { code: 'CTS', name: 'Cardiothoracic', file: 'cardiothoracic-station.js' },
+      { code: 'NEUROSURG', name: 'Neurosurgery', file: 'neurosurgery-station.js' },
+      { code: 'PACU', name: 'PACU', file: 'pacu-station.js' },
+      { code: 'PLASTIC', name: 'Plastic Surgery', file: 'plastic-surgery-station.js' },
+      { code: 'UROL', name: 'Urology', file: 'urology-station.js' },
+    ];
+
+    const colors = {
+      CAR: 'rose', ER: 'red', OBG: 'pink', ICU: 'purple', NICU: 'fuchsia',
+      PEDS: 'cyan', ONC: 'violet', ORTHO: 'amber', NEURO: 'indigo', PSYCH: 'teal',
+      DERM: 'orange', ENT: 'lime', OPHTH: 'sky', PULM: 'blue', GI: 'green',
+      NEPH: 'yellow', ENDO: 'pink', INF: 'red', RHEUM: 'indigo', LAB: 'gray',
+      RAD: 'slate', ANES: 'purple', SURG: 'rose', CRIT: 'red', DIAG: 'emerald',
+      FUNC: 'cyan', CTS: 'rose', NEUROSURG: 'indigo', PACU: 'amber',
+      PLASTIC: 'pink', UROL: 'blue',
+    };
+
+    function renderStations() {
+      const grid = document.getElementById('stations');
+      grid.innerHTML = stations.map((s) => `
+        <div class="station-card bg-white rounded-lg shadow p-3 border border-slate-200" data-code="${s.code}">
+          <div class="text-2xl font-bold text-${colors[s.code] || 'slate'}-600">${s.code}</div>
+          <div class="text-sm text-slate-700 font-medium">${s.name}</div>
+          <div class="text-xs text-slate-400 mt-1">${s.file}</div>
+        </div>
+      `).join('');
+      grid.querySelectorAll('.station-card').forEach((card) => {
+        card.onclick = () => {
+          const code = card.getAttribute('data-code');
+          const s = stations.find((x) => x.code === code);
+          stationBuilderPreview(code, s);
+        };
+      });
+    }
+
+    function stationBuilderPreview(code, s) {
+      const station = StationBuilder.buildStation({ dept: code, lang: document.documentElement.lang, tenant: 'demo' });
+      document.getElementById('viewerTitle').textContent = `${code} — ${s.name}`;
+      const iframe = document.getElementById('viewerFrame');
+      const doc = iframe.contentDocument || iframe.contentWindow.document;
+      doc.open();
+      doc.write('<!doctype html><html><head><link rel="stylesheet" href="/css/tailwind-compiled.css"><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-slate-50">' + station.render() + '<script src="/js/modal.js?v=20260801_2"></script><\/script></body></html>');
+      doc.close();
+      document.getElementById('viewer').style.display = 'block';
+      document.getElementById('viewer').scrollIntoView({ behavior: 'smooth' });
+      setTimeout(() => {
+        const body = doc.body;
+        station.bind(body);
+      }, 50);
+    }
+
+    document.getElementById('loadAll').onclick = () => renderStations();
+    document.getElementById('closeViewer').onclick = () => document.getElementById('viewer').style.display = 'none';
+    document.getElementById('applyLang').onclick = () => {
+      document.documentElement.lang = document.documentElement.lang === 'ar-SA' ? 'en-US' : 'ar-SA';
+      document.documentElement.dir = document.documentElement.lang === 'ar-SA' ? 'rtl' : 'ltr';
+      Modal.toast('Language: ' + document.documentElement.lang, { type: 'info' });
+      renderStations();
+    };
+    document.getElementById('testModals').onclick = () => {
+      Modal.toast('Toast: success', { type: 'success' });
+      setTimeout(() => Modal.toast('Toast: error', { type: 'error' }), 500);
+      setTimeout(() => Modal.toast('Toast: warn', { type: 'warn' }), 1000);
+      setTimeout(() => Modal.toast('Toast: info', { type: 'info' }), 1500);
+      setTimeout(() => Modal.open({ title: 'Test Modal', body: '<p>Body content here</p>', primaryLabel: 'OK' }), 2000);
+      setTimeout(() => Modal.confirm('Are you sure?').then(r => r && Modal.toast('Confirmed', { type: 'success' })), 3000);
+      setTimeout(() => Modal.list({ title: 'Pick a dept', items: stations.map((s) => ({ id: s.code, label: s.name })) }).then(id => Modal.toast('Picked: ' + (id ? id.id : 'none'))), 4000);
+      setTimeout(() => Modal.asyncJob({ title: 'Processing', message: 'Demo', run: () => new Promise(r => setTimeout(r, 2000)) }).then(() => Modal.toast('Job done', { type: 'success' })), 5000);
+    };
+
+    renderStations();
+  </script>
+</body>
+</html>

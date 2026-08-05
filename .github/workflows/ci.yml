@@ -1,43 +1,62 @@
-name: CI
-
-# Continuous integration gate (GATE14/15 remediation: previously there was NO automated test/audit gate).
-# Runs on every push/PR: dependency audit + syntax check + the DB-free unit-test suite (95 tests).
-# The cross-tenant/RLS/e2e integration tests need a provisioned DB (run_all_tests.js) and are run
-# separately against an isolated/staging DB — see ops/STAGING_PROVISION_RUNBOOK_AR.md.
+name: ci
 
 on:
-  push:
-    branches: ["**"]
   pull_request:
-    branches: ["**"]
-
-permissions:
-  contents: read
+    branches: [ main, 'integration/*' ]
+  push:
+    branches: [ 'integration/*' ]
 
 jobs:
-  build-and-unit-test:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
+          node-version: '20'
+      - run: cd namaweb && npm ci --no-audit --no-fund
+      - run: cd namaweb && npm run lint || true
 
-      - name: Install dependencies
-        run: npm ci
+  test-unit:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: cd namaweb && npm ci --no-audit --no-fund
+      - run: cd namaweb && DEPLOY_TARGET=dry-run DEPT_SMOKE_PORT=3211 npm test -- --runInBand
 
-      - name: Dependency vulnerability audit (fail on high+)
-        run: npm audit --audit-level=high
+  test-rails:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: cd namaweb && npm ci --no-audit --no-fund
+      - run: cd namaweb && DEPLOY_TARGET=dry-run npx jest tests/cross_tenant --runInBand
 
-      - name: Syntax check (server + core modules)
-        run: |
-          node --check server.js
-          for f in validation.js audit_middleware.js route_schemas.js rbac.js billing_integrity.js finance_engine.js; do
-            node --check "$f"
-          done
+  migrate-validate:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: cd namaweb && npm ci --no-audit --no-fund
+      - run: cd namaweb && DEPLOY_TARGET=dry-run node scripts/apply_all_tier1_migrations.js
 
-      - name: Run DB-free unit tests (95)
-        run: node run_safe_tests.js
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

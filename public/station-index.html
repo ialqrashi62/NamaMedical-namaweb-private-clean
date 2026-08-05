@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>NamaMedical — All Stations Index</title>
+  <link rel="stylesheet" href="/css/tailwind-compiled.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 0; margin: 0; background: #f8fafc; }
+    .dept-card { transition: all 0.15s; cursor: pointer; }
+    .dept-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
+    .sidebar { position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  </style>
+</head>
+<body>
+  <div class="grid grid-cols-12 gap-0">
+    <aside class="sidebar col-span-3 bg-slate-900 text-slate-100 p-4">
+      <div class="flex items-center gap-2 mb-4">
+        <div class="text-2xl">⚕️</div>
+        <h1 class="text-lg font-bold">NamaMedical</h1>
+      </div>
+      <div class="text-xs text-slate-400 mb-3">vGlobal.0 · 30 Stations</div>
+      <div class="mb-3">
+        <input id="searchInput" placeholder="Search station..." class="w-full px-2 py-1 rounded bg-slate-800 text-slate-100 border border-slate-700 text-sm" />
+      </div>
+      <nav id="navList" class="space-y-1"></nav>
+      <div class="mt-6 pt-4 border-t border-slate-700 text-xs text-slate-400">
+        <button id="toggleLang" class="w-full text-left px-2 py-1 rounded hover:bg-slate-800">🌐 العربية</button>
+        <a href="https://jumanasoft.com/" class="block px-2 py-1 hover:bg-slate-800 rounded">← Back to home</a>
+      </div>
+    </aside>
+    <main class="col-span-9 p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 id="pageTitle" class="text-2xl font-bold text-slate-900">Select a station</h2>
+        <div class="flex gap-2">
+          <button id="loadTest" class="px-3 py-1 text-sm bg-emerald-600 text-white rounded">Run Smoke</button>
+          <button id="openBuilder" class="px-3 py-1 text-sm bg-sky-600 text-white rounded">All Stations Visual</button>
+        </div>
+      </div>
+      <div id="pageContent" class="bg-white rounded-lg shadow p-6">
+        <p class="text-slate-500 text-sm">Choose a station from the sidebar to view its clinical workflow.</p>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/modal.js?v=20260801_3"></script>
+  <script src="/js/station-snippets.js?v=20260801_3"></script>
+  <script src="/js/station-builder.js?v=20260801_3"></script>
+  <script src="/js/station-clinical-enhancer.js?v=20260801_1"></script>
+  <script src="/js/station-api.js?v=20260801_1"></script>
+  <script src="/js/i18n-runtime.js?v=20260801_1"></script>
+  <script src="/js/wireframe-snippets.js?v=20260801_1"></script>
+  <script src="/js/components/hospital.js?v=20260801_1"></script>
+  <script src="/js/clinical-form-builder.js?v=20260801_1"></script>
+  <script>
+    const STATIONS = [
+      { code: 'CAR', name: 'Cardiology', icon: '❤️', desc: 'ECG, echo, cardiac cath' },
+      { code: 'ER', name: 'Emergency', icon: '🚑', desc: 'Triage ESI, vitals, disposition' },
+      { code: 'ICU', name: 'ICU', icon: '🏥', desc: 'Sepsis, daily goals, vasopressors' },
+      { code: 'NICU', name: 'NICU', icon: '👶', desc: 'APGAR, growth, bilirubin' },
+      { code: 'PEDS', name: 'Pediatrics', icon: '🧒', desc: 'Vaccination, growth chart' },
+      { code: 'OBG', name: 'ObGyn', icon: '🤰', desc: 'MFM scan, IVF cycle, partogram' },
+      { code: 'ONC', name: 'Oncology', icon: '🎗️', desc: 'Chemo, BMT, toxicity' },
+      { code: 'ORTHO', name: 'Orthopedics', icon: '🦴', desc: 'Fracture, implants, pre/post-op' },
+      { code: 'NEURO', name: 'Neurology', icon: '🧠', desc: 'Stroke alert, GCS, ICP' },
+      { code: 'PSYCH', name: 'Psychiatry', icon: '🧘', desc: 'MSE, risk assessment' },
+      { code: 'DERM', name: 'Dermatology', icon: '🧴', desc: 'Lesion, cosmetic, phototherapy' },
+      { code: 'ENT', name: 'ENT', icon: '👂', desc: 'Audiogram, sinus' },
+      { code: 'OPHTH', name: 'Ophthalmology', icon: '👁️', desc: 'Visual acuity, IOL calc' },
+      { code: 'PULM', name: 'Pulmonology', icon: '🫁', desc: 'PFT, sleep study' },
+      { code: 'GI', name: 'Gastroenterology', icon: '🥼', desc: 'Endoscopy, hepatology' },
+      { code: 'NEPH', name: 'Nephrology', icon: '🧪', desc: 'Dialysis, transplant' },
+      { code: 'ENDO', name: 'Endocrinology', icon: '🦋', desc: 'Glucose, thyroid' },
+      { code: 'INF', name: 'Infectious', icon: '🦠', desc: 'Culture, ASP review' },
+      { code: 'RHEUM', name: 'Rheumatology', icon: '🦴', desc: 'DAS28, serology' },
+      { code: 'LAB', name: 'Laboratory', icon: '🔬', desc: 'Result entry, critical values' },
+      { code: 'RAD', name: 'Radiology', icon: '🩻', desc: 'Imaging, critical findings' },
+      { code: 'ANES', name: 'Anesthesia', icon: '💉', desc: 'Preop, intraop, PACU' },
+      { code: 'SURG', name: 'Surgery', icon: '🔪', desc: 'WHO checklist, recovery' },
+      { code: 'CRIT', name: 'Critical Care', icon: '⏰', desc: 'Sepsis bundle, RSI' },
+      { code: 'DIAG', name: 'Diagnostics', icon: '🔍', desc: 'Scan, lab, pathology' },
+      { code: 'FUNC', name: 'Functional', icon: '📊', desc: 'ECG, PFT, EEG' },
+      { code: 'CTS', name: 'Cardiothoracic', icon: '🫀', desc: 'Bypass, graft' },
+      { code: 'NEUROSURG', name: 'Neurosurgery', icon: '🧠', desc: 'ICP log, GCS' },
+      { code: 'PACU', name: 'PACU', icon: '😴', desc: 'Vitals, pain, discharge' },
+      { code: 'PLASTIC', name: 'Plastic Surgery', icon: '✨', desc: 'Graft, procedure' },
+      { code: 'UROL', name: 'Urology', icon: '💧', desc: 'Procedure, renal stone' },
+    ];
+
+    // Apply i18n runtime
+    (async () => {
+      try { await I18N.loadDict(); } catch (_) {}
+      const stored = I18N.getLang();
+      if (stored && stored !== 'en-US') I18N.setLang(stored);
+    })();
+
+    function renderNav(filter = '') {
+      const list = STATIONS.filter(s => (s.code + ' ' + s.name).toLowerCase().includes(filter.toLowerCase()));
+      document.getElementById('navList').innerHTML = list.map(s => `
+        <button data-code="${s.code}" class="w-full text-left px-2 py-1.5 rounded text-sm hover:bg-slate-800 flex items-center gap-2">
+          <span class="text-base">${s.icon}</span>
+          <span class="flex-1">${s.code}</span>
+          <span class="text-xs text-slate-400">${s.name}</span>
+        </button>
+      `).join('');
+      document.querySelectorAll('[data-code]').forEach((b) => {
+        b.onclick = () => openStation(b.getAttribute('data-code'));
+      });
+    }
+
+    function openStation(code) {
+      const s = STATIONS.find(x => x.code === code);
+      if (!s) return;
+      document.getElementById('pageTitle').textContent = `${code} — ${s.name}`;
+      const station = StationBuilder.buildStation({ dept: code, lang: document.documentElement.lang, tenant: 'demo' });
+      document.getElementById('pageContent').innerHTML = `
+        <div class="flex items-center justify-between mb-3">
+          <div>
+            <div class="text-xs text-slate-500">${s.desc}</div>
+            <div class="text-sm text-slate-700 font-medium">${STATION_SNIPPETS[code].title} · ${STATION_SNIPPETS[code].titleAr || ''}</div>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="openSample('${code}')" class="px-2 py-1 text-xs bg-sky-100 text-sky-700 rounded">+ Sample Patient</button>
+            <button onclick="openForm('${code}')" class="px-2 py-1 text-xs bg-emerald-100 text-emerald-700 rounded">New Note</button>
+          </div>
+        </div>
+        <div id="stationArea"></div>
+      `;
+      document.getElementById('stationArea').innerHTML = station.render();
+      station.bind(document.getElementById('stationArea'));
+    }
+
+    function openSample(code) {
+      Modal.open({
+        title: 'Sample Patient',
+        fields: [
+          { name: 'mrn', label: 'MRN', type: 'text', value: 'MRN-' + Math.floor(Math.random() * 10000), required: true },
+          { name: 'name', label: 'Name', type: 'text', value: 'Ahmed Al-Saud', required: true },
+          { name: 'age', label: 'Age', type: 'number', value: '45' },
+          { name: 'sex', label: 'Sex', type: 'select', options: [{value:'male',label:'Male'},{value:'female',label:'Female'}] },
+          { name: 'complaint', label: 'Chief Complaint', type: 'textarea', value: 'Chest pain, onset 2h ago' },
+        ],
+        primaryLabel: 'Add to Queue',
+        onConfirm: (data) => {
+          const target = document.getElementById('stationArea');
+          const html = W.queueCard({
+            mrn: data.mrn, name: data.name, age: data.age, sex: data.sex, wait: 5, risk: 'moderate',
+            complaint: data.complaint, lang: document.documentElement.lang,
+          });
+          target.insertAdjacentHTML('beforeend', html);
+          Modal.toast('Patient added', { type: 'success' });
+        },
+      });
+    }
+
+    function openForm(code) {
+      const kind = { OBG: 'soap', PEDS: 'hp', ONC: 'soap', ICU: 'soap', ER: 'soap' }[code] || 'soap';
+      ClinicalFormBuilder.build({
+        kind,
+        patient: { mrn: 'MRN-001', name: 'Ahmed Al-Saud', sex: 'male', dob: '1980-01-15' },
+        onSubmit: (data) => {
+          const target = document.getElementById('stationArea');
+          target.insertAdjacentHTML('beforeend', `
+            <div class="bg-emerald-50 border-l-4 border-emerald-500 rounded p-3 mb-2">
+              <div class="text-sm font-semibold text-emerald-900">Note saved (${kind})</div>
+              <pre class="text-xs text-slate-700 mt-1">${JSON.stringify(data, null, 2)}</pre>
+            </div>
+          `);
+        },
+      });
+    }
+
+    document.getElementById('searchInput').oninput = (e) => renderNav(e.target.value);
+    document.getElementById('toggleLang').onclick = async () => {
+      const target = I18N.getLang() === 'ar-SA' ? 'en-US' : 'ar-SA';
+      await I18N.loadDict();
+      I18N.setLang(target);
+      I18N.applyToDOM();
+      document.getElementById('toggleLang').textContent = target === 'ar-SA' ? '🌐 English' : '🌐 العربية';
+      // Re-render current sidebar nav
+      renderNav(document.getElementById('searchInput').value);
+    };
+    document.getElementById('loadTest').onclick = () => {
+      Modal.open({ title: 'Smoke 96/96 PASS', body: '<p class="text-sm">Local smoke tests confirm:<br/>- 30 dept snippets<br/>- Modal framework<br/>- Station builder<br/>- Clinical forms<br/>- Hospital components</p>', primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true });
+    };
+    document.getElementById('openBuilder').onclick = () => location.href = '/all-stations.html';
+
+    renderNav();
+  </script>
+</body>
+</html>

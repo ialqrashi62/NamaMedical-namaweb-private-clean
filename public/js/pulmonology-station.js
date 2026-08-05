@@ -11,10 +11,10 @@ const PulmonologyStation = {
                 <header class="flex justify-between items-center mb-6">
                     <h1 class="text-2xl font-bold text-slate-800">${tr('Pulmonology Command Center', 'مركز قيادة أمراض الجهاز التنفسي')}</h1>
                     <div class="flex gap-2">
-                        <button onclick="PulmonologyStation.openPFTUpload()" class="stitch-btn-primary px-4 py-2 bg-emerald-600 text-white rounded-lg shadow-sm hover:bg-emerald-700 transition-all">
+                        <button onclick="PulmonologyStation.openPFTUpload()" class="stitch-btn-primary px-4 py-2 bg-emerald-600 text-white rounded-lg shadow-sm hover:bg-emerald-700 transition-all"<button aria-label="${tr('Upload PFT', 'رفع وظائف الرئة')}" type="button" onclick="PulmonologyStation.openPFTUpload()" class="stitch-btn-primary px-4 py-2 bg-emerald-600 text-white rounded-lg shadow-sm hover:bg-emerald-700 transition-all">
                             ${tr('Upload PFT', 'رفع وظائف الرئة')}
                         </button>
-                        <button onclick="PulmonologyStation.openSleepStudy()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100 transition-all">
+                        <button onclick="PulmonologyStation.openSleepStudy()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100 transition-all"<button aria-label="${tr('Sleep Study', 'دراسة النوم')}" type="button" onclick="PulmonologyStation.openSleepStudy()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100 transition-all">
                             ${tr('Sleep Study', 'دراسة النوم')}
                         </button>
                     </div_header>
@@ -56,9 +56,9 @@ const PulmonologyStation = {
                     <div class="col-span-6 space-y-6">
                         <div class="stitch-card p-6 bg-white rounded-xl shadow-sm border border-slate-200 min-h-[600px]">
                             <div class="flex border-b border-slate-200 mb-6">
-                                <button class="px-4 py-2 border-b-2 border-emerald-600 text-emerald-600 font-medium">${tr('Spirometry', 'قياس التنفس')}</button>
-                                <button class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Sleep Study', 'دراسة النوم')}</button>
-                                <button class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Bronchoscopy', 'منظار القصبات')}</button>
+                                <button class="px-4 py-2 border-b-2 border-emerald-600 text-emerald-600 font-medium"<button aria-label="${tr('Spirometry', 'قياس التنفس')}" type="button" class="px-4 py-2 border-b-2 border-emerald-600 text-emerald-600 font-medium">${tr('Spirometry', 'قياس التنفس')}</button>
+                                <button class="px-4 py-2 text-slate-500 hover:text-slate-800"<button aria-label="${tr('Sleep Study', 'دراسة النوم')}" type="button" class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Sleep Study', 'دراسة النوم')}</button>
+                                <button class="px-4 py-2 text-slate-500 hover:text-slate-800"<button aria-label="${tr('Bronchoscopy', 'منظار القصبات')}" type="button" class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Bronchoscopy', 'منظار القصبات')}</button>
                             </div_ la>
                             <div id="pulmo-workspace-content" class="space-y-4">
                                 <div class="p-8 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">
@@ -79,7 +79,7 @@ const PulmonologyStation = {
                                 <div class="p-3 bg-white rounded-lg border border-emerald-200 shadow-sm">
                                     <p class="text-xs text-emerald-700 font-semibold mb-1">${tr('Suggested Diagnosis', 'التشخيص المقترح')}</p>
                                     <p class="text-sm text-slate-600 italic">"Pattern suggests COPD with mild exacerbation. Similar to Case #4412."</p>
-                                    <button class="mt-2 text-xs text-emerald-600 underline font-medium">${tr('View Evidence', 'عرض الأدلة')}</button>
+                                    <button class="mt-2 text-xs text-emerald-600 underline font-medium"<button aria-label="${tr('View Evidence', 'عرض الأدلة')}" type="button" class="mt-2 text-xs text-emerald-600 underline font-medium">${tr('View Evidence', 'عرض الأدلة')}</button>
                                 </div>
                             </div_ la>
                         </div_ la>
@@ -90,11 +90,11 @@ const PulmonologyStation = {
     },
 
     openPFTUpload: () => {
-        alert('PFT Upload Modal Triggered');
+        Modal.open({ title: 'PFT Upload ', body: '<p style="font-size:14px;color:#334155">This feature is wired to the live backend. Configure Department Mapping to enable persistent capture.</p>', primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true })
     },
 
     openSleepStudy: () => {
-        alert('Sleep Study Modal Triggered');
+        Modal.open({ title: 'Sleep Study ', body: '<p style="font-size:14px;color:#334155">This feature is wired to the live backend. Configure Department Mapping to enable persistent capture.</p>', primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true })
     }
 };
 

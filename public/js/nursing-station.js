@@ -163,7 +163,7 @@ async function renderNursingStation(el) {
     el.innerHTML = `<div class="page-title">👩‍⚕️ ${tr('Nursing Station', 'محطة التمريض')}</div>
       <div class="error-card-premium"><div class="error-card-icon">⚠️</div>
         <h3>${tr('Failed to load', 'فشل التحميل')}</h3><p>${escapeHTML(e.message)}</p>
-        <button class="btn btn-primary" onclick="navigateTo(currentPage)">🔄 ${tr('Retry', 'إعادة المحاولة')}</button>
+        <button class="btn btn-primary" onclick="navigateTo(currentPage)"<button aria-label="🔄 ${tr('Retry', 'إعادة المحاولة')}" type="button" class="btn btn-primary" onclick="navigateTo(currentPage)">🔄 ${tr('Retry', 'إعادة المحاولة')}</button>
       </div>`;
     return;
   }
@@ -198,6 +198,7 @@ async function renderNursingStation(el) {
         <div id="nsWorklistBody" style="flex:1;overflow-y:auto"></div>
         <div style="padding:10px;border-top:1px solid var(--border)">
           <button class="btn btn-sm w-full" onclick="window.nsRefreshWorklist()"
+            style="background:var(--primary-glow);color:var(--primary);border:1px solid var(--primary);font-size:11px"<button aria-label="🔄 ${tr('Refresh', 'تحديث')}" type="button" class="btn btn-sm w-full" onclick="window.nsRefreshWorklist()"
             style="background:var(--primary-glow);color:var(--primary);border:1px solid var(--primary);font-size:11px">
             🔄 ${tr('Refresh', 'تحديث')}
           </button>
@@ -418,6 +419,7 @@ window.nsRenderPatientChart = function(patient, chart, vitals, problems, allergi
       </div>
       <div style="display:flex;gap:8px;flex-shrink:0">
         <button class="btn btn-sm" onclick="window.nsMarkWithNurse(${safeId(patient.id)})"
+          style="font-size:11px;padding:6px 10px;background:#0ea5e9;color:#fff;border:none"<button aria-label="👩‍⚕️ ${tr('With Nurse', 'مع الممرضة')}" type="button" class="btn btn-sm" onclick="window.nsMarkWithNurse(${safeId(patient.id)})"
           style="font-size:11px;padding:6px 10px;background:#0ea5e9;color:#fff;border:none">
           👩‍⚕️ ${tr('With Nurse', 'مع الممرضة')}
         </button>
@@ -549,7 +551,7 @@ window.nsTabVitals = function(container, { patient = {}, vitals = [] }, pid) {
           <textarea class="form-input" id="nsVNotes" rows="2" placeholder="${tr('Any observations...', 'أي ملاحظات...')}"></textarea>
         </div>
         <div style="display:flex;gap:8px">
-          <button class="btn btn-primary" onclick="window.nsSaveVitals(${pid})" style="flex:1;height:40px;font-size:13px">
+          <button class="btn btn-primary" onclick="window.nsSaveVitals(${pid})" style="flex:1;height:40px;font-size:13px"<button aria-label="💾 ${tr('Save &amp; Calculate EWS', 'حفظ وحساب EWS')}" type="button" class="btn btn-primary" onclick="window.nsSaveVitals(${pid})" style="flex:1;height:40px;font-size:13px">
             💾 ${tr('Save & Calculate EWS', 'حفظ وحساب EWS')}
           </button>
         </div>
@@ -566,6 +568,7 @@ window.nsTabVitals = function(container, { patient = {}, vitals = [] }, pid) {
           <div style="font-size:12px;font-weight:700;color:${news2.riskColor};margin-top:4px">${news2.riskLabel}</div>
           ${news2.score >= 5 ? `
             <button class="btn" onclick="window.nsEscalate(${pid})"
+              style="margin-top:12px;background:#dc2626;color:#fff;border:none;font-size:12px;font-weight:700;width:100%"<button aria-label="🚨 ${tr('ESCALATE TO DOCTOR', 'تصعيد فوري للطبيب')}" type="button" class="btn" onclick="window.nsEscalate(${pid})"
               style="margin-top:12px;background:#dc2626;color:#fff;border:none;font-size:12px;font-weight:700;width:100%">
               🚨 ${tr('ESCALATE TO DOCTOR', 'تصعيد فوري للطبيب')}
             </button>
@@ -730,6 +733,7 @@ window.nsTabEMAR = function(container, { patient = {}, emarOrders = [], allergie
               </td>
               <td style="padding:8px;text-align:center">
                 <button class="btn btn-sm" onclick="window.nsGiveMed(${safeId(o.id)},${safeId(pid)},'${jsStr(o.medication||o.drug_name||'')}','${jsStr(o.dose||'')}','${jsStr(o.route||'')}',${isHighAlert})"
+                  style="background:#16a34a;color:#fff;border:none;font-size:11px;padding:4px 10px"<button aria-label="💉 ${tr('Give', 'إعطاء')}" type="button" class="btn btn-sm" onclick="window.nsGiveMed(${safeId(o.id)},${safeId(pid)},'${jsStr(o.medication||o.drug_name||'')}','${jsStr(o.dose||'')}','${jsStr(o.route||'')}',${isHighAlert})"
                   style="background:#16a34a;color:#fff;border:none;font-size:11px;padding:4px 10px">
                   💉 ${tr('Give', 'إعطاء')}
                 </button>
@@ -1004,10 +1008,10 @@ window.nsTabH2T = function({ patient = {}, vitals = [] }) {
 
       <!-- Submit -->
       <div style="grid-column:span 2;display:flex;gap:10px">
-        <button type="button" class="btn btn-primary" onclick="window.nsSaveH2T(${window._NS.selectedPatientId})" style="flex:1;height:44px;font-size:13px">
+        <button type="button" class="btn btn-primary" onclick="window.nsSaveH2T(${window._NS.selectedPatientId})" style="flex:1;height:44px;font-size:13px"<button aria-label="💾 ${tr('Save Assessment', 'حفظ التقييم')}" type="button" class="btn btn-primary" onclick="window.nsSaveH2T(${window._NS.selectedPatientId})" style="flex:1;height:44px;font-size:13px">
           💾 ${tr('Save Assessment', 'حفظ التقييم')}
         </button>
-        <button type="button" class="btn" onclick="window.nsPrintH2T()" style="height:44px;font-size:13px;background:#fff3e0;border:1px solid #ff9800;color:#e65100">
+        <button type="button" class="btn" onclick="window.nsPrintH2T()" style="height:44px;font-size:13px;background:#fff3e0;border:1px solid #ff9800;color:#e65100"<button aria-label="🖨️ ${tr('Print', 'طباعة')}" type="button" class="btn" onclick="window.nsPrintH2T()" style="height:44px;font-size:13px;background:#fff3e0;border:1px solid #ff9800;color:#e65100">
           🖨️ ${tr('Print', 'طباعة')}
         </button>
       </div>
@@ -1128,7 +1132,7 @@ window.nsTabCarePlan = async function(container, { patient = {} }, pid) {
           <textarea class="form-input" id="cpInterventions" rows="3" placeholder="${tr('Nursing interventions...', 'التدخلات التمريضية...')}"></textarea>
         </div>
       </div>
-      <button class="btn btn-primary" onclick="window.nsSaveCarePlan(${pid})" style="margin-top:12px;height:40px;font-size:13px">
+      <button class="btn btn-primary" onclick="window.nsSaveCarePlan(${pid})" style="margin-top:12px;height:40px;font-size:13px"<button aria-label="💾 ${tr('Save Care Plan', 'حفظ خطة الرعاية')}" type="button" class="btn btn-primary" onclick="window.nsSaveCarePlan(${pid})" style="margin-top:12px;height:40px;font-size:13px">
         💾 ${tr('Save Care Plan', 'حفظ خطة الرعاية')}
       </button>
     </div>
@@ -1222,6 +1226,7 @@ window.nsTabIO = async function(container, pid) {
           <input class="form-input" id="ioIntakeTime" type="time" value="${new Date().toTimeString().slice(0,5)}" style="height:32px;font-size:12px">
         </div>
         <button class="btn w-full" onclick="window.nsAddIO('intake')"
+          style="background:#0369a1;color:#fff;border:none;height:34px;font-size:12px"<button aria-label="➕ ${tr('Add Intake', 'إضافة وارد')}" type="button" class="btn w-full" onclick="window.nsAddIO('intake')"
           style="background:#0369a1;color:#fff;border:none;height:34px;font-size:12px">
           ➕ ${tr('Add Intake', 'إضافة وارد')}
         </button>
@@ -1250,6 +1255,7 @@ window.nsTabIO = async function(container, pid) {
           <input class="form-input" id="ioOutputTime" type="time" value="${new Date().toTimeString().slice(0,5)}" style="height:32px;font-size:12px">
         </div>
         <button class="btn w-full" onclick="window.nsAddIO('output')"
+          style="background:#ca8a04;color:#fff;border:none;height:34px;font-size:12px"<button aria-label="➖ ${tr('Add Output', 'إضافة صادر')}" type="button" class="btn w-full" onclick="window.nsAddIO('output')"
           style="background:#ca8a04;color:#fff;border:none;height:34px;font-size:12px">
           ➖ ${tr('Add Output', 'إضافة صادر')}
         </button>
@@ -1389,10 +1395,10 @@ window.nsTabHandover = function({ patient = {}, chart = {}, vitals = [] }, pid) 
       </div>
 
       <div style="display:flex;gap:10px">
-        <button class="btn btn-primary" onclick="window.nsSaveSBAR(${pid})" style="flex:1;height:44px;font-size:13px">
+        <button class="btn btn-primary" onclick="window.nsSaveSBAR(${pid})" style="flex:1;height:44px;font-size:13px"<button aria-label="💾 ${tr('Save Handover Report', 'حفظ تقرير الوردية')}" type="button" class="btn btn-primary" onclick="window.nsSaveSBAR(${pid})" style="flex:1;height:44px;font-size:13px">
           💾 ${tr('Save Handover Report', 'حفظ تقرير الوردية')}
         </button>
-        <button class="btn" onclick="window.nsPrintSBAR()" style="height:44px;font-size:13px;background:#fff3e0;border:1px solid #ff9800;color:#e65100">
+        <button class="btn" onclick="window.nsPrintSBAR()" style="height:44px;font-size:13px;background:#fff3e0;border:1px solid #ff9800;color:#e65100"<button aria-label="🖨️ ${tr('Print SBAR', 'طباعة SBAR')}" type="button" class="btn" onclick="window.nsPrintSBAR()" style="height:44px;font-size:13px;background:#fff3e0;border:1px solid #ff9800;color:#e65100">
           🖨️ ${tr('Print SBAR', 'طباعة SBAR')}
         </button>
       </div>
@@ -1532,7 +1538,7 @@ window.nsTabTriage = function({ patient = {} }, pid) {
       <label style="font-size:11px;font-weight:700;color:var(--text-dim)">${tr('Triage Notes', 'ملاحظات الفرز')}</label>
       <textarea class="form-input" id="tgNotes" rows="2" placeholder="${tr('Additional observations...', 'ملاحظات إضافية...')}"></textarea>
     </div>
-    <button class="btn btn-primary w-full" onclick="window.nsSaveTriage(${pid})" style="height:44px;font-size:14px;font-weight:700">
+    <button class="btn btn-primary w-full" onclick="window.nsSaveTriage(${pid})" style="height:44px;font-size:14px;font-weight:700"<button aria-label="⚠️ ${tr('Save Triage &amp; Route to Doctor', 'حفظ الفرز والتحويل للطبيب')}" type="button" class="btn btn-primary w-full" onclick="window.nsSaveTriage(${pid})" style="height:44px;font-size:14px;font-weight:700">
       ⚠️ ${tr('Save Triage & Route to Doctor', 'حفظ الفرز والتحويل للطبيب')}
     </button>
   `;
@@ -1617,10 +1623,10 @@ window.nsTabRisks = function({ patient = {} }, pid) {
         </div>
         <div id="morseResult" style="margin-top:10px;padding:10px;border-radius:8px;text-align:center;font-weight:700;background:#f1f5f9"></div>
         <div style="display:flex;gap:8px;margin-top:8px">
-          <button class="btn" onclick="window.nsCalcMorse()" style="flex:1;background:#ca8a04;color:#fff;border:none;font-size:12px;height:36px">
+          <button class="btn" onclick="window.nsCalcMorse()" style="flex:1;background:#ca8a04;color:#fff;border:none;font-size:12px;height:36px"<button aria-label="🧮 ${tr('Calculate', 'احتساب')}" type="button" class="btn" onclick="window.nsCalcMorse()" style="flex:1;background:#ca8a04;color:#fff;border:none;font-size:12px;height:36px">
             🧮 ${tr('Calculate', 'احتساب')}
           </button>
-          <button class="btn" onclick="window.nsSaveMorse(${pid})" style="flex:1;background:#16a34a;color:#fff;border:none;font-size:12px;height:36px">
+          <button class="btn" onclick="window.nsSaveMorse(${pid})" style="flex:1;background:#16a34a;color:#fff;border:none;font-size:12px;height:36px"<button aria-label="💾 ${tr('Save', 'حفظ')}" type="button" class="btn" onclick="window.nsSaveMorse(${pid})" style="flex:1;background:#16a34a;color:#fff;border:none;font-size:12px;height:36px">
             💾 ${tr('Save', 'حفظ')}
           </button>
         </div>
@@ -1648,10 +1654,10 @@ window.nsTabRisks = function({ patient = {} }, pid) {
         </div>
         <div id="bradenResult" style="margin-top:10px;padding:10px;border-radius:8px;text-align:center;font-weight:700;background:#f1f5f9"></div>
         <div style="display:flex;gap:8px;margin-top:8px">
-          <button class="btn" onclick="window.nsCalcBraden()" style="flex:1;background:#7c3aed;color:#fff;border:none;font-size:12px;height:36px">
+          <button class="btn" onclick="window.nsCalcBraden()" style="flex:1;background:#7c3aed;color:#fff;border:none;font-size:12px;height:36px"<button aria-label="🧮 ${tr('Calculate', 'احتساب')}" type="button" class="btn" onclick="window.nsCalcBraden()" style="flex:1;background:#7c3aed;color:#fff;border:none;font-size:12px;height:36px">
             🧮 ${tr('Calculate', 'احتساب')}
           </button>
-          <button class="btn" onclick="window.nsSaveBraden(${pid})" style="flex:1;background:#16a34a;color:#fff;border:none;font-size:12px;height:36px">
+          <button class="btn" onclick="window.nsSaveBraden(${pid})" style="flex:1;background:#16a34a;color:#fff;border:none;font-size:12px;height:36px"<button aria-label="💾 ${tr('Save', 'حفظ')}" type="button" class="btn" onclick="window.nsSaveBraden(${pid})" style="flex:1;background:#16a34a;color:#fff;border:none;font-size:12px;height:36px">
             💾 ${tr('Save', 'حفظ')}
           </button>
         </div>
@@ -1673,7 +1679,7 @@ window.nsTabRisks = function({ patient = {} }, pid) {
           `).join('')}
         </div>
         <div id="qsofaResult" style="margin-top:10px;padding:10px;border-radius:8px;text-align:center;font-weight:700;background:#f1f5f9"></div>
-        <button class="btn w-full" onclick="window.nsCalcQSOFA()" style="margin-top:8px;background:#dc2626;color:#fff;border:none;font-size:12px;height:36px">
+        <button class="btn w-full" onclick="window.nsCalcQSOFA()" style="margin-top:8px;background:#dc2626;color:#fff;border:none;font-size:12px;height:36px"<button aria-label="🧮 ${tr('Screen for Sepsis', 'فحص الإنتان')}" type="button" class="btn w-full" onclick="window.nsCalcQSOFA()" style="margin-top:8px;background:#dc2626;color:#fff;border:none;font-size:12px;height:36px">
           🧮 ${tr('Screen for Sepsis', 'فحص الإنتان')}
         </button>
       </div>
@@ -1805,6 +1811,7 @@ window.nsTabOrders = async function(container, pid) {
               <td style="padding:8px;text-align:center;color:var(--text-dim)">${escapeHTML(o.created_at?.split('T')[1]?.slice(0,5) || '-')}</td>
               <td style="padding:8px;text-align:center">
                 ${o.status !== 'Completed' ? `<button class="btn btn-sm" onclick="window.nsAckOrder(${safeId(o.id)},${safeId(pid)})"
+                  style="background:#16a34a;color:#fff;border:none;font-size:10px;padding:3px 8px"<button aria-label="✅ ${tr('Done', 'منجز')}" type="button" class="btn btn-sm" onclick="window.nsAckOrder(${safeId(o.id)},${safeId(pid)})"
                   style="background:#16a34a;color:#fff;border:none;font-size:10px;padding:3px 8px">
                   ✅ ${tr('Done', 'منجز')}
                 </button>` : '<span style="color:#16a34a;font-size:11px">✅</span>'}
@@ -1855,6 +1862,7 @@ window.nsTabNotes = function({ chart = {} }, pid) {
       <div style="display:flex;flex-wrap:wrap;gap:6px">
         ${templates.map(t => `
           <button class="btn btn-sm" onclick="document.getElementById('nsNoteText').value='${t.text.replace(/'/g,"\\'")}'"
+            style="font-size:10px;padding:4px 8px;background:var(--surface-container,#f1f5f9);border:1px solid var(--border)"<button aria-label="${t.label}" type="button" class="btn btn-sm" onclick="document.getElementById('nsNoteText').value='${t.text.replace(/'/g,"\\'")}'"
             style="font-size:10px;padding:4px 8px;background:var(--surface-container,#f1f5f9);border:1px solid var(--border)">
             ${t.label}
           </button>
@@ -1876,7 +1884,7 @@ window.nsTabNotes = function({ chart = {} }, pid) {
       <textarea class="form-input" id="nsNoteText" rows="6"
         placeholder="${tr('Enter nursing note...', 'أدخل الملاحظة التمريضية...')}"></textarea>
     </div>
-    <button class="btn btn-primary w-full" onclick="window.nsSaveNote(${pid})" style="height:44px;font-size:13px;margin-bottom:20px">
+    <button class="btn btn-primary w-full" onclick="window.nsSaveNote(${pid})" style="height:44px;font-size:13px;margin-bottom:20px"<button aria-label="💾 ${tr('Save &amp; Sign Note', 'حفظ وتوقيع الملاحظة')}" type="button" class="btn btn-primary w-full" onclick="window.nsSaveNote(${pid})" style="height:44px;font-size:13px;margin-bottom:20px">
       💾 ${tr('Save & Sign Note', 'حفظ وتوقيع الملاحظة')}
     </button>
 
@@ -1933,31 +1941,38 @@ window.nsRenderActionsPanel = function(patient, news2) {
     <!-- Quick Action Buttons -->
     <div style="display:grid;gap:8px">
       <button class="btn" onclick="window.nsSwitchTab('vitals')"
+        style="background:#0ea5e9;color:#fff;border:none;font-size:12px;height:40px;font-weight:700;border-radius:10px"<button aria-label="🌡️ ${tr('Quick Vitals', 'قياس سريع')}" type="button" class="btn" onclick="window.nsSwitchTab('vitals')"
         style="background:#0ea5e9;color:#fff;border:none;font-size:12px;height:40px;font-weight:700;border-radius:10px">
         🌡️ ${tr('Quick Vitals', 'قياس سريع')}
       </button>
       <button class="btn" onclick="window.nsSwitchTab('emar')"
+        style="background:#16a34a;color:#fff;border:none;font-size:12px;height:40px;font-weight:700;border-radius:10px"<button aria-label="💉 ${tr('Give Medication', 'إعطاء دواء')}" type="button" class="btn" onclick="window.nsSwitchTab('emar')"
         style="background:#16a34a;color:#fff;border:none;font-size:12px;height:40px;font-weight:700;border-radius:10px">
         💉 ${tr('Give Medication', 'إعطاء دواء')}
       </button>
       <button class="btn" onclick="window.nsSwitchTab('io')"
+        style="background:#7c3aed;color:#fff;border:none;font-size:12px;height:40px;font-weight:700;border-radius:10px"<button aria-label="💧 ${tr('I &amp; O Entry', 'تسجيل سوائل')}" type="button" class="btn" onclick="window.nsSwitchTab('io')"
         style="background:#7c3aed;color:#fff;border:none;font-size:12px;height:40px;font-weight:700;border-radius:10px">
         💧 ${tr('I & O Entry', 'تسجيل سوائل')}
       </button>
       ${news2.score >= 5 ? `
       <button class="btn" onclick="window.nsEscalate(${pid})"
+        style="background:#dc2626;color:#fff;border:none;font-size:12px;height:40px;font-weight:800;border-radius:10px;animation:pulse 1s infinite"<button aria-label="🚨 ${tr('ESCALATE TO DOCTOR', 'تصعيد للطبيب')}" type="button" class="btn" onclick="window.nsEscalate(${pid})"
         style="background:#dc2626;color:#fff;border:none;font-size:12px;height:40px;font-weight:800;border-radius:10px;animation:pulse 1s infinite">
         🚨 ${tr('ESCALATE TO DOCTOR', 'تصعيد للطبيب')}
       </button>` : ''}
       <button class="btn" onclick="window.nsSwitchTab('handover')"
+        style="background:#ca8a04;color:#fff;border:none;font-size:12px;height:40px;font-weight:700;border-radius:10px"<button aria-label="🔄 ${tr('Write SBAR', 'كتابة SBAR')}" type="button" class="btn" onclick="window.nsSwitchTab('handover')"
         style="background:#ca8a04;color:#fff;border:none;font-size:12px;height:40px;font-weight:700;border-radius:10px">
         🔄 ${tr('Write SBAR', 'كتابة SBAR')}
       </button>
       <button class="btn" onclick="window.nsSwitchTab('triage')"
+        style="background:#ea580c;color:#fff;border:none;font-size:12px;height:40px;font-weight:700;border-radius:10px"<button aria-label="⚠️ ${tr('Triage', 'فرز المريض')}" type="button" class="btn" onclick="window.nsSwitchTab('triage')"
         style="background:#ea580c;color:#fff;border:none;font-size:12px;height:40px;font-weight:700;border-radius:10px">
         ⚠️ ${tr('Triage', 'فرز المريض')}
       </button>
       <button class="btn" onclick="window.nsMarkWithNurse(${pid})"
+        style="background:#0369a1;color:#fff;border:none;font-size:12px;height:40px;font-weight:700;border-radius:10px"<button aria-label="👩‍⚕️ ${tr('Mark: With Nurse', 'وضع علامة: مع الممرضة')}" type="button" class="btn" onclick="window.nsMarkWithNurse(${pid})"
         style="background:#0369a1;color:#fff;border:none;font-size:12px;height:40px;font-weight:700;border-radius:10px">
         👩‍⚕️ ${tr('Mark: With Nurse', 'وضع علامة: مع الممرضة')}
       </button>

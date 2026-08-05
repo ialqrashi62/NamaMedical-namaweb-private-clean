@@ -1,0 +1,113 @@
+{
+  "title": "NamaMedical SLOs (P3-E v8)",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["nama-medical", "slo", "production"],
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "tenant",
+        "type": "query",
+        "datasource": "prometheus",
+        "query": "label_values(nama_engine_runs_total, tenant)",
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "title": "HTTP Availability (SLO: 99.95%)",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(nama_http_requests_total{status!~\"5..\"}[5m])) / sum(rate(nama_http_requests_total[5m]))",
+          "legendFormat": "success rate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "red" },
+              { "value": 0.9, "color": "yellow" },
+              { "value": 0.999, "color": "green" }
+            ]
+          },
+          "min": 0.95
+        }
+      }
+    },
+    {
+      "title": "p95 Engine Latency (target ≤ 1s)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(nama_engine_latency_seconds_bucket[5m])) by (le, dept))",
+          "legendFormat": "p95 {{dept}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "title": "Red-Flag Firings (per severity)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "targets": [
+        {
+          "expr": "sum(rate(nama_red_flags_fired_total[5m])) by (severity)",
+          "legendFormat": "{{severity}}"
+        }
+      ]
+    },
+    {
+      "title": "Drug Blocks (per reason)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(nama_drug_blocks_total[5m])) by (reason)",
+          "legendFormat": "{{reason}}"
+        }
+      ]
+    },
+    {
+      "title": "Auth Failures",
+      "type": "graph",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(nama_auth_failures_total[5m])) by (reason)",
+          "legendFormat": "{{reason}}"
+        }
+      ]
+    },
+    {
+      "title": "Audit Chain Writes (by sink)",
+      "type": "graph",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(nama_audit_writes_total[5m])) by (sink)",
+          "legendFormat": "{{sink}}"
+        }
+      ]
+    },
+    {
+      "title": "RAG p99 (per adapter)",
+      "type": "graph",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 14 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(nama_rag_search_seconds_bucket[5m])) by (le, adapter))",
+          "legendFormat": "{{adapter}}"
+        }
+      ]
+    }
+  ]
+}

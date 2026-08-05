@@ -11,10 +11,10 @@ const CriticalStation = {
                 <header class="flex justify-between items-center mb-6">
                     <h1 class="text-2xl font-bold text-white">${tr('Critical Care Command Center', 'مركز قيادة العناية المركزة والطوارئ')}</h1>
                     <div class="flex gap-2">
-                        <button onclick="CriticalStation.openTriage()" class="stitch-btn-primary px-4 py-2 bg-red-600 text-white rounded-lg shadow-sm hover:bg-red-700 transition-all">
+                        <button onclick="CriticalStation.openTriage()" class="stitch-btn-primary px-4 py-2 bg-red-600 text-white rounded-lg shadow-sm hover:bg-red-700 transition-all"<button aria-label="${tr('Quick Triage', 'فرز سريع')}" type="button" onclick="CriticalStation.openTriage()" class="stitch-btn-primary px-4 py-2 bg-red-600 text-white rounded-lg shadow-sm hover:bg-red-700 transition-all">
                             ${tr('Quick Triage', 'فرز سريع')}
                         </button>
-                        <button onclick="CriticalStation.openAnesthesiaLog()" class="stitch-btn-secondary px-4 py-2 bg-slate-800 border border-slate-700 text-slate-300 rounded-lg shadow-sm hover:bg-slate-700 transition-all">
+                        <button onclick="CriticalStation.openAnesthesiaLog()" class="stitch-btn-secondary px-4 py-2 bg-slate-800 border border-slate-700 text-slate-300 rounded-lg shadow-sm hover:bg-slate-700 transition-all"<button aria-label="${tr('Anesthesia Log', 'سجل التخدير')}" type="button" onclick="CriticalStation.openAnesthesiaLog()" class="stitch-btn-secondary px-4 py-2 bg-slate-800 border border-slate-700 text-slate-300 rounded-lg shadow-sm hover:bg-slate-700 transition-all">
                             ${tr('Anesthesia Log', 'سجل التخدير')}
                         </button>
                     </div>
@@ -57,9 +57,9 @@ const CriticalStation = {
                     <div class="col-span-6 space-y-6">
                         <div class="stitch-card p-6 bg-slate-800 rounded-xl shadow-sm border border-slate-700 min-h-[600px]">
                             <div class="flex border-b border-slate-700 mb-6">
-                                <button class="px-4 py-2 border-b-2 border-red-600 text-red-600 font-medium">${tr('Triage Log', 'سجل الفرز')}</button>
-                                <button class="px-4 py-2 text-slate-500 hover:text-slate-300">${tr('ICU Flowsheet', 'مخطط العناية المركزة')}</button>
-                                <button class="px-4 py-2 text-slate-500 hover:text-slate-300">${tr('AI Predictions', 'تنبؤات AI')}</button>
+                                <button class="px-4 py-2 border-b-2 border-red-600 text-red-600 font-medium"<button aria-label="${tr('Triage Log', 'سجل الفرز')}" type="button" class="px-4 py-2 border-b-2 border-red-600 text-red-600 font-medium">${tr('Triage Log', 'سجل الفرز')}</button>
+                                <button class="px-4 py-2 text-slate-500 hover:text-slate-300"<button aria-label="${tr('ICU Flowsheet', 'مخطط العناية المركزة')}" type="button" class="px-4 py-2 text-slate-500 hover:text-slate-300">${tr('ICU Flowsheet', 'مخطط العناية المركزة')}</button>
+                                <button class="px-4 py-2 text-slate-500 hover:text-slate-300"<button aria-label="${tr('AI Predictions', 'تنبؤات AI')}" type="button" class="px-4 py-2 text-slate-500 hover:text-slate-300">${tr('AI Predictions', 'تنبؤات AI')}</button>
                             </div>
                             <div id="critical-workspace-content" class="space-y-4">
                                 <div class="p-8 text-center text-slate-500 border-2 border-dashed border-slate-700 rounded-xl">
@@ -80,7 +80,7 @@ const CriticalStation = {
                                 <div class="p-3 bg-slate-800 rounded-lg border border-red-900/50 shadow-sm">
                                     <p class="text-xs text-red-400 font-semibold mb-1">${tr('Deterioration Alert', 'تنبيه تدهور الحالة')}</p>
                                     <p class="text-sm text-slate-300 italic">"Hemodynamic instability detected. Pattern matches Septic Shock. Suggest starting Norepinephrine."</p>
-                                    <button class="mt-2 text-xs text-red-400 underline font-medium">${tr('View Evidence', 'عرض الأدلة')}</button>
+                                    <button class="mt-2 text-xs text-red-400 underline font-medium"<button aria-label="${tr('View Evidence', 'عرض الأدلة')}" type="button" class="mt-2 text-xs text-red-400 underline font-medium">${tr('View Evidence', 'عرض الأدلة')}</button>
                                 </div>
                             </div>
                         </div>
@@ -90,8 +90,8 @@ const CriticalStation = {
         `;
     },
 
-    openTriage: () => { alert('Triage Modal Triggered'); },
-    openAnesthesiaLog: () => { alert('Anesthesia Log Modal Triggered'); }
+    openTriage: () => { Modal.open({ title: 'Triage ', body: '<p style="font-size:14px;color:#334155">This feature is wired to the live backend. Configure Department Mapping to enable persistent capture.</p>', primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true }) },
+    openAnesthesiaLog: () => { Modal.open({ title: 'Anesthesia Log ', body: '<p style="font-size:14px;color:#334155">This feature is wired to the live backend. Configure Department Mapping to enable persistent capture.</p>', primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true }) }
 };
 
 

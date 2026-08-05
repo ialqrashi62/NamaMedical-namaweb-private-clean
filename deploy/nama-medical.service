@@ -1,0 +1,38 @@
+# systemd unit — NamaMedical ERP
+# Place at: /etc/systemd/system/nama-medical.service
+# Enable:   systemctl enable nama-medical
+#
+# Owner approval required before running live (AGENTS.md §2.4).
+
+[Unit]
+Description=NamaMedical ERP (Node 20 + Express + PostgreSQL)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=nama
+WorkingDirectory=/opt/namaweb
+EnvironmentFile=-/opt/namaweb/.env
+ExecStart=/usr/bin/node /opt/namaweb/server.js
+Restart=always
+RestartSec=10
+StartLimitBurst=5
+StartLimitInterval=300
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/namaweb/phi_vault /opt/namaweb/audit
+StandardOutput=journal
+StandardError=journal
+
+# Hardening
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+
+[Install]
+WantedBy=multi-user.target

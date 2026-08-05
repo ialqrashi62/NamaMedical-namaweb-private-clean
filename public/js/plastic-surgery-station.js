@@ -12,8 +12,8 @@ const PlasticSurgeryStation = {
   <header class="flex justify-between items-center mb-6">
     <h1 class="text-2xl font-bold text-slate-800">${tr('Plastic Surgery Command Center', 'مركز قيادة الجراحة التجميلية')}</h1>
     <div class="flex gap-2">
-      <button onclick="PlasticSurgeryStation.openTBSA()" class="stitch-btn-primary px-4 py-2 bg-pink-600 text-white rounded-lg shadow-sm hover:bg-pink-700">${tr('TBSA Calculator', 'حاسبة مساحة الحرق')}</button>
-      <button onclick="PlasticSurgeryStation.openFlapMonitor()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100">${tr('Flap Monitor', 'مراقبة السديلة')}</button>
+      <button onclick="PlasticSurgeryStation.openTBSA()" class="stitch-btn-primary px-4 py-2 bg-pink-600 text-white rounded-lg shadow-sm hover:bg-pink-700"<button aria-label="${tr('TBSA Calculator', 'حاسبة مساحة الحرق')}" type="button" onclick="PlasticSurgeryStation.openTBSA()" class="stitch-btn-primary px-4 py-2 bg-pink-600 text-white rounded-lg shadow-sm hover:bg-pink-700">${tr('TBSA Calculator', 'حاسبة مساحة الحرق')}</button>
+      <button onclick="PlasticSurgeryStation.openFlapMonitor()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100"<button aria-label="${tr('Flap Monitor', 'مراقبة السديلة')}" type="button" onclick="PlasticSurgeryStation.openFlapMonitor()" class="stitch-btn-secondary px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm hover:bg-slate-100">${tr('Flap Monitor', 'مراقبة السديلة')}</button>
     </div>
   </header>
   <div class="grid grid-cols-12 gap-6">
@@ -36,9 +36,9 @@ const PlasticSurgeryStation = {
     <div class="col-span-6 space-y-6">
       <div class="stitch-card p-6 bg-white rounded-xl shadow-sm border border-slate-200 min-h-[500px]">
         <div class="flex border-b border-slate-200 mb-6">
-          <button class="px-4 py-2 border-b-2 border-pink-600 text-pink-600 font-medium">${tr('TBSA / Fluids', 'مساحة الحرق / السوائل')}</button>
-          <button class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Flap Perfusion', 'تروية السديلة')}</button>
-          <button class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Symmetry', 'التناظر')}</button>
+          <button class="px-4 py-2 border-b-2 border-pink-600 text-pink-600 font-medium"<button aria-label="${tr('TBSA / Fluids', 'مساحة الحرق / السوائل')}" type="button" class="px-4 py-2 border-b-2 border-pink-600 text-pink-600 font-medium">${tr('TBSA / Fluids', 'مساحة الحرق / السوائل')}</button>
+          <button class="px-4 py-2 text-slate-500 hover:text-slate-800"<button aria-label="${tr('Flap Perfusion', 'تروية السديلة')}" type="button" class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Flap Perfusion', 'تروية السديلة')}</button>
+          <button class="px-4 py-2 text-slate-500 hover:text-slate-800"<button aria-label="${tr('Symmetry', 'التناظر')}" type="button" class="px-4 py-2 text-slate-500 hover:text-slate-800">${tr('Symmetry', 'التناظر')}</button>
         </div>
         <div id="plastic-workspace" class="space-y-4">
           <div class="p-8 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">${tr('No active session. Open TBSA Calc to begin.', 'لا توجد جلسة نشطة. افتح حاسبة TBSA للبدء.')}</div>
@@ -66,7 +66,6 @@ const PlasticSurgeryStation = {
   </div>
 </div>`;
     },
-    openTBSA: () => alert('TBSA + Parkland (POST /api/plastic-burns/burn-resuscitation)'),
-    openFlapMonitor: () => alert('Flap monitor (POST /api/plastic-burns/flap-monitor)')
-};
+    openTBSA: () => Modal.open({ title: "TBSA + Parkland (POST /api/plastic-burns/burn-resuscitation)", body: "<p style=\"font-size:14px;color:#334155\">TBSA + Parkland (POST /api/plastic-burns/burn-resuscitation)</p><div style=\"background:#f1f5f9;border-radius:6px;padding:10px;font-size:12px;color:#475569;margin-top:10px\"><strong>HTTP:</strong> API &nbsp;&nbsp;<strong>Endpoint:</strong> <code>/api/plastic-burns/burn-resuscitation</code></div><p style=\"font-size:13px;color:#64748b;margin-top:10px\">This action will be wired to the live backend. Configure Department Mappings to enable persistent capture.</p>", primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true }),
+    openFlapMonitor: () => Modal.open({ title: "Flap monitor (POST /api/plastic-burns/flap-monitor)", body: "<p style=\"font-size:14px;color:#334155\">Flap monitor (POST /api/plastic-burns/flap-monitor)</p><div style=\"background:#f1f5f9;border-radius:6px;padding:10px;font-size:12px;color:#475569;margin-top:10px\"><strong>HTTP:</strong> API &nbsp;&nbsp;<strong>Endpoint:</strong> <code>/api/plastic-burns/flap-monitor</code></div><p style=\"font-size:13px;color:#64748b;margin-top:10px\">This action will be wired to the live backend. Configure Department Mappings to enable persistent capture.</p>", primaryLabel: 'OK', secondaryLabel: 'Close', hidePrimary: true })};
 if (typeof window !== 'undefined') window.PlasticSurgeryStation = PlasticSurgeryStation;

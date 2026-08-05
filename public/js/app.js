@@ -4436,12 +4436,17 @@ window.showModal = (title, content) => {
     modal = document.createElement('div');
     modal.id = 'genericModal';
     modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
-    modal.innerHTML = '<div style="background:var(--card-bg,#fff);border-radius:16px;padding:24px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3)"><div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:16px"><h3 id="genericModalTitle" style="margin:0"></h3><button onclick="this.closest(\'#genericModal\').style.display=\'none\'" style="border:none;background:none;font-size:20px;cursor:pointer">\u2715</button></div><div id="genericModalBody"></div></div>';
+    modal.innerHTML = '<div role="dialog" aria-modal="true" aria-labelledby="genericModalTitle" style="background:var(--card-bg,#fff);border-radius:16px;padding:24px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3)"><div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:16px"><h3 id="genericModalTitle" style="margin:0"></h3><button type="button" aria-label="' + escapeHTML(tr('Close', 'إغلاق')) + '" onclick="this.closest(\'#genericModal\').style.display=\'none\'" style="border:none;background:none;font-size:20px;cursor:pointer;line-height:1" title="' + escapeHTML(tr('Close', 'إغلاق')) + '"><span aria-hidden="true">\u2715</span></button></div><div id="genericModalBody"></div></div>';
     document.body.appendChild(modal);
   }
   document.getElementById('genericModalTitle').textContent = title;
   document.getElementById('genericModalBody').innerHTML = content;
   modal.style.display = 'flex';
+  // Wave 13: trap focus within the dialog and announce.
+  if (window.a11y && typeof window.a11y.trapFocus === 'function') {
+    try { window.a11y.trapFocus(modal); } catch (_e) { /* noop */ }
+    try { window.a11y.announce(title); } catch (_e) { /* noop */ }
+  }
 };
 
 async function renderReception(el) {
@@ -5449,7 +5454,7 @@ window.selectPatient = async (id) => {
             <span>🏢 ${tr('Facility Context', 'سياق المنشأة')}: M-${escapeHTML(p.tenant_id || currentUser.tenantId)}</span>
             <div style="display: flex; gap: 8px">
               <button class="btn btn-sm btn-info" onclick="printPatientWristband(${safeId(p.id)})" style="padding: 2px 8px">🖨️ ${tr('Print Wristband', 'طباعة السوار')}</button>
-              <button class="btn btn-sm btn-secondary" onclick="document.getElementById('rPatientBannerContainer').innerHTML=''" style="padding: 2px 8px">${tr('Clear Banner', 'إغلاق البانر')}</button>
+              <button class="btn btn-sm btn-secondary" type="button" aria-label="${tr('Clear patient banner', 'إغلاق بانر المريض')}" onclick="document.getElementById('rPatientBannerContainer').innerHTML=''" style="padding: 2px 8px">${tr('Clear Banner', 'إغلاق البانر')}</button>
             </div>
           </div>
         </div>
@@ -6606,9 +6611,9 @@ window.loadPatientInfo = async () => {
     }
     const consentBadge = p.privacy_consent_signed
       ? `<span class="badge badge-success" style="background:#10b981;color:#fff">🟢 ${tr('PDPL Consent Signed', 'موافقة حماية البيانات')}</span>`
-      : `<button class="badge" style="background:#ef4444;color:#fff;cursor:pointer;border:none;border-radius:4px;padding:4px 8px;" onclick="signPrivacyConsent(${p.id})">⚠️ ${tr('PDPL Consent Required', 'توقيع موافقة البيانات')}</button>`;
+      : `<button type="button" class="badge" aria-label="${tr('Sign PDPL privacy consent', 'توقيع موافقة خصوصية البيانات')}" style="background:#ef4444;color:#fff;cursor:pointer;border:none;border-radius:4px;padding:4px 8px;" onclick="signPrivacyConsent(${p.id})">⚠️ ${tr('PDPL Consent Required', 'توقيع موافقة البيانات')}</button>`;
 
-    document.getElementById('drPatientInfo').innerHTML = `<div class="flex gap-8 mt-16" style="flex-wrap:wrap;align-items:center"><span class="badge badge-info">📁 ${escapeHTML(p.mrn || p.file_number)}</span><span class="badge badge-warning">🎂 ${tr('Age', 'العمر')}: ${escapeHTML(p.age || '?')}</span>${p.blood_type ? `<span class="badge" style="background:#dc2626;color:#fff;font-weight:700">🩸 ${escapeHTML(p.blood_type)}</span>` : ''}<span class="badge badge-success">📞 ${escapeHTML(p.phone)}</span><span class="badge badge-purple">🆔 ${escapeHTML(p.national_id)}</span>${p.gender ? `<span class="badge" style="background:${p.gender === 'ذكر' ? '#3b82f6' : '#ec4899'};color:#fff">${p.gender === 'ذكر' ? '👨' : '👩'} ${escapeHTML(p.gender)}</span>` : ''}${p.insurance_company ? `<span class="badge" style="background:#0d9488;color:#fff">🏢 ${escapeHTML(p.insurance_company)}${p.insurance_class ? ' (' + escapeHTML(p.insurance_class) + ')' : ''}</span>` : ''}${consentBadge}<span class="badge" style="background:#0ea5e9;color:#fff">📅 ${tr('Visit', 'الزيارة')}: ${new Date().toLocaleString('ar-SA', { dateStyle: 'short', timeStyle: 'short' })}</span><button class="btn btn-sm btn-primary" onclick="viewPatientResults(${safeId(p.id)})">📋 ${tr('View Lab & Radiology Results', 'استعراض نتائج الفحوصات والأشعة')}</button><button class="btn btn-sm" onclick="dischargePatient(${safeId(p.id)})" style="margin-right:auto;background:#dc3545;color:#fff;font-weight:600">🚪 ${tr('Patient Done', 'المريض طلع')}</button></div>${p.allergies ? `<div style="margin-top:8px;padding:10px;background:#fef2f2;border:2px solid #ef4444;border-radius:8px;font-size:13px;font-weight:600;color:#dc2626">⚠️ <strong>${tr('ALLERGIES', 'حساسية')}:</strong> ${escapeHTML(p.allergies)}</div>` : ''}${p.chronic_diseases ? `<div style="margin-top:6px;padding:8px;background:#fefce8;border:1px solid #facc15;border-radius:8px;font-size:12px;color:#854d0e">🩺 <strong>${tr('Chronic Diseases', 'أمراض مزمنة')}:</strong> ${escapeHTML(p.chronic_diseases)}</div>` : ''}${vitalsHtml}${historyHtml}<div id="drE1Panel"></div><div id="drResultsPanel"></div>`;
+    document.getElementById('drPatientInfo').innerHTML = `<div class="flex gap-8 mt-16" style="flex-wrap:wrap;align-items:center"><span class="badge badge-info">📁 ${escapeHTML(p.mrn || p.file_number)}</span><span class="badge badge-warning">🎂 ${tr('Age', 'العمر')}: ${escapeHTML(p.age || '?')}</span>${p.blood_type ? `<span class="badge" style="background:#dc2626;color:#fff;font-weight:700">🩸 ${escapeHTML(p.blood_type)}</span>` : ''}<span class="badge badge-success">📞 ${escapeHTML(p.phone)}</span><span class="badge badge-purple">🆔 ${escapeHTML(p.national_id)}</span>${p.gender ? `<span class="badge" style="background:${p.gender === 'ذكر' ? '#3b82f6' : '#ec4899'};color:#fff">${p.gender === 'ذكر' ? '👨' : '👩'} ${escapeHTML(p.gender)}</span>` : ''}${p.insurance_company ? `<span class="badge" style="background:#0d9488;color:#fff">🏢 ${escapeHTML(p.insurance_company)}${p.insurance_class ? ' (' + escapeHTML(p.insurance_class) + ')' : ''}</span>` : ''}${consentBadge}<span class="badge" style="background:#0ea5e9;color:#fff">📅 ${tr('Visit', 'الزيارة')}: ${new Date().toLocaleString('ar-SA', { dateStyle: 'short', timeStyle: 'short' })}</span><button class="btn btn-sm btn-primary" type="button" aria-label="${tr('View lab and radiology results', 'استعراض نتائج الفحوصات والأشعة')}" onclick="viewPatientResults(${safeId(p.id)})">📋 ${tr('View Lab & Radiology Results', 'استعراض نتائج الفحوصات والأشعة')}</button><button class="btn btn-sm" type="button" aria-label="${tr('Mark patient as discharged', 'إنهاء زيارة المريض')}" onclick="dischargePatient(${safeId(p.id)})" style="margin-right:auto;background:#dc3545;color:#fff;font-weight:600">🚪 ${tr('Patient Done', 'المريض طلع')}</button></div>${p.allergies ? `<div style="margin-top:8px;padding:10px;background:#fef2f2;border:2px solid #ef4444;border-radius:8px;font-size:13px;font-weight:600;color:#dc2626">⚠️ <strong>${tr('ALLERGIES', 'حساسية')}:</strong> ${escapeHTML(p.allergies)}</div>` : ''}${p.chronic_diseases ? `<div style="margin-top:6px;padding:8px;background:#fefce8;border:1px solid #facc15;border-radius:8px;font-size:12px;color:#854d0e">🩺 <strong>${tr('Chronic Diseases', 'أمراض مزمنة')}:</strong> ${escapeHTML(p.chronic_diseases)}</div>` : ''}${vitalsHtml}${historyHtml}<div id="drE1Panel"></div><div id="drResultsPanel" aria-live="polite" aria-atomic="false" aria-label="${tr('Lab and radiology results', 'نتائج الفحوصات والأشعة')}"></div>`;
     // E1: render Problem List / CPOE / SOAP tabs for the selected patient.
     if (typeof window.renderE1Panel === 'function') { window.renderE1Panel(p.id); }
     // Dynamic specialty clinical templates
@@ -7495,7 +7500,7 @@ async function renderLab(el) {
         <div class="card glass-card-premium mb-16">
           <div class="card-title">📊 ${tr('Barcode Scanner', 'قارئ الباركود')}</div>
           <div class="flex gap-8"><input class="form-input" id="labBarcodeInput" placeholder="${tr('Scan barcode or enter order ID...', 'امسح الباركود أو ادخل رقم الطلب...')}" style="flex:3" onkeydown="if(event.key==='Enter')scanLabBarcode()"><button class="btn btn-primary" onclick="scanLabBarcode()" style="flex:1">🔍 ${tr('Search', 'بحث')}</button></div>
-          <div id="labScanResult" class="mt-16"></div>
+          <div id="labScanResult" class="mt-16" aria-live="polite" aria-atomic="true" aria-label="${tr('Lab barcode scan result', 'نتيجة مسح الباركود')}"></div>
         </div>
         <div class="card glass-card-premium">
           <div class="card-title">📋 ${tr('Lab Orders', 'طلبات المختبر')}</div>
@@ -7518,7 +7523,7 @@ async function renderLab(el) {
         </div>
       </div>
     </div>
-    <div id="lisPanel" class="mt-16"></div>`;
+    <div id="lisPanel" class="mt-16" aria-live="polite" aria-atomic="false" aria-label="${tr('Lab orders list', 'قائمة طلبات المختبر')}"></div>`;
   setTimeout(() => { orders.forEach(o => { try { JsBarcode('#labBC' + o.id, 'LAB-' + o.id + '-' + (o.patient_name || '').replace(/[^a-zA-Z0-9]/g, '').substring(0, 8), { format: 'CODE128', width: 1.2, height: 35, fontSize: 9, displayValue: true, margin: 2, textMargin: 1 }); } catch (e) { } }); }, 100);
   try { renderLisPanel(); } catch (e) { console.log('LIS panel error:', e); }
 }
@@ -25341,7 +25346,7 @@ window.openBradenModal = function() {
         </div>
       </div>
       
-      <div id="bradenResultPanel" style="background:var(--hover,#f8f9fa);padding:12px;border-radius:8px;font-size:14px;border-left:4px solid #10b981;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+      <div id="bradenResultPanel" role="status" aria-live="polite" aria-atomic="true" aria-label="${tr('Braden pressure ulcer risk score', 'درجة خطورة قرحة الفراش - برادن')}" style="background:var(--hover,#f8f9fa);padding:12px;border-radius:8px;font-size:14px;border-left:4px solid #10b981;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
         <span><strong>${tr('Total Score', 'الدرجة الإجمالية')}:</strong> <span id="bradenInterpretation">${tr('No Risk', 'لا يوجد خطر')}</span></span>
         <span id="bradenScoreVal" class="badge badge-success" style="font-size:16px;padding:4px 10px">23 / 23</span>
       </div>
@@ -25493,7 +25498,7 @@ window.openMorseModal = function() {
         </div>
       </div>
       
-      <div id="morseResultPanel" style="background:var(--hover,#f8f9fa);padding:12px;border-radius:8px;font-size:14px;border-left:4px solid #10b981;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+      <div id="morseResultPanel" role="status" aria-live="polite" aria-atomic="true" aria-label="${tr('Morse fall risk score', 'درجة خطورة السقوط - مورس')}" style="background:var(--hover,#f8f9fa);padding:12px;border-radius:8px;font-size:14px;border-left:4px solid #10b981;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
         <span><strong>${tr('Total Score', 'الدرجة الإجمالية')}:</strong> <span id="morseInterpretation">${tr('Low Risk', 'مخاطر منخفضة')}</span></span>
         <span id="morseScoreVal" class="badge badge-success" style="font-size:16px;padding:4px 10px">0 / 125</span>
       </div>
@@ -25622,7 +25627,7 @@ window.openSurgicalCountModal = function(surgeryId) {
         </div>
       </div>
       
-      <div id="countMatchPanel" style="background:var(--hover,#f8f9fa);padding:10px;border-radius:8px;font-size:13px;border-left:4px solid #10b981;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+      <div id="countMatchPanel" role="status" aria-live="polite" aria-atomic="true" aria-label="${tr('Surgical count verification status', 'حالة التحقق من العد الجراحي')}" style="background:var(--hover,#f8f9fa);padding:10px;border-radius:8px;font-size:13px;border-left:4px solid #10b981;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
         <span id="countMatchStatus"><strong>${tr('Verification Status', 'حالة المطابقة')}:</strong> <span id="countInterpretation" style="color:#10b981;font-weight:bold">${tr('Perfect Match ✅', 'متطابقة تماماً ✅')}</span></span>
       </div>
       

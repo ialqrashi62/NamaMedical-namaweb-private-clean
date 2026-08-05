@@ -1,0 +1,23 @@
+'use strict';
+// Auto-generated stub (Wave 6) — derm_path/initial_assessment.engine
+// Returns a minimal valid initial assessment for the derm_path department.
+
+const INITIAL_ASSESSMENT = function () {
+  return {
+    ok: true,
+    dept: 'derm_path',
+    note: 'stub initial_assessment',
+    fields: [
+      { id: 'chief_complaint', type: 'text', required: true },
+      { id: 'history_present_illness', type: 'textarea' },
+      { id: 'vitals', type: 'vitals_block' },
+      { id: 'physical_exam', type: 'textarea' },
+      { id: 'assessment', type: 'textarea' },
+      { id: 'plan', type: 'textarea' },
+    ],
+    generated_at: new Date().toISOString(),
+  };
+};
+
+module.exports = INITIAL_ASSESSMENT;
+module.exports.INITIAL_ASSESSMENT = INITIAL_ASSESSMENT;

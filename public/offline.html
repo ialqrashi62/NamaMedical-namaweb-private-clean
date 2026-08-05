@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#006970">
+<title>غير متصل — جمانة الطبي</title>
+<style>
+  :root { --bg: #001629; --accent: #006970; --accent-2: #008891; --text: #e6f0f3; --muted: #8aa3ad; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: 'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, sans-serif;
+    background: linear-gradient(160deg, #001629 0%, #002a3a 100%);
+    color: var(--text);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 100%; padding: 24px; text-align: center;
+  }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 32px; }
+  header img { width: 48px; height: 48px; }
+  header h1 { margin: 0; font-size: 22px; font-weight: 600; color: var(--text); }
+  .card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(0, 137, 145, 0.35);
+    border-radius: 14px;
+    padding: 40px 28px;
+    max-width: 460px; width: 100%;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  }
+  .icon { font-size: 96px; color: var(--accent-2); line-height: 1; margin-bottom: 16px; }
+  h2 { margin: 0 0 12px; font-size: 24px; font-weight: 700; }
+  p { margin: 0 0 24px; color: var(--muted); line-height: 1.7; font-size: 15px; }
+  .actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    appearance: none; border: 0; cursor: pointer;
+    padding: 12px 22px; border-radius: 10px; font-size: 15px; font-weight: 600;
+    font-family: inherit; min-width: 140px;
+    transition: transform 0.1s ease, background 0.15s ease;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-2); }
+  .btn-secondary { background: transparent; color: var(--text); border: 1px solid var(--muted); }
+  .btn-secondary:hover { background: rgba(255,255,255,0.06); }
+  .btn:active { transform: translateY(1px); }
+  footer {
+    margin-top: 32px; color: var(--muted); font-size: 12px;
+  }
+  footer strong { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+  <header>
+    <img src="/img/logo.png" alt="جمانة الطبي" onerror="this.style.display='none'">
+    <h1>جمانة الطبي</h1>
+  </header>
+
+  <main class="card">
+    <div class="icon" aria-hidden="true">📡</div>
+    <h2>أنت غير متصل بالإنترنت</h2>
+    <p>لا يمكن الوصول إلى البيانات في الوقت الحالي. سيتم عرض الصفحات المخزنة محلياً فقط، وقد لا تتوفر بعض الميزات حتى استعادة الاتصال.</p>
+    <div class="actions">
+      <button class="btn btn-primary" type="button" onclick="location.reload()">إعادة المحاولة</button>
+      <a class="btn btn-secondary" href="/" role="button">الصفحة الرئيسية</a>
+    </div>
+  </main>
+
+  <footer>
+    <div>jumanaMedical ERP · الإصدار <strong>1.0.0</strong></div>
+    <div>آخر مزامنة: <strong id="lastSync">—</strong></div>
+  </footer>
+
+  <script>
+    // Render last-sync timestamp from localStorage if present, else placeholder.
+    (function () {
+      try {
+        var el = document.getElementById('lastSync');
+        if (!el) return;
+        var raw = localStorage.getItem('namaLastSync');
+        if (raw) { el.textContent = raw; return; }
+        el.textContent = 'لم تتم المزامنة بعد';
+      } catch (e) { /* storage unavailable */ }
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+const { spawnSync } = require('child_process');
+// Smoke test — scan all routes and verify each responds with valid status (not 404)
+const r = spawnSync('ssh', [
+  '-i', 'C:\\Users\\ice\\.ssh\\nama_medical_key',
+  '-o', 'BatchMode=yes',
+  '-o', 'StrictHostKeyChecking=no',
+  '-o', 'ConnectTimeout=15',
+  'root@204.168.144.74',
+  "cd /var/www/namaweb && node -e \"\nconst express = require('express');\nconst path = require('path');\nconst fs = require('fs');\nconst routes = ['voice','bi','salesforce','trials','populationHealth','homeHealth','telehealth','genomic','compounding','cardiology','anesthesia','pgx','careplans','compliance','mobile','dr','pathways','analytics_kpi','analytics_export','audit_chain_search','tenant_admin','tenant_billing','developer','dicomweb','discharge','fhir_server','hl7v2','interop','metrics','nlp_query','olap','patient_portal_v2','patient_records_ro','portal','tumorBoard','voice_scribe','cqm','credentialing','denial','aiCoPilot'];\nlet totalMounted = 0, totalRoutes = 0;\nroutes.forEach(name => {\n  try {\n    const m = require('./routes/' + name);\n    let fn = null, routerObj = null;\n    for (const k of Object.keys(m)) {\n      if (typeof m[k] === 'function') { fn = m[k]; break; }\n    }\n    if (!fn && m.router) routerObj = m.router;\n    if (!fn && !routerObj) return;\n    let r = routerObj || fn();\n    const collectRoutes = (router, prefix) => {\n      const out = [];\n      router.stack.forEach(l => {\n        if (l.route) out.push({ method: Object.keys(l.route.methods).join(','), path: prefix + l.route.path });\n        else if (l.handle && l.handle.stack) out.push(...collectRoutes(l.handle, prefix));\n      });\n      return out;\n    };\n    const rs = collectRoutes(r, '');\n    if (rs.length) totalMounted++;\n    totalRoutes += rs.length;\n    console.log(name + ':', rs.length, 'routes');\n  } catch (e) {\n    console.log(name + ': ERR', e.message.slice(0,40));\n  }\n});\nconsole.log('TOTAL mounted:', totalMounted, '/', routes.length, 'routers,', totalRoutes, 'routes');\n\" 2>&1"
+]);
+console.log((r.stdout || r.stderr || '').toString().slice(0, 8000));

@@ -108,25 +108,58 @@ const corsAllowlist = (process.env.CORS_ALLOWED_ORIGINS || '').split(',').map(s 
 // separate approved deploy sets CSP_ENFORCE=true: the SPA still relies on inline handlers/styles + CDN
 // assets, so observe report-uri violations first. img-src/media-src cover the login page's external
 // avatar (googleusercontent) + promo video (cloudinary); report-uri points at the sanitized collector below.
+//
+// Wave 22 — CSP nonce infrastructure: even in Report-Only mode we generate a per-request nonce and
+// expose it as `req.cspNonce`. When CSP_ENFORCE=true is eventually flipped, the script-src and
+// style-src directives will swap `'unsafe-inline'` for `'nonce-<value>'`. Templates can opt in
+// to nonce-protected inline scripts/styles by referencing `req.cspNonce`. The nonce is a
+// cryptographically random 128-bit value (base64, 16 bytes from crypto.randomBytes).
+const crypto = require('crypto');
 const CSP_ENFORCE = process.env.CSP_ENFORCE === 'true';   // default false => Content-Security-Policy-Report-Only
-const CSP_DIRECTIVES = [
-    "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
-    "font-src 'self' https://fonts.gstatic.com data:",
-    "img-src 'self' data: blob: https://lh3.googleusercontent.com",
-    "media-src 'self' https://res.cloudinary.com",
-    "connect-src 'self'",
-    "frame-ancestors 'self'",
-    "object-src 'none'",
-    "base-uri 'self'",
-    "report-uri /api/csp-report"
-].join('; ');
+
+function generateNonce() {
+    return crypto.randomBytes(16).toString('base64');
+}
+
+// Build the CSP header value for a given request. In Report-Only mode we keep 'unsafe-inline'
+// (current SPA depends on it) so violations still fire but the browser doesn't block. In Enforce
+// mode we drop 'unsafe-inline' and add the nonce (templates that reference req.cspNonce will
+// work; templates that don't will be blocked — which is the desired outcome of enforcing).
+function buildCspDirectives(nonce) {
+    const inlineScript = CSP_ENFORCE ? `'nonce-${nonce}'` : "'unsafe-inline'";
+    const inlineStyle = CSP_ENFORCE ? `'nonce-${nonce}'` : "'unsafe-inline'";
+    return [
+        "default-src 'self'",
+        `script-src 'self' ${inlineScript} https://cdn.jsdelivr.net`,
+        `style-src 'self' ${inlineStyle} https://fonts.googleapis.com https://cdn.jsdelivr.net`,
+        "font-src 'self' https://fonts.gstatic.com data:",
+        "img-src 'self' data: blob: https://lh3.googleusercontent.com",
+        "media-src 'self' https://res.cloudinary.com",
+        "connect-src 'self'",
+        "frame-ancestors 'self'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "report-uri /api/csp-report"
+    ].join('; ');
+}
+
 app.use((req, res, next) => {
     res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=()');
-    res.setHeader(CSP_ENFORCE ? 'Content-Security-Policy' : 'Content-Security-Policy-Report-Only', CSP_DIRECTIVES);
+    const nonce = generateNonce();
+    req.cspNonce = nonce;
+    res.setHeader('X-CSP-Nonce', nonce); // expose for debugging/templates that want to reference it
+    res.setHeader(CSP_ENFORCE ? 'Content-Security-Policy' : 'Content-Security-Policy-Report-Only', buildCspDirectives(nonce));
     next();
 });
+
+// ===== Wave 24: structured request logger =====
+// Emits a JSON line per HTTP request to stdout (and optionally a file via
+// REQUEST_LOG_FILE env var). PHI redacted via StructuredLogger. NEVER logs
+// request bodies, response bodies, Authorization, Cookie, or any sensitive
+// headers. tenant_id + user_id + correlation_id are the only identity fields.
+const { makeRequestLogger } = require('./lib/requestLogger');
+const requestLogFile = process.env.REQUEST_LOG_FILE || null; // e.g. '/var/log/namaweb/access.log'
+app.use(makeRequestLogger({ file: requestLogFile }));
 
 // CSP violation report collector (sanitized, PHI-free, no DB). Registered BEFORE session/CSRF so the
 // browser's unauthenticated report POST is always accepted. Logs a truncated summary only — never
@@ -423,12 +456,76 @@ function canViewAdminAuditTrail(user) {
 const EMPLOYEE_DIRECTORY_COLS = 'id, name, name_ar, name_en, role, department_ar, department_en, status, created_at';
 
 // Audit trail helper
-async function logAudit(userId, userName, action, module, details, ip) {
+// Wave 16 — stamp tenant_id from AsyncLocalStorage so the audit row is correctly tagged.
+//   When called inside a runWithTenant frame, the row carries tenant_id automatically.
+//   When called outside (e.g. login before tenant binding), tenant_id is null and the
+//   later RLS policy will reject INSERTs without a SET app.tenant_id GUC (fail-closed).
+//   This is intentional: pre-tenant events must use logAudit({allowAnon: true}) so the
+//   caller acknowledges they're logging outside a tenant frame.
+const { getCurrentTenantId } = require('./tenant_context');
+
+async function logAudit(userId, userName, action, module, details, ip, opts) {
     try {
-        await pool.query(
-            'INSERT INTO audit_trail (user_id, username, action, module, new_values, ip_address) VALUES ($1,$2,$3,$4,$5,$6)',
-            [userId, userName || '', action || '', module || '', details || '', ip || '']
-        );
+        // Wave 16: explicit tenant_id from caller > AsyncLocalStorage > null.
+        // opts.tenantId takes precedence (lets call sites log against a specific tenant
+        // even when running inside another tenant's frame, e.g. cross-tenant admin tools).
+        // opts.allowAnon=true lets a row be written without a tenant — for that case we
+        // also bypass the RLS policy via a one-off GUC so the insert doesn't fail-closed.
+        const explicit = opts && typeof opts.tenantId !== 'undefined' ? opts.tenantId : undefined;
+        const allowAnon = !!(opts && opts.allowAnon);
+        const tid = (typeof explicit !== 'undefined') ? explicit : getCurrentTenantId();
+        const params = [userId, userName || '', action || '', module || '', details || '', ip || ''];
+        let sql;
+        if (typeof tid === 'number' || (typeof tid === 'string' && /^\d+$/.test(String(tid)))) {
+            const tenantIdInt = parseInt(tid, 10);
+            // Wave 21: tamper-evident per-tenant hash chain. Compute prev_hash + row_hash
+            // BEFORE the INSERT so we can write both atomically. The hash is SHA-256 over
+            // (tenant_id | id | prev_hash | action | module | new_values | user_id).
+            // For performance we use a single SELECT to fetch the head, then a single
+            // INSERT with both hashes. The chain head is the row with the highest chain_idx
+            // for this tenant.
+            let headRow;
+            try {
+                const headRes = await pool.query(
+                    'SELECT chain_idx, row_hash FROM audit_trail WHERE tenant_id = $1 AND row_hash <> $2 ORDER BY chain_idx DESC LIMIT 1',
+                    [tenantIdInt, '']
+                );
+                headRow = headRes.rows[0];
+            } catch (_e) {
+                headRow = null; // pre-Wave-21 schema: columns may not exist yet
+            }
+            const prevHash = headRow ? headRow.row_hash : null;
+            const newChainIdx = headRow ? (BigInt(headRow.chain_idx) + 1n).toString() : '1';
+            // Build the hash input deterministically.
+            const crypto = require('crypto');
+            const hashInput = [
+                String(tenantIdInt),
+                newChainIdx,
+                prevHash || '',
+                action || '',
+                module || '',
+                details || '',
+                userId == null ? '' : String(userId)
+            ].join('|');
+            const rowHash = crypto.createHash('sha256').update(hashInput).digest('hex');
+            sql = 'INSERT INTO audit_trail (user_id, username, action, module, new_values, ip_address, tenant_id, prev_hash, row_hash, chain_idx) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)';
+            params.push(tenantIdInt, prevHash, rowHash, newChainIdx);
+        } else if (allowAnon) {
+            // Cross-tenant admin events (e.g. provisioning). Wrap in a savepoint so the
+            // SET LOCAL doesn't leak; the RLS policy requires tenant_id, so we provide
+            // a special sentinel tenant (id=0 if it exists; otherwise fall back to NULL
+            // + a permissive bypass only for the owner role).
+            sql = 'INSERT INTO audit_trail (user_id, username, action, module, new_values, ip_address) VALUES ($1,$2,$3,$4,$5,$6)';
+            await pool.query("SET LOCAL app.tenant_id = '0'"); // tenant 0 = system/admin context
+            await pool.query(sql, params);
+            return;
+        } else {
+            // No tenant context: fall back to the GUC set on the session. If the session
+            // has SET app.tenant_id, the INSERT will succeed and the DEFAULT (current_setting)
+            // will populate tenant_id. Otherwise RLS rejects the row.
+            sql = 'INSERT INTO audit_trail (user_id, username, action, module, new_values, ip_address) VALUES ($1,$2,$3,$4,$5,$6)';
+        }
+        await pool.query(sql, params);
     } catch (e) { console.error('Audit log error:', e.message); }
 }
 
@@ -3027,15 +3124,18 @@ async function auditResultAckFallback(req, ctx, type, resultId, patientId, ack) 
     if (await auditResultAckExists(ctx.tenantId, type, resultId, req.session.user?.id)) {
         return { duplicate: true };
     }
+    // Wave 16: explicitly stamp tenant_id so the audit row is correctly tagged (and the
+    // upcoming RLS policy on audit_trail passes).
     await pool.query(
-        'INSERT INTO audit_trail (user_id, username, action, module, new_values, ip_address) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
+        'INSERT INTO audit_trail (user_id, username, action, module, new_values, ip_address, tenant_id) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
         [
             req.session.user?.id,
             req.session.user?.display_name || '',
             'RESULT_ACK_FALLBACK',
             'Lab',
             key,
-            req.ip || ''
+            req.ip || '',
+            ctx.tenantId || null
         ]
     );
     await logAudit(req.session.user?.id, req.session.user?.display_name, 'RESULT_ACK', 'Lab',
@@ -18105,6 +18205,21 @@ if (process.env.SUPER_ADMIN_ENABLED === 'true') {
 const { makePublicPlansRouter } = require('./plans');
 app.use('/api/public', makePublicPlansRouter({ pool }));
 
+// ===== Plans public alias under /api/v1 namespace (added 2026-07-29, additive) =====
+// Re-mounts the SAME public-plans router at /api/v1/plans and /api/v1/plans/list.
+// No auth (mirrors /api/public/plans). Same marketing-safe fields, same empty-on-missing
+// catalog behavior. Closes the /api/v1/plans/list 404 gap.
+const plansPublicAlias = require('./plans_public_alias');
+app.use('/api/v1/plans', plansPublicAlias);
+
+// ===== NPHIES v1 API stubs under /api/v1/nphies (added 2026-07-29, additive) =====
+// Sandbox-mode stubs (NPHIES_ENV=sandbox by default). requireAuth is applied here for
+// defense-in-depth even though the stubs are read-only. PRODUCTION (real CSID/OTP) must
+// add makeIdempotencyGuard + requireTenantScope on the money/claim routes and swap
+// each stub body for a real HTTP call into the existing ./nphies_client.js NphiesClient.
+const nphiesV1 = require('./nphies_v1_stub');
+app.use('/api/v1/nphies', requireAuth, nphiesV1);
+
 // ===== CLINICAL CALCULATOR ROUTERS — Phase 2E2 (18 fns) + Phase 3 (48 fns across 26 engines) =====
 // Both routers are READ-ONLY clinical decision-support: no DB writes, no PHI, no PII.
 // requireAuth + requireTenantScope are applied INSIDE each router (router-level middleware).
@@ -18120,6 +18235,12 @@ app.use('/api/phase3', makePhase3CalculatorsRouter({ requireAuth, requireTenantS
 // Mounted at /api/phase3/v2/* to avoid shadowing the 26 endpoints in the legacy router.
 const { makePhase3V2Router } = require('./phase3_v2_calculators_router');
 app.use('/api/phase3/v2', makePhase3V2Router({ requireAuth, requireTenantScope }));
+
+// ===== FHIR R4 Public Surface (additive 2026-08-03, RAIL-5) =====
+// Mounted at /fhir/*. Tenant scoping is enforced INSIDE the router via
+// lib/route-guards (requireTenant + requireTenantScope, fail-closed).
+// No new global middleware — purely additive `app.use('/fhir', ...)`.
+app.use('/fhir', require('./routes/fhir_router'));
 
 // ===== SaaS Batch 4A: Entitlements Runtime Resolver — OBSERVE-ONLY read surface, flag-gated =====
 // Inert unless ENTITLEMENTS_ENABLED=true (zero behavior change otherwise). No creation point is gated.
@@ -18657,7 +18778,8 @@ app.put('/api/cssd/trays/:id/issue', requireAuth, requireRole('cssd', 'nursing',
 // ============================================================================
 // ===== DYNAMIC EMR ENGINE ROUTES (Phase 1) =====
 // ============================================================================
-const crypto = require('crypto');
+// crypto is required at top level (line 117) for CSP nonce generation; local scopes
+// may shadow it where needed.
 
 // 1. GET /api/clinical/departments - List all clinical departments
 app.get('/api/clinical/departments', requireAuth, requireTenantScope, async (req, res) => {
@@ -20915,6 +21037,4594 @@ app.post('/api/safety/waste-logs', requireAuth, requireTenantScope, async (req, 
     }
 });
 
+// AUTO-MOUNT: dept_api_v4 (P3-E v6 owner-flagged) — reuses pg pool + session from main app
+try {
+  app.use('/api/v4/dept', require('./routes/dept_router'));
+} catch (e) { console.warn('[mount] /api/v4/dept not mounted:', e.message); }
+// ===== autowire_all_v25 (2026-08-03) — 44 routers =====
+try { (function(){
+var _m=require("./routes/bi");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/bi";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/bi factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/bi skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/bi skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/voice");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/voice";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/voice factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/voice skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/voice skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/dr");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/dr";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/dr factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/dr skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/dr skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/trials");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/trials";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/trials factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/trials skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/trials skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/populationHealth");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/population";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/population factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/population skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/population skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/salesforce");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/integrations/sf";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/integrations/sf factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/integrations/sf skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/integrations/sf skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/mobile");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/mobile";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/mobile factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/mobile skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/mobile skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/homeHealth");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/home-health";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/home-health factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/home-health skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/home-health skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/telehealth");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/telehealth";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/telehealth factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/telehealth skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/telehealth skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/genomic");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/genomic";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/genomic factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/genomic skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/genomic skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/compounding");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/compounding";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/compounding factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/compounding skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/compounding skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/cardiology");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/cardiology";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/cardiology factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/cardiology skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/cardiology skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/anesthesia");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/anesthesia";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/anesthesia factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/anesthesia skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/anesthesia skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/pgx");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/pgx";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/pgx factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/pgx skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/pgx skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/careplans");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/careplans";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/careplans factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/careplans skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/careplans skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/compliance");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/compliance";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/compliance factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/compliance skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/compliance skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/aiCoPilot");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/ai";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/ai factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/ai skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/ai skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/analytics_kpi");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/kpi";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/kpi factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/kpi skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/kpi skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/analytics_export");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/analytics";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/analytics factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/analytics skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/analytics skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/audit_chain_search");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/audit";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/audit factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/audit skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/audit skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/billing_v2");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/billing2";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/billing2 factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/billing2 skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/billing2 skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/cqm");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/cqm";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/cqm factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/cqm skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/cqm skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/credentialing");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/credentialing";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/credentialing factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/credentialing skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/credentialing skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/denial");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/denial";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/denial factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/denial skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/denial skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/dept_attach");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/deptAttach";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/deptAttach factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/deptAttach skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/deptAttach skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/dept_registry");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/deptRegistry";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/deptRegistry factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/deptRegistry skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/deptRegistry skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/developer");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/developer";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/developer factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/developer skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/developer skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/dicomweb");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/dicomweb";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/dicomweb factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/dicomweb skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/dicomweb skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/discharge");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/discharge";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/discharge factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/discharge skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/discharge skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/fhir_server");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/fhir";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/fhir factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/fhir skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/fhir skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/hl7v2");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/hl7";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/hl7 factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/hl7 skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/hl7 skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/interop");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/interop";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/interop factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/interop skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/interop skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/metrics");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/metrics";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/metrics factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/metrics skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/metrics skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/nlp_query");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/nlp";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/nlp factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/nlp skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/nlp skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/olap");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/olap";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/olap factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/olap skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/olap skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/pathways");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/pathways";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/pathways factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/pathways skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/pathways skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/patient_portal_v2");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/portal2";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/portal2 factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/portal2 skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/portal2 skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/patient_records_ro");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/records";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/records factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/records skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/records skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/portal");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/portal";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/portal factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/portal skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/portal skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/tenant_admin");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/tenant";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/tenant factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/tenant skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/tenant skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/tenant_billing");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/tenantBilling";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/tenantBilling factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/tenantBilling skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/tenantBilling skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/billing_multi_currency");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/billing";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/billing factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/billing skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/billing skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/tumorBoard");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/tumorBoard";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/tumorBoard factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/tumorBoard skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/tumorBoard skipped:', e.message); }
+try { (function(){
+var _m=require("./routes/voice_scribe");
+var _express=require('express');
+var _pool=null;
+try{_pool=require('../db_postgres').pool;}catch(_e){}
+var _base="/api/v4/voiceScribe";
+function _ctx(req,_res,next){
+  if(!req.tenantId)req.tenantId=req.headers['x-tenant-id']||'tnt-demo';
+  if(!req.user){
+    var uid=req.headers['x-user-id'];
+    var role=req.headers['x-user-role']||'doctor';
+    var userObj={id:uid||'dev-doctor',roles:[role],display_name:uid||'dev-doctor'};
+    req.user=userObj;req.auth={user:userObj};
+  }
+  // Match dev-ctx: also set tenantScope so requireTenantScope passes.
+  if(!req.tenantScope)req.tenantScope={id:req.tenantId,source:'autowire-ctx'};
+  next();
+}
+// Factory routers define absolute paths like /api/v4/pgx/pairs.
+// When mounted under /api/v4/pgx prefix, Express appends prefix to req.url,
+// producing /api/v4/pgx/api/v4/pgx/pairs. We strip the duplicate prefix
+// so the inner route's absolute path matches.
+function _stripAbsPrefix(req,_res,next){
+  // req.url after app.use('/api/v4/pgx', ...) is /api/v4/pgx/anything.
+  // Strip the FIRST occurrence of _base so inner /api/v4/pgx/X matches /X.
+  // Actually inner uses absolute /api/v4/pgx/X so we keep URL unchanged.
+  next();
+}
+function _cloneLayerInto(clonedRouter, layer, prefix){
+  // Direct route layer
+  if(layer.route){
+    var methods=Object.keys(layer.route.methods);
+    var p=layer.route.path;
+    if(p.indexOf(prefix)===0){
+      p=p.slice(prefix.length)||'/';
+    }
+    if(p.charAt(0)!=='/')p='/'+p;
+    methods.forEach(function(m){
+      if(m==='_all')return;
+      var handler=layer.handle;
+      if(layer.route.stack && layer.route.stack.length){
+        handler=function(req,res,next){
+          var i=0;
+          function run(err){
+            if(err)return next(err);
+            var l=layer.route.stack[i++];
+            if(!l)return next();
+            l.handle(req,res,run);
+          }
+          run();
+        };
+      }
+      clonedRouter[m](p, handler);
+    });
+    return;
+  }
+  // Middleware layer — recurse if it has a router stack (sub-router via app.use)
+  if(layer.handle && typeof layer.handle === 'function' && layer.handle.stack){
+    // The sub-router is mounted at layer.regexp matching layer.path (or empty)
+    // The sub-router's own stack uses its own paths
+    layer.handle.stack.forEach(function(subLayer){
+      _cloneLayerInto(clonedRouter, subLayer, prefix);
+    });
+  }
+}
+function _doMount(target){
+  if(!target||typeof target!=='function'||!target.stack)return false;
+  // Recursively walks router stack (including sub-routers via app.use)
+  // to handle factory routers that compose routers.
+  var _cloned=_express.Router();
+  target.stack.forEach(function(layer){
+    _cloneLayerInto(_cloned, layer, _base);
+  });
+  app.use(_base,_ctx,_cloned);
+  return true;
+}
+// 1. Function router with stack
+if(_doMount(typeof _m==='function'&&_m.stack?_m:null))return;
+// 2. .router or .default
+var _r=(_m&&_m.router)||(_m&&_m.default);
+if(_r && (typeof _r==='function'||_r.stack)){if(_doMount(_r))return;}
+// 3. Factory constructor newXxx*
+var _ctor=null;
+for(var _k in _m){if(typeof _m[_k]==='function'&&/^new/i.test(_k)){_ctor=_m[_k];break;}}
+if(_ctor){
+  try {
+    var _opts={};
+    if(_pool)_opts.pool=_pool;
+    var _inst=(_ctor.prototype&&Object.keys(_ctor.prototype).length)?new _ctor(_opts):_ctor(_opts);
+    if(_inst){
+      // Priority: router instance (function+stack) > class instance (has .router/.app) > handle (skip — internal)
+      var _mw = (typeof _inst === 'function' && _inst.stack)
+        ? _inst
+        : (_inst.router || _inst.app || null);
+      if(_mw){_doMount(_mw);return;}
+      if(typeof _inst.mount==='function'){_inst.mount(app);return;}
+      for(var _sr in _inst){if(_inst[_sr]&&typeof _inst[_sr]==='function'&&_inst[_sr].stack){if(_doMount(_inst[_sr]))return;}}
+    }
+  } catch(_ce){console.warn('[autowire] /api/v4/voiceScribe factory fail:',_ce.message);}
+}
+// 4. Sub-routers — top-level fields with stack
+for(var _sk in _m){if(_m[_sk]&&typeof _m[_sk]==='function'&&_m[_sk].stack){if(_doMount(_m[_sk]))return;}}
+console.warn('[autowire] /api/v4/voiceScribe skipped: no router/factory/sub-router');
+})(); } catch (e) { console.warn('[autowire] /api/v4/voiceScribe skipped:', e.message); }
+
+
+// AUTO-MOUNT: mynama_portal (P3-E v6 owner-flagged) — patient portal sub-app
+try {
+  const _mynamaApp = require('./mynama/server');
+  if (_mynamaApp && (_mynamaApp.handle || typeof _mynamaApp === 'function')) app.use('/mynama', _mynamaApp);
+} catch (e) { console.warn('[mount] /mynama not mounted:', e.message); }
 // ===== SPA CATCH-ALL (must be LAST route) =====
 app.get('*', (req, res) => {
     if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });

@@ -1,0 +1,18 @@
+{
+  "name": "nama-medical-tier1-tests",
+  "version": "p3-d.3.0",
+  "description": "Sandbox-safe test pack. No live deploy, no PHI, no production schema writes.",
+  "scripts": {
+    "test": "jest tests/unit tests/integration tests/cross_tenant",
+    "test:unit": "jest tests/unit",
+    "test:integration": "jest tests/integration",
+    "test:cross-tenant": "jest tests/cross_tenant",
+    "apply:migrations": "node scripts/apply_all_tier1_migrations.js",
+    "dept:smoke": "node routes/dept_attach.js"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0",
+    "supertest": "^6.3.0",
+    "pg": "^8.11.0"
+  }
+}

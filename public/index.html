@@ -84,6 +84,23 @@
             top: 8px;
             outline: 2px solid #fff;
         }
+        /* Wave 13 a11y: visually hidden helper for screen-reader-only text. */
+        .sr-only {
+            position: absolute !important;
+            width: 1px !important;
+            height: 1px !important;
+            padding: 0 !important;
+            margin: -1px !important;
+            overflow: hidden !important;
+            clip: rect(0, 0, 0, 0) !important;
+            white-space: nowrap !important;
+            border: 0 !important;
+        }
+        /* Wave 13 a11y: visible focus ring on every interactive control. */
+        :focus-visible {
+            outline: 2px solid #1d4ed8 !important;
+            outline-offset: 2px !important;
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
@@ -93,6 +110,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/material_blue.css">
 </head>
 <body class="text-on-surface antialiased bg-background">
+    <div id="nmLiveStatus" class="sr-only" aria-live="polite" aria-atomic="true"></div>
     <a href="#pageContent" class="skip-link">تخطّي إلى المحتوى</a>
     <div id="app">
         <!-- Sidebar Overlay (Mobile) -->
@@ -201,7 +219,24 @@
     <script src="/js/surgery-station.js?v=20260722_1"></script>
     <script src="/js/enterprise-contracts.js"></script>
     <script src="/js/mock-api-runtime.js"></script>
-    <script src="/js/app.js?v=20260706_6"></script>
+    <!-- PWA: service worker + manifest registration (added 2026-07-29) -->
+    <script src="/js/pwa-registration.js?v=20260729_1" defer></script>
+    <script src="/js/modal.js?v=20260801_3"></script>
+    <script src="/js/station-snippets.js?v=20260801_3"></script>
+    <script src="/js/station-builder.js?v=20260801_3"></script>
+    <script src="/js/station-clinical-enhancer.js?v=20260801_1"></script>
+    <script src="/js/station-api.js?v=20260801_1"></script>
+    <script src="/js/i18n-runtime.js?v=20260801_1"></script>
+    <script src="/js/wireframe-snippets.js?v=20260801_1"></script>
+    <script src="/js/components/hospital.js?v=20260801_1"></script>
+    <script src="/js/clinical-form-builder.js?v=20260801_1"></script>
+    <script src="/js/fhir-bridge.js?v=20260803_1"></script>
+    <script src="/js/vital-trend.js?v=20260803_1"></script>
+    <script src="/js/audit-trail.js?v=20260803_1"></script>
+    <script src="/js/barcode-meds.js?v=20260803_1"></script>
+    <script src="/js/procedure-consent.js?v=20260803_1"></script>
+    <script src="/js/a11y.js?v=20260826_1"></script>
+    <script src="/js/app.js?v=20260826_1"></script>
     <script src="/js/doctor-station.js?v=20260706_6"></script>
     <script src="/js/nursing-station.js?v=20260706_6"></script>
     <script src="/js/phase3-engines-ui.js?v=20260723_1"></script>
