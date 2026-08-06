@@ -31,6 +31,7 @@ const wave41 = require('./wave41_dr_drill'); // Wave 41 DR drill hardening + met
 const wave42 = require('./wave42_process_lifecycle'); // Wave 42 process lifecycle observability
 const wave43 = require('./wave43_error_handler'); // Wave 43 Express error middleware + metrics
 const wave44 = require('./wave44_http_request_metrics'); // Wave 44 HTTP request metrics middleware
+const wave45 = require('./wave45_db_pool_metrics'); // Wave 45 PG connection pool metrics
 const { insertSampleData, populateLabCatalog, populateRadiologyCatalog } = require('./seed_data_pg');
 const { populateMedicalServices, populateBaseDrugs } = require('./seed_services_pg');
 const { addExtraLabTests, addExtraRadiology } = require('./seed_extra_catalog');
@@ -234,6 +235,25 @@ app.use(express.urlencoded({ extended: true }));
 // Tracks in-flight requests, per-method / per-status-class / per-path counters,
 // and average duration. Must come BEFORE all routes.
 app.use(wave44.makeHttpMetricsMiddleware());
+
+// ===== Wave 45: DB POOL METRICS ENDPOINTS =====
+// Registered BEFORE the SPA catch-all so they aren't intercepted by it.
+app.get('/api/metrics/db-pool', async (req, res) => {
+    try {
+        const summary = wave45.getSummary(pool);
+        const prom = wave45.toPrometheusMetrics(summary);
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send(prom);
+    } catch (e) {
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.send('# scrape_error 1\nnama_db_pool_total 0\n');
+    }
+});
+app.get('/api/security/db-pool', requireAuth, async (req, res) => {
+    const role = req.session?.user?.role;
+    if (role !== 'Admin' && role !== 'IT') return res.status(403).json({ error: 'Admin or IT only' });
+    res.json(wave45.getSummary(pool));
+});
 class FallbackSessionStore extends session.Store {
     constructor(redisStore) {
         super();
