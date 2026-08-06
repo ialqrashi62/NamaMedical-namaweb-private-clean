@@ -34,6 +34,7 @@ const wave44 = require('./wave44_http_request_metrics'); // Wave 44 HTTP request
 const wave45 = require('./wave45_db_pool_metrics'); // Wave 45 PG connection pool metrics
 const wave46 = require('./wave46_metrics_aggregator'); // Wave 46 unified metrics aggregator
 const wave47 = require('./wave47_aggregator_extension'); // Wave 47 extended aggregator (backup/logrotate/dr-drill/process)
+const wave48 = require('./wave48_security_aggregator'); // Wave 48 security aggregator (RLS defense + audit chain + errors)
 const { insertSampleData, populateLabCatalog, populateRadiologyCatalog } = require('./seed_data_pg');
 const { populateMedicalServices, populateBaseDrugs } = require('./seed_services_pg');
 const { addExtraLabTests, addExtraRadiology } = require('./seed_extra_catalog');
@@ -25796,11 +25797,10 @@ app.get('/api/metrics', async (req, res) => {
         const chain = _wave32LastChain || (await getWave38Report());
         _wave32LastChain = chain;
         const prom32 = await wave32.toPrometheusMetrics(pool, { rlsAudit: rls, auditChain: chain });
-        // Wave 47: aggregateAll() composes wave46's output (csp/audit/http/db_pool)
-        // with wave47's extended sub-modules (backup/logrotate/dr_drill/process).
-        const promAll = await wave47.aggregateAll({ pool });
-        // prepend wave32 (process/db/redis/sessions/audit-chain/rls-audit) + Wave 32's
-        // base is the canonical prod stack summary.
+        // Wave 48: aggregateSecurity() composes wave47's output (csp/audit/http/db_pool/backup/logrotate/dr_drill/process)
+        // with wave48's security sub-modules (rls_defense/audit_chain/errors).
+        const promAll = await wave48.aggregateSecurity({ pool });
+        // prepend wave32 (process/db/redis/sessions/audit-chain/rls-audit) — the canonical prod stack summary.
         const combined = prom32 + '\n' + promAll;
         res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
         res.send(combined);
@@ -25812,7 +25812,7 @@ app.get('/api/metrics', async (req, res) => {
 });
 // JSON surface for human inspection (Admin / IT only).
 // Shows which sub-modules succeeded and the gauge count.
-// Wave 47: now also reports the EXTENDED sub-modules (backup/logrotate/dr_drill/process).
+// Wave 48: now also reports SECURITY sub-modules (rls_defense/audit_chain/errors).
 app.get('/api/security/metrics-summary', requireAuth, async (req, res) => {
     const role = req.session?.user?.role;
     if (role !== 'Admin' && role !== 'IT') return res.status(403).json({ error: 'Admin or IT only' });
@@ -25821,9 +25821,12 @@ app.get('/api/security/metrics-summary', requireAuth, async (req, res) => {
         const prom46 = wave46.buildPrometheusOutput(summaries);
         const extSummaries = await wave47.fetchExtendedSummaries({});
         const prom47 = wave47.buildExtendedOutput(extSummaries);
+        const secSummaries = await wave48.fetchSecuritySummaries({ pool });
+        const prom48 = wave48.buildSecurityOutput(secSummaries);
         res.json({
             sub_modules: wave46.listSubModules(),
             extended_sub_modules: wave47.listExtendedSubModules(),
+            security_sub_modules: wave48.listSecuritySubModules(),
             succeeded: {
                 csp: summaries.csp !== null,
                 audit: summaries.audit !== null,
@@ -25833,12 +25836,16 @@ app.get('/api/security/metrics-summary', requireAuth, async (req, res) => {
                 logrotate: extSummaries.logrotate !== null,
                 dr_drill: extSummaries.dr_drill !== null,
                 process: extSummaries.process !== null,
+                rls_defense: secSummaries.rls_defense !== null,
+                audit_chain: secSummaries.audit_chain !== null,
+                errors: secSummaries.errors !== null,
             },
-            gauge_count: wave46.countGauges(prom46) + wave47.countExtendedGauges(prom47),
+            gauge_count: wave46.countGauges(prom46) + wave47.countExtendedGauges(prom47) + wave48.countSecurityGauges(prom48),
             captured_at: summaries.captured_at,
             errors: [
                 ...((summaries.errors || []).map((e) => ({ label: e.label, error: e.error, scope: 'wave46' }))),
                 ...((extSummaries.errors || []).map((e) => ({ label: e.label, error: e.error, scope: 'wave47' }))),
+                ...((secSummaries.errors_meta || []).map((e) => ({ label: e.label, error: e.error, scope: 'wave48' }))),
             ],
         });
     } catch (e) {
