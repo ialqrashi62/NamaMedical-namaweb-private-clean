@@ -33,6 +33,7 @@ const wave43 = require('./wave43_error_handler'); // Wave 43 Express error middl
 const wave44 = require('./wave44_http_request_metrics'); // Wave 44 HTTP request metrics middleware
 const wave45 = require('./wave45_db_pool_metrics'); // Wave 45 PG connection pool metrics
 const wave46 = require('./wave46_metrics_aggregator'); // Wave 46 unified metrics aggregator
+const wave47 = require('./wave47_aggregator_extension'); // Wave 47 extended aggregator (backup/logrotate/dr-drill/process)
 const { insertSampleData, populateLabCatalog, populateRadiologyCatalog } = require('./seed_data_pg');
 const { populateMedicalServices, populateBaseDrugs } = require('./seed_services_pg');
 const { addExtraLabTests, addExtraRadiology } = require('./seed_extra_catalog');
@@ -25795,8 +25796,12 @@ app.get('/api/metrics', async (req, res) => {
         const chain = _wave32LastChain || (await getWave38Report());
         _wave32LastChain = chain;
         const prom32 = await wave32.toPrometheusMetrics(pool, { rlsAudit: rls, auditChain: chain });
-        const prom46 = await wave46.aggregate({ pool });
-        const combined = prom32 + '\n' + prom46;
+        // Wave 47: aggregateAll() composes wave46's output (csp/audit/http/db_pool)
+        // with wave47's extended sub-modules (backup/logrotate/dr_drill/process).
+        const promAll = await wave47.aggregateAll({ pool });
+        // prepend wave32 (process/db/redis/sessions/audit-chain/rls-audit) + Wave 32's
+        // base is the canonical prod stack summary.
+        const combined = prom32 + '\n' + promAll;
         res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
         res.send(combined);
     } catch (e) {
@@ -25807,23 +25812,34 @@ app.get('/api/metrics', async (req, res) => {
 });
 // JSON surface for human inspection (Admin / IT only).
 // Shows which sub-modules succeeded and the gauge count.
+// Wave 47: now also reports the EXTENDED sub-modules (backup/logrotate/dr_drill/process).
 app.get('/api/security/metrics-summary', requireAuth, async (req, res) => {
     const role = req.session?.user?.role;
     if (role !== 'Admin' && role !== 'IT') return res.status(403).json({ error: 'Admin or IT only' });
     try {
         const summaries = await wave46.fetchAllSummaries({ pool });
         const prom46 = wave46.buildPrometheusOutput(summaries);
+        const extSummaries = await wave47.fetchExtendedSummaries({});
+        const prom47 = wave47.buildExtendedOutput(extSummaries);
         res.json({
             sub_modules: wave46.listSubModules(),
+            extended_sub_modules: wave47.listExtendedSubModules(),
             succeeded: {
                 csp: summaries.csp !== null,
                 audit: summaries.audit !== null,
                 http: summaries.http !== null,
                 db_pool: summaries.dbPool !== null,
+                backup: extSummaries.backup !== null,
+                logrotate: extSummaries.logrotate !== null,
+                dr_drill: extSummaries.dr_drill !== null,
+                process: extSummaries.process !== null,
             },
-            gauge_count: wave46.countGauges(prom46),
+            gauge_count: wave46.countGauges(prom46) + wave47.countExtendedGauges(prom47),
             captured_at: summaries.captured_at,
-            errors: (summaries.errors || []).map((e) => ({ label: e.label, error: e.error })),
+            errors: [
+                ...((summaries.errors || []).map((e) => ({ label: e.label, error: e.error, scope: 'wave46' }))),
+                ...((extSummaries.errors || []).map((e) => ({ label: e.label, error: e.error, scope: 'wave47' }))),
+            ],
         });
     } catch (e) {
         res.status(500).json({ error: 'Server error' });
