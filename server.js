@@ -32,6 +32,7 @@ const wave42 = require('./wave42_process_lifecycle'); // Wave 42 process lifecyc
 const wave43 = require('./wave43_error_handler'); // Wave 43 Express error middleware + metrics
 const wave44 = require('./wave44_http_request_metrics'); // Wave 44 HTTP request metrics middleware
 const wave45 = require('./wave45_db_pool_metrics'); // Wave 45 PG connection pool metrics
+const wave46 = require('./wave46_metrics_aggregator'); // Wave 46 unified metrics aggregator
 const { insertSampleData, populateLabCatalog, populateRadiologyCatalog } = require('./seed_data_pg');
 const { populateMedicalServices, populateBaseDrugs } = require('./seed_services_pg');
 const { addExtraLabTests, addExtraRadiology } = require('./seed_extra_catalog');
@@ -25780,6 +25781,11 @@ app.get('/api/security/rls-audit', requireAuth, (req, res) => {
 // ===== Wave 32: UNIFIED PROMETHEUS METRICS + ALERT ENDPOINT =====
 // Exposes the Wave 29 (sessions) + Wave 31 (RLS audit) + system probe in one scrape.
 // NEVER includes PHI / secrets. Operator-facing — no auth required (Prometheus scrape convention).
+// ===== Wave 46: APPEND WAVES 39/40/44/45 METRICS INTO THE SAME SCRAPE =====
+// The aggregator concatenates Wave 39 (CSP), Wave 40 (audit resilience),
+// Wave 44 (HTTP), and Wave 45 (DB pool) into the same text body so a
+// single Prometheus scrape picks up all sub-modules. Failures are
+// isolated per sub-module — the scrape never 500s.
 let _wave32LastRls = null;
 let _wave32LastChain = null;
 app.get('/api/metrics', async (req, res) => {
@@ -25788,13 +25794,39 @@ app.get('/api/metrics', async (req, res) => {
         _wave32LastRls = rls;
         const chain = _wave32LastChain || (await getWave38Report());
         _wave32LastChain = chain;
-        const prom = await wave32.toPrometheusMetrics(pool, { rlsAudit: rls, auditChain: chain });
+        const prom32 = await wave32.toPrometheusMetrics(pool, { rlsAudit: rls, auditChain: chain });
+        const prom46 = await wave46.aggregate({ pool });
+        const combined = prom32 + '\n' + prom46;
         res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
-        res.send(prom);
+        res.send(combined);
     } catch (e) {
         // NEVER 500 the scrape surface — emit a degraded-but-valid prom output.
         res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
         res.send('# scrape_error 1\nnama_alerts_firing 1\n');
+    }
+});
+// JSON surface for human inspection (Admin / IT only).
+// Shows which sub-modules succeeded and the gauge count.
+app.get('/api/security/metrics-summary', requireAuth, async (req, res) => {
+    const role = req.session?.user?.role;
+    if (role !== 'Admin' && role !== 'IT') return res.status(403).json({ error: 'Admin or IT only' });
+    try {
+        const summaries = await wave46.fetchAllSummaries({ pool });
+        const prom46 = wave46.buildPrometheusOutput(summaries);
+        res.json({
+            sub_modules: wave46.listSubModules(),
+            succeeded: {
+                csp: summaries.csp !== null,
+                audit: summaries.audit !== null,
+                http: summaries.http !== null,
+                db_pool: summaries.dbPool !== null,
+            },
+            gauge_count: wave46.countGauges(prom46),
+            captured_at: summaries.captured_at,
+            errors: (summaries.errors || []).map((e) => ({ label: e.label, error: e.error })),
+        });
+    } catch (e) {
+        res.status(500).json({ error: 'Server error' });
     }
 });
 // Alert JSON surface — same data as Prometheus but with remediation text.
