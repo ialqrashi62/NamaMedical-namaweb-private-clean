@@ -684,6 +684,62 @@ const labQcCreate = {
     reagent_lot: { type: 'str', required: false, max: 120 }
 };
 
+// PUT /api/radiology/orders/:id
+const radiologyOrderUpdate = {
+    status: { type: 'str', required: false, max: 80 },
+    result: { type: 'str', required: false, max: 8000 }
+};
+
+// POST /api/radiology/worklist
+const radiologyWorklistCreate = {
+    rad_order_id:  { type: 'id', required: true },
+    modality:      { type: 'str', required: false, max: 40 },
+    exam_name:     { type: 'str', required: false, max: 300 },
+    accession:     { type: 'str', required: false, max: 120 },
+    scheduled_at:  { type: 'str', required: false, max: 80 }
+};
+
+// PUT /api/radiology/worklist/:id/state
+const radiologyWorklistStateUpdate = {
+    state: { type: 'str', required: true, max: 40 }
+};
+
+// POST /api/radiology/dicom-studies
+const radiologyDicomStudyCreate = {
+    rad_exam_id:     { type: 'id', required: false },
+    study_uid:       { type: 'str', required: false, max: 200 },
+    accession:       { type: 'str', required: false, max: 120 },
+    modality:        { type: 'str', required: false, max: 40 },
+    study_desc:      { type: 'str', required: false, max: 1000 },
+    series_count:    { type: 'int', required: false, min: 0 },
+    instance_count:  { type: 'int', required: false, min: 0 },
+    stored_ref:      { type: 'id', required: false }
+};
+
+// POST /api/radiology/reports
+const radiologyReportCreate = {
+    rad_exam_id:     { type: 'id', required: true },
+    template:        { type: 'str', required: false, max: 120 },
+    findings:        { type: 'str', required: false, max: 12000 },
+    impression:      { type: 'str', required: false, max: 12000 },
+    birads:          { type: 'str', required: false, max: 40 },
+    is_critical:     { type: 'bool', required: false },
+    prior_study_id:  { type: 'id', required: false }
+};
+
+// POST /api/radiology/reports/:id/critical-notify
+const radiologyReportCriticalNotify = {
+    notified_doctor_id: { type: 'id', required: false },
+    note:               { type: 'str', required: false, max: 2000 }
+};
+
+// POST /api/radiology/reports/:id/addendum
+const radiologyReportAddendum = {
+    findings:    { type: 'str', required: false, max: 12000 },
+    impression:  { type: 'str', required: false, max: 12000 },
+    is_critical: { type: 'bool', required: false }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -761,5 +817,12 @@ module.exports = {
     labResultCreate,
     labResultCriticalCallback,
     labHl7Ingest,
-    labQcCreate
+    labQcCreate,
+    radiologyOrderUpdate,
+    radiologyWorklistCreate,
+    radiologyWorklistStateUpdate,
+    radiologyDicomStudyCreate,
+    radiologyReportCreate,
+    radiologyReportCriticalNotify,
+    radiologyReportAddendum
 };

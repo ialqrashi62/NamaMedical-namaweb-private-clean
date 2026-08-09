@@ -3465,7 +3465,7 @@ app.get('/api/radiology/catalog', requireAuth, async (req, res) => {
     catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.put('/api/radiology/orders/:id', requireAuth, async (req, res) => {
+app.put('/api/radiology/orders/:id', requireAuth, requireTenantScope, validateBody(RS.radiologyOrderUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { status, result: testResult } = req.body;
         // --- TENANT SCOPE: verify order belongs to current tenant before update (IDOR prevention) ---
@@ -3482,7 +3482,7 @@ app.put('/api/radiology/orders/:id', requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/radiology/orders', requireAuth, async (req, res) => {
+app.post('/api/radiology/orders', requireAuth, requireTenantScope, validateBody(RS.labOrderCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, doctor_id, order_type, description, price } = req.body;
         // --- TENANT SCOPE: stamp tenant_id from session + validate patient belongs to same tenant ---
@@ -3519,7 +3519,7 @@ app.post('/api/radiology/orders', requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/radiology/orders/:id/upload', requireAuth, upload.single('image'), async (req, res) => {
+app.post('/api/radiology/orders/:id/upload', requireAuth, requireTenantScope, upload.single('image'), idempotencyGuard, async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
         const orderId = req.params.id;
@@ -3624,7 +3624,7 @@ app.get('/api/radiology/worklist', requireAuth, requireTenantScope, async (req, 
 });
 
 // --- E4-S1: schedule a worklist exam from an existing radiology order (tenant-scoped) ---
-app.post('/api/radiology/worklist', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/radiology/worklist', requireAuth, requireTenantScope, validateBody(RS.radiologyWorklistCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
         if (!tenantId) return res.status(403).json({ error: 'Tenant scope required' }); // FAIL-CLOSED
@@ -3647,7 +3647,7 @@ app.post('/api/radiology/worklist', requireAuth, requireTenantScope, async (req,
 });
 
 // --- E4-S1: worklist state transition (Scheduled->Arrived->InProgress->Completed->Reported) ---
-app.put('/api/radiology/worklist/:id/state', requireAuth, requireTenantScope, async (req, res) => {
+app.put('/api/radiology/worklist/:id/state', requireAuth, requireTenantScope, validateBody(RS.radiologyWorklistStateUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         if (!tenantId) return res.status(403).json({ error: 'Tenant scope required' }); // FAIL-CLOSED
@@ -3674,7 +3674,7 @@ app.put('/api/radiology/worklist/:id/state', requireAuth, requireTenantScope, as
 });
 
 // --- E4-S2: DICOM study METADATA register (gated; metadata only; NO bytes here) ---
-app.post('/api/radiology/dicom-studies', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/radiology/dicom-studies', requireAuth, requireTenantScope, validateBody(RS.radiologyDicomStudyCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
         if (!tenantId) return res.status(403).json({ error: 'Tenant scope required' }); // FAIL-CLOSED
@@ -3779,7 +3779,7 @@ app.get('/api/radiology/reports/priors', requireAuth, requireTenantScope, async 
 });
 
 // --- E4-S3: create / update a structured report draft (tenant-scoped) ---
-app.post('/api/radiology/reports', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/radiology/reports', requireAuth, requireTenantScope, validateBody(RS.radiologyReportCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
         if (!tenantId) return res.status(403).json({ error: 'Tenant scope required' }); // FAIL-CLOSED
@@ -3809,7 +3809,7 @@ app.post('/api/radiology/reports', requireAuth, requireTenantScope, async (req, 
 
 // --- E4-S3: record critical-finding notification (documents the call-back; required before signing) ---
 // RBAC: report state-mutating endpoints are restricted to radiology/doctor (medico-legal) — not any tenant user.
-app.post('/api/radiology/reports/:id/critical-notify', requireAuth, requireRole('radiology', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/radiology/reports/:id/critical-notify', requireAuth, requireRole('radiology', 'doctor'), requireTenantScope, validateBody(RS.radiologyReportCriticalNotify), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         if (!tenantId) return res.status(403).json({ error: 'Tenant scope required' }); // FAIL-CLOSED
@@ -3861,7 +3861,7 @@ app.post('/api/radiology/reports/:id/critical-notify', requireAuth, requireRole(
 });
 
 // --- E4-S3: SIGN report — FAIL-CLOSED if critical without documented notification ---
-app.put('/api/radiology/reports/:id/sign', requireAuth, requireRole('radiology', 'doctor'), requireTenantScope, async (req, res) => {
+app.put('/api/radiology/reports/:id/sign', requireAuth, requireRole('radiology', 'doctor'), requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         if (!tenantId) return res.status(403).json({ error: 'Tenant scope required' }); // FAIL-CLOSED
@@ -3910,7 +3910,7 @@ app.put('/api/radiology/reports/:id/sign', requireAuth, requireRole('radiology',
 });
 
 // --- E4-S3: addendum to a SIGNED report (creates a new linked report) ---
-app.post('/api/radiology/reports/:id/addendum', requireAuth, requireRole('radiology', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/radiology/reports/:id/addendum', requireAuth, requireRole('radiology', 'doctor'), requireTenantScope, validateBody(RS.radiologyReportAddendum), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
         if (!tenantId) return res.status(403).json({ error: 'Tenant scope required' }); // FAIL-CLOSED
