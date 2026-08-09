@@ -29,6 +29,11 @@ const schemas = fs.readFileSync(path.join(__dirname, 'route_schemas.js'), 'utf8'
 const validation = fs.readFileSync(path.join(__dirname, 'validation.js'), 'utf8').replace(/\s+/g, '');
 
 assert(
+  server.includes("app.post('/api/finance/accounts',requireAuth,requireRole('finance','accounts','invoices'),requireTenantScope,validateBody(RS.financeAccountCreate),idempotencyGuard,async(req,res)=>{"),
+  'Finance account creation route has validateBody(RS.financeAccountCreate)'
+);
+
+assert(
   server.includes("app.post('/api/finance/ap',requireAuth,requireRole('finance','accounts'),requireTenantScope,validateBody(RS.financeApCreate),idempotencyGuard,async(req,res)=>{"),
   'AP create route has validateBody(RS.financeApCreate)'
 );
@@ -54,6 +59,8 @@ assert(
 );
 
 assert(
+  schemas.includes('constfinanceAccountCreate={') &&
+    schemas.includes("account_code:{type:'str',required:true,max:80}") &&
   schemas.includes('constfinanceApCreate={') &&
     schemas.includes('constfinanceApPay={') &&
     schemas.includes('constfinanceArCreate={') &&

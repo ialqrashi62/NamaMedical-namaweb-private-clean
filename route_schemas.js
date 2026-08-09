@@ -114,6 +114,16 @@ const financeApCreate = {
     notes:            { type: 'str', required: false, max: 1000 }
 };
 
+// POST /api/finance/accounts
+const financeAccountCreate = {
+    account_code:    { type: 'str', required: true, max: 80 },
+    account_name_ar: { type: 'str', required: false, max: 200 },
+    account_name_en: { type: 'str', required: false, max: 200 },
+    parent_id:       { type: 'int', required: false, min: 0 },
+    account_class:   { type: 'enumOf', required: false, allowed: ['Asset', 'Liability', 'Equity', 'Revenue', 'Expense'] },
+    account_type:    { type: 'enumOf', required: false, allowed: ['Asset', 'Liability', 'Equity', 'Revenue', 'Expense'] }
+};
+
 // POST /api/finance/ap/:id/pay
 const financeApPay = {
     payment_amount:    { type: 'num', required: true, min: 0.01 },
@@ -218,6 +228,7 @@ module.exports = {
     integrationSettingsSave,
     integrationPing,
     zatcaSubmit,
+    financeAccountCreate,
     financeApCreate,
     financeApPay,
     financeArCreate,

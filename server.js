@@ -4105,7 +4105,7 @@ app.get('/api/finance/accounts', requireAuth, requireRole('finance', 'accounts',
     } catch (e) { e10Err(res, e); }
 });
 
-app.post('/api/finance/accounts', requireAuth, requireRole('finance', 'accounts', 'invoices'), requireTenantScope, async (req, res) => {
+app.post('/api/finance/accounts', requireAuth, requireRole('finance', 'accounts', 'invoices'), requireTenantScope, validateBody(RS.financeAccountCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e10RequireTenant(req);
         const { account_code, account_name_ar, account_name_en, parent_id } = req.body;
