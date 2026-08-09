@@ -500,6 +500,56 @@ const controlledSubstanceDispense = {
     waste_reason:     { type: 'str', required: false, max: 1000 }
 };
 
+// POST /api/clinical/medication-reconciliation
+const clinicalMedicationReconciliationCreate = {
+    patient_id:            { type: 'id', required: true },
+    admission_id:          { type: 'id', required: false },
+    reconciliation_type:   { type: 'str', required: false, max: 80 },
+    status:                { type: 'str', required: false, max: 80 },
+    allergy_verified:      { type: 'bool', required: false },
+    high_alert_checked:    { type: 'bool', required: false },
+    patient_counselled:    { type: 'bool', required: false },
+    notes:                 { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/lab/microbiology
+const labMicrobiologyCreate = {
+    order_id:             { type: 'id', required: false },
+    patient_id:           { type: 'id', required: true },
+    admission_id:         { type: 'id', required: false },
+    specimen_type:        { type: 'str', required: false, max: 120 },
+    collection_date:      { type: 'dateStr', required: false },
+    collection_time:      { type: 'str', required: false, max: 40 },
+    collection_site:      { type: 'str', required: false, max: 200 },
+    gram_stain:           { type: 'str', required: false, max: 1000 },
+    preliminary_result:   { type: 'str', required: false, max: 4000 },
+    final_result:         { type: 'str', required: false, max: 4000 },
+    organism_identified:  { type: 'str', required: false, max: 300 },
+    colony_count:         { type: 'str', required: false, max: 200 },
+    antibiogram_profile:  { type: 'str', required: false, max: 4000 },
+    report_status:        { type: 'str', required: false, max: 60 },
+    critical_value:       { type: 'bool', required: false },
+    critical_notified_to: { type: 'str', required: false, max: 200 },
+    loinc_code:           { type: 'str', required: false, max: 60 }
+};
+
+// POST /api/clinical/problem-list
+const clinicalProblemListCreate = {
+    patient_id:         { type: 'id', required: true },
+    admission_id:       { type: 'id', required: false },
+    icd10_code:         { type: 'str', required: false, max: 60 },
+    icd10_description:  { type: 'str', required: false, max: 1000 },
+    snomed_code:        { type: 'str', required: false, max: 80 },
+    problem_name:       { type: 'str', required: true, max: 300 },
+    problem_type:       { type: 'str', required: false, max: 80 },
+    onset_date:         { type: 'dateStr', required: false },
+    resolved_date:      { type: 'dateStr', required: false },
+    severity:           { type: 'str', required: false, max: 80 },
+    status:             { type: 'str', required: false, max: 80 },
+    notes:              { type: 'str', required: false, max: 4000 },
+    principal_diagnosis:{ type: 'bool', required: false }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -556,5 +606,8 @@ module.exports = {
     pharmacyPrescriptionCreate,
     pharmacyPrescriptionUpdate,
     controlledSubstanceReconcile,
-    controlledSubstanceDispense
+    controlledSubstanceDispense,
+    clinicalMedicationReconciliationCreate,
+    labMicrobiologyCreate,
+    clinicalProblemListCreate
 };

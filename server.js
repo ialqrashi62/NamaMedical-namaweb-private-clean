@@ -20192,7 +20192,7 @@ app.get('/api/clinical/medication-reconciliation/:patientId', requireAuth, requi
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/clinical/medication-reconciliation', requireAuth, requireRole('pharmacist', 'doctor', 'clinical-pharmacy'), requireTenantScope, async (req, res) => {
+app.post('/api/clinical/medication-reconciliation', requireAuth, requireRole('pharmacist', 'doctor', 'clinical-pharmacy'), requireTenantScope, validateBody(RS.clinicalMedicationReconciliationCreate), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { patient_id, admission_id, reconciliation_type = 'Admission', status = 'Completed', home_medications = [], hospital_medications = [], discrepancies = [], allergy_verified = false, high_alert_checked = false, patient_counselled = false, notes = '' } = req.body;
@@ -20228,7 +20228,7 @@ app.get('/api/lab/microbiology/:patientId', requireAuth, requireTenantScope, asy
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/lab/microbiology', requireAuth, requireRole('lab_technician', 'lab', 'admin'), requireTenantScope, async (req, res) => {
+app.post('/api/lab/microbiology', requireAuth, requireRole('lab_technician', 'lab', 'admin'), requireTenantScope, validateBody(RS.labMicrobiologyCreate), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { order_id, patient_id, admission_id, specimen_type, collection_date, collection_time, collection_site, gram_stain, preliminary_result, final_result, organism_identified, colony_count, sensitivity_results = [], antibiogram_profile, report_status = 'Final', critical_value = false, critical_notified_to, loinc_code } = req.body;
@@ -20290,7 +20290,7 @@ app.get('/api/clinical/problem-list/:patientId', requireAuth, requireTenantScope
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/clinical/problem-list', requireAuth, requireRole('doctor', 'nurse', 'clinical'), requireTenantScope, async (req, res) => {
+app.post('/api/clinical/problem-list', requireAuth, requireRole('doctor', 'nurse', 'clinical'), requireTenantScope, validateBody(RS.clinicalProblemListCreate), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { patient_id, admission_id, icd10_code, icd10_description, snomed_code, problem_name, problem_type = 'Chronic', onset_date, resolved_date, severity = 'Moderate', status = 'Active', notes, principal_diagnosis = false } = req.body;
