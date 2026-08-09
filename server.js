@@ -4929,7 +4929,7 @@ app.get('/api/ai/status', requireAuth, AI_ORCH_ROLE, requireTenantScope, async (
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/clinical/records', requireAuth, requireRole('patients'), async (req, res, next) => {
+app.post('/api/clinical/records', requireAuth, requireRole('patients'), requireTenantScope, idempotencyGuard, async (req, res, next) => {
     try {
         const { patient_id, encounter_id, template_id, recorded_values } = req.body;
         if (!recorded_values) {
@@ -4953,7 +4953,7 @@ app.post('/api/clinical/records', requireAuth, requireRole('patients'), async (r
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/clinical/records/:id/lock', requireAuth, requireRole('patients'), requireTenantScope, async (req, res) => {
+app.post('/api/clinical/records/:id/lock', requireAuth, requireRole('patients'), requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const idParam = req.params.id;
