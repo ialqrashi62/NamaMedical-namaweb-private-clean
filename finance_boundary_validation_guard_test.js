@@ -49,7 +49,7 @@ assert(
 );
 
 assert(
-  server.includes("app.post('/api/finance/reports/generate',requireAuth,requireRole('finance','accounts','admin'),requireTenantScope,validateBody(RS.financeReportGenerate),async(req,res)=>{"),
+  server.includes("app.post('/api/finance/reports/generate',requireAuth,requireRole('finance','accounts','admin'),requireTenantScope,validateBody(RS.financeReportGenerate),idempotencyGuard,async(req,res)=>{"),
   'Finance report generation route has validateBody(RS.financeReportGenerate)'
 );
 

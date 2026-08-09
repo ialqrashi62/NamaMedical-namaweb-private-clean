@@ -20597,7 +20597,7 @@ app.get('/api/finance/reports/snapshots', requireAuth, requireRole('finance', 'a
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/finance/reports/generate', requireAuth, requireRole('finance', 'accounts', 'admin'), requireTenantScope, validateBody(RS.financeReportGenerate), async (req, res) => {
+app.post('/api/finance/reports/generate', requireAuth, requireRole('finance', 'accounts', 'admin'), requireTenantScope, validateBody(RS.financeReportGenerate), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { report_type = 'PL', period_start, period_end } = req.body;
