@@ -211,6 +211,20 @@ const insurancePayerPricingCreate = {
     payer_price:          { type: 'num', required: true, min: 0 }
 };
 
+// POST /api/insurance/companies
+const insuranceCompanyCreate = {
+    name_ar:      { type: 'str', required: false, max: 200 },
+    name_en:      { type: 'str', required: false, max: 200 },
+    contact_info: { type: 'str', required: false, max: 2000 }
+};
+
+// POST /api/insurance/eligibility and /api/nphies/eligibility
+const insuranceEligibilityCreate = {
+    patient_id:            { type: 'id', required: false },
+    insurance_company_id:  { type: 'id', required: false },
+    policy_number:         { type: 'str', required: false, max: 120 }
+};
+
 // POST /api/nphies/claim-status-inquiry
 const nphiesClaimStatusInquiry = {
     claim_id: { type: 'id', required: true }
@@ -240,5 +254,7 @@ module.exports = {
     insuranceClaimLegacyUpdate,
     insuranceDenialAppealUpdate,
     insurancePayerPricingCreate,
+    insuranceCompanyCreate,
+    insuranceEligibilityCreate,
     nphiesClaimStatusInquiry
 };

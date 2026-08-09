@@ -28,6 +28,21 @@ const server = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8').replac
 const schemas = fs.readFileSync(path.join(__dirname, 'route_schemas.js'), 'utf8').replace(/\s+/g, '');
 
 assert(
+  server.includes("app.post('/api/insurance/companies',requireAuth,requireRole(...E11_INS_ROLES),requireTenantScope,validateBody(RS.insuranceCompanyCreate),idempotencyGuard,async(req,res)=>{"),
+  'insurance companies create route is guarded by validateBody + idempotencyGuard'
+);
+
+assert(
+  server.includes("app.post('/api/insurance/eligibility',requireAuth,requireRole(...E11_INS_ROLES),requireTenantScope,validateBody(RS.insuranceEligibilityCreate),idempotencyGuard,async(req,res)=>{"),
+  'insurance eligibility route is guarded by validateBody + idempotencyGuard'
+);
+
+assert(
+  server.includes("app.post('/api/nphies/eligibility',requireAuth,requireRole(...E11_INS_ROLES),requireTenantScope,validateBody(RS.insuranceEligibilityCreate),idempotencyGuard,async(req,res)=>{"),
+  'nphies eligibility route is guarded by validateBody + idempotencyGuard'
+);
+
+assert(
   server.includes("app.put('/api/insurance/claims/:id',requireAuth,requireRole(...E11_INS_ROLES),requireTenantScope,validateBody(RS.insuranceClaimLegacyUpdate),idempotencyGuard,async(req,res)=>{"),
   'legacy claim update route is guarded by validateBody + idempotencyGuard'
 );
@@ -51,7 +66,11 @@ assert(
   schemas.includes('constinsuranceClaimLegacyUpdate={') &&
   schemas.includes('constinsuranceDenialAppealUpdate={') &&
   schemas.includes('constinsurancePayerPricingCreate={') &&
+  schemas.includes('constinsuranceCompanyCreate={') &&
+  schemas.includes('constinsuranceEligibilityCreate={') &&
   schemas.includes('constnphiesClaimStatusInquiry={') &&
+  schemas.includes("contact_info:{type:'str',required:false,max:2000}") &&
+  schemas.includes("policy_number:{type:'str',required:false,max:120}") &&
   schemas.includes("status:{type:'enumOf',required:true,allowed:['Approved','Rejected']}") &&
   schemas.includes("appeal_status:{type:'enumOf',required:true,allowed:['appealed','upheld','overturned','closed']}") &&
   schemas.includes("payer_price:{type:'num',required:true,min:0}"),

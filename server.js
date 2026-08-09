@@ -1806,7 +1806,7 @@ app.get('/api/insurance/companies', requireAuth, requireRole(...E11_INS_ROLES), 
     } catch (e) { return e11Err(res, e); }
 });
 
-app.post('/api/insurance/companies', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, async (req, res) => {
+app.post('/api/insurance/companies', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, validateBody(RS.insuranceCompanyCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e11RequireTenant(req);
         const { name_ar, name_en, contact_info } = req.body;
@@ -1834,7 +1834,7 @@ app.get('/api/insurance/eligibility', requireAuth, requireRole(...E11_INS_ROLES)
     } catch (e) { if (optionalReadFallback(res, e)) return; return e11Err(res, e); }
 });
 
-app.post('/api/insurance/eligibility', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, async (req, res) => {
+app.post('/api/insurance/eligibility', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, validateBody(RS.insuranceEligibilityCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e11RequireTenant(req);
         const patientId = e11IntId(req.body.patient_id);
@@ -1905,7 +1905,7 @@ app.get('/api/nphies/eligibility', requireAuth, requireRole(...E11_INS_ROLES), r
     } catch (e) { if (optionalReadFallback(res, e)) return; return e11Err(res, e); }
 });
 
-app.post('/api/nphies/eligibility', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, async (req, res) => {
+app.post('/api/nphies/eligibility', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, validateBody(RS.insuranceEligibilityCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e11RequireTenant(req);
         const patientId = e11IntId(req.body.patient_id);
