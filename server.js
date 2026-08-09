@@ -11840,7 +11840,7 @@ app.get('/api/cssd/instruments', requireAuth, requireRole('cssd', 'nursing', 'su
         res.json((await pool.query('SELECT * FROM cssd_instrument_sets WHERE tenant_id=$1 ORDER BY id', [t.tenantId])).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/cssd/instruments', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, async (req, res) => {
+app.post('/api/cssd/instruments', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, validateBody(RS.cssdInstrumentSetCreate), idempotencyGuard, async (req, res) => {
     try {
         const t = e16RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
@@ -11858,7 +11858,7 @@ app.get('/api/cssd/cycles', requireAuth, requireRole('cssd', 'nursing', 'surgery
         res.json((await pool.query('SELECT * FROM cssd_sterilization_cycles WHERE tenant_id=$1 ORDER BY start_time DESC', [t.tenantId])).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/cssd/cycles', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, async (req, res) => {
+app.post('/api/cssd/cycles', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, validateBody(RS.cssdCycleCreate), idempotencyGuard, async (req, res) => {
     try {
         const t = e16RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
@@ -11870,7 +11870,7 @@ app.post('/api/cssd/cycles', requireAuth, requireRole('cssd', 'nursing', 'surger
         res.json(r.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/cssd/cycles/:id', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, async (req, res) => {
+app.put('/api/cssd/cycles/:id', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, validateBody(RS.cssdCycleStatusUpdate), idempotencyGuard, async (req, res) => {
     // HARDENED (E16): server-side cycle state machine + tenant scope. BI/CI results are NOT
     // accepted here (anti-spoof) — use PUT /api/cssd/cycles/:id/bi-result. Release for sterile
     // issue is the separate fail-CLOSED gate PUT /api/cssd/cycles/:id/release.
@@ -11897,7 +11897,7 @@ app.put('/api/cssd/cycles/:id', requireAuth, requireRole('cssd', 'nursing', 'sur
         } catch (e) { try { await client.query('ROLLBACK'); } catch (_) {} client.release(); throw e; }
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/cssd/load-items', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, async (req, res) => {
+app.post('/api/cssd/load-items', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, validateBody(RS.cssdLoadItemCreate), idempotencyGuard, async (req, res) => {
     try {
         const t = e16RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
@@ -18170,7 +18170,7 @@ app.get('/api/cssd/batches', requireAuth, requireRole('cssd', 'nursing', 'surger
         res.json((await pool.query('SELECT * FROM cssd_batches WHERE tenant_id=$1 ORDER BY created_at DESC', [t.tenantId])).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/cssd/batches', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, async (req, res) => {
+app.post('/api/cssd/batches', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, validateBody(RS.cssdBatchCreate), idempotencyGuard, async (req, res) => {
     try {
         const t = e16RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
@@ -18181,7 +18181,7 @@ app.post('/api/cssd/batches', requireAuth, requireRole('cssd', 'nursing', 'surge
         res.json(r.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/cssd/batches/:id', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, async (req, res) => {
+app.put('/api/cssd/batches/:id', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, validateBody(RS.cssdBatchUpdate), idempotencyGuard, async (req, res) => {
     try {
         const t = e16RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
@@ -18227,7 +18227,7 @@ app.get('/api/infection-control/reports', requireAuth, requireRole('infection'),
         res.json((await pool.query('SELECT * FROM infection_control_reports WHERE tenant_id=$1 ORDER BY created_at DESC', [tenantId])).rows);
     } catch (e) { res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' }); }
 });
-app.post('/api/infection-control/reports', requireAuth, requireRole('infection'), requireTenantScope, async (req, res) => {
+app.post('/api/infection-control/reports', requireAuth, requireRole('infection'), requireTenantScope, validateBody(RS.infectionControlReportCreate), idempotencyGuard, async (req, res) => {
     try {
         // C1 FIX: fail-closed tenant required; unscoped fallback removed.
         const tenantId = e17RequireTenant(req);
@@ -18240,7 +18240,7 @@ app.post('/api/infection-control/reports', requireAuth, requireRole('infection')
         res.json(r.rows[0]);
     } catch (e) { res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' }); }
 });
-app.put('/api/infection-control/reports/:id', requireAuth, requireRole('infection'), requireTenantScope, async (req, res) => {
+app.put('/api/infection-control/reports/:id', requireAuth, requireRole('infection'), requireTenantScope, validateBody(RS.infectionControlReportUpdate), idempotencyGuard, async (req, res) => {
     try {
         // C1 FIX: fail-closed tenant required; unscoped fallback removed.
         const tenantId = e17RequireTenant(req);
@@ -18881,7 +18881,7 @@ app.post('/api/inventory/stock-counts', requireAuth, requireRole('inventory', 'p
 // ============================================================================
 
 // record the BI / CI result for a cycle (does NOT itself release — that is a separate gated step)
-app.put('/api/cssd/cycles/:id/bi-result', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, async (req, res) => {
+app.put('/api/cssd/cycles/:id/bi-result', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, validateBody(RS.cssdCycleBiResultUpdate), idempotencyGuard, async (req, res) => {
     try {
         const t = e16RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
@@ -18905,7 +18905,7 @@ app.put('/api/cssd/cycles/:id/bi-result', requireAuth, requireRole('cssd', 'nurs
 });
 
 // THE GATE: release a completed cycle's load for sterile issue — fail-CLOSED on BI.
-app.put('/api/cssd/cycles/:id/release', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, async (req, res) => {
+app.put('/api/cssd/cycles/:id/release', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const t = e16RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
@@ -18942,7 +18942,7 @@ app.get('/api/cssd/trays', requireAuth, requireRole('cssd', 'nursing', 'surgery'
         res.status(500).json({ error: 'Server error' });
     }
 });
-app.post('/api/cssd/trays', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, async (req, res) => {
+app.post('/api/cssd/trays', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, validateBody(RS.cssdTrayCreate), idempotencyGuard, async (req, res) => {
     try {
         const t = e16RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
@@ -18955,7 +18955,7 @@ app.post('/api/cssd/trays', requireAuth, requireRole('cssd', 'nursing', 'surgery
 });
 
 // issue a STERILE tray to OR/ward — fail-CLOSED: only a tray already 'sterile' may be issued.
-app.put('/api/cssd/trays/:id/issue', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, async (req, res) => {
+app.put('/api/cssd/trays/:id/issue', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, validateBody(RS.cssdTrayIssue), idempotencyGuard, async (req, res) => {
     try {
         const t = e16RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });

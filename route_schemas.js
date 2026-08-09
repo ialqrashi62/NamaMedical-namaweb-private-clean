@@ -1079,6 +1079,92 @@ const cmeEventCreate = {
     status:      { type: 'str', required: false, max: 80 }
 };
 
+// POST /api/cssd/instruments
+const cssdInstrumentSetCreate = {
+    set_name:          { type: 'str', required: false, max: 300 },
+    set_name_ar:       { type: 'str', required: false, max: 300 },
+    set_code:          { type: 'str', required: false, max: 120 },
+    category:          { type: 'str', required: false, max: 120 },
+    instrument_count:  { type: 'int', required: false, min: 0 },
+    department:        { type: 'str', required: false, max: 120 }
+};
+
+// POST /api/cssd/cycles
+const cssdCycleCreate = {
+    cycle_number:      { type: 'str', required: false, max: 120 },
+    machine_name:      { type: 'str', required: false, max: 300 },
+    cycle_type:        { type: 'str', required: false, max: 120 },
+    temperature:       { type: 'num', required: false },
+    pressure:          { type: 'num', required: false },
+    duration_minutes:  { type: 'int', required: false, min: 0 },
+    operator:          { type: 'str', required: false, max: 300 }
+};
+
+// PUT /api/cssd/cycles/:id
+const cssdCycleStatusUpdate = {
+    status: { type: 'str', required: true, max: 80 }
+};
+
+// POST /api/cssd/load-items
+const cssdLoadItemCreate = {
+    cycle_id:  { type: 'id', required: false },
+    set_id:    { type: 'id', required: false },
+    set_name:  { type: 'str', required: false, max: 300 },
+    barcode:   { type: 'str', required: false, max: 300 }
+};
+
+// POST /api/cssd/batches
+const cssdBatchCreate = {
+    batch_number: { type: 'str', required: false, max: 120 },
+    department:   { type: 'str', required: false, max: 120 },
+    method:       { type: 'str', required: false, max: 120 },
+    temperature:  { type: 'num', required: false },
+    operator:     { type: 'str', required: false, max: 300 }
+};
+
+// PUT /api/cssd/batches/:id
+const cssdBatchUpdate = {
+    status: { type: 'str', required: true, max: 80 }
+};
+
+// POST /api/infection-control/reports
+const infectionControlReportCreate = {
+    patient_name:      { type: 'str', required: false, max: 300 },
+    infection_type:    { type: 'str', required: false, max: 300 },
+    ward:              { type: 'str', required: false, max: 120 },
+    isolation_type:    { type: 'str', required: false, max: 120 },
+    culture_results:   { type: 'str', required: false, max: 4000 },
+    action_taken:      { type: 'str', required: false, max: 4000 },
+    status:            { type: 'str', required: false, max: 80 }
+};
+
+// PUT /api/infection-control/reports/:id
+const infectionControlReportUpdate = {
+    status: { type: 'str', required: true, max: 80 }
+};
+
+// PUT /api/cssd/cycles/:id/bi-result
+const cssdCycleBiResultUpdate = {
+    bi_test_result:    { type: 'str', required: true, max: 80 },
+    ci_result:         { type: 'str', required: false, max: 80 },
+    bi_indicator_lot:  { type: 'str', required: false, max: 120 }
+};
+
+// POST /api/cssd/trays
+const cssdTrayCreate = {
+    tray_code:          { type: 'str', required: false, max: 300 },
+    set_id:             { type: 'id', required: false },
+    cycle_id:           { type: 'id', required: false },
+    department:         { type: 'str', required: false, max: 120 },
+    notes:              { type: 'str', required: false, max: 4000 }
+};
+
+// PUT /api/cssd/trays/:id/issue
+const cssdTrayIssue = {
+    issued_to:           { type: 'str', required: false, max: 300 },
+    used_in_surgery_id:  { type: 'id', required: false }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -1196,5 +1282,16 @@ module.exports = {
     mortuaryCaseUpdate,
     cmeActivityCreate,
     cmeRegistrationCreate,
-    cmeEventCreate
+    cmeEventCreate,
+    cssdInstrumentSetCreate,
+    cssdCycleCreate,
+    cssdCycleStatusUpdate,
+    cssdLoadItemCreate,
+    cssdBatchCreate,
+    cssdBatchUpdate,
+    infectionControlReportCreate,
+    infectionControlReportUpdate,
+    cssdCycleBiResultUpdate,
+    cssdTrayCreate,
+    cssdTrayIssue
 };
