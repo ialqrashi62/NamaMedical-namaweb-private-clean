@@ -4345,7 +4345,7 @@ app.get('/api/settings/integrations', requireAuth, requireTenantContext, async (
     }
 });
 
-app.post('/api/settings/integrations', requireAuth, requireTenantContext, async (req, res) => {
+app.post('/api/settings/integrations', requireAuth, requireTenantContext, validateBody(RS.integrationSettingsSave), async (req, res) => {
     try {
         const tenantId = req.tenantId;
         const { integration_name, provider, api_key, api_secret, endpoint_url, is_enabled, config_json } = req.body;
@@ -4436,7 +4436,7 @@ app.post('/api/settings/integrations', requireAuth, requireTenantContext, async 
     }
 });
 
-app.post('/api/settings/integrations/ping', requireAuth, requireTenantContext, async (req, res) => {
+app.post('/api/settings/integrations/ping', requireAuth, requireTenantContext, validateBody(RS.integrationPing), async (req, res) => {
     try {
         const tenantId = req.tenantId;
         const { integration_name } = req.body;
@@ -13141,7 +13141,7 @@ app.post('/api/zatca/generate', requireAuth, requireRole('finance', 'accounts'),
     } catch (e) { e10Err(res, e); }
 });
 
-app.post('/api/zatca/submit', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/zatca/submit', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, validateBody(RS.zatcaSubmit), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e10RequireTenant(req);
         const invoiceId = e10IntId(req.body.invoice_id);

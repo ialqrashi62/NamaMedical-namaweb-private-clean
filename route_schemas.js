@@ -54,4 +54,34 @@ const patientCreate = {
     dob:         { type: 'str', required: false, max: 30 }
 };
 
-module.exports = { invoiceCreate, journalCreate, invoiceRefund, patientCreate };
+// POST /api/settings/integrations — high-value compliance config edge.
+// NOTE: config_json is intentionally not schema-validated here because the route accepts either
+// string or object and then applies per-integration deep validators (ZATCA/NPHIES/CBAHI).
+const integrationSettingsSave = {
+    integration_name: { type: 'str', required: true, max: 40 },
+    provider:         { type: 'str', required: false, max: 200 },
+    api_key:          { type: 'str', required: false, max: 4000 },
+    api_secret:       { type: 'str', required: false, max: 4000 },
+    endpoint_url:     { type: 'str', required: false, max: 2000 },
+    is_enabled:       { type: 'int', required: false, min: 0, max: 1 }
+};
+
+// POST /api/settings/integrations/ping
+const integrationPing = {
+    integration_name: { type: 'str', required: true, max: 40 }
+};
+
+// POST /api/zatca/submit
+const zatcaSubmit = {
+    invoice_id: { type: 'id', required: true }
+};
+
+module.exports = {
+    invoiceCreate,
+    journalCreate,
+    invoiceRefund,
+    patientCreate,
+    integrationSettingsSave,
+    integrationPing,
+    zatcaSubmit
+};

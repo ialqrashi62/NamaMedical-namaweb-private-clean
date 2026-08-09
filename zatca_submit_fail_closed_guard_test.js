@@ -35,8 +35,14 @@ const src = fs.readFileSync(serverPath, 'utf8');
 const clean = src.replace(/\s+/g, '');
 
 assert(
-  clean.includes("app.post('/api/zatca/submit',requireAuth,requireRole('finance','accounts'),requireTenantScope,idempotencyGuard,async(req,res)=>{"),
-  'submit route is auth+role+tenant+idempotency guarded'
+  clean.includes("app.post('/api/zatca/submit',requireAuth,requireRole('finance','accounts'),requireTenantScope,validateBody(RS.zatcaSubmit),idempotencyGuard,async(req,res)=>{"),
+  'submit route is auth+role+tenant+validation+idempotency guarded'
+);
+
+assert(
+  clean.includes("app.post('/api/settings/integrations',requireAuth,requireTenantContext,validateBody(RS.integrationSettingsSave),async(req,res)=>{") &&
+  clean.includes("app.post('/api/settings/integrations/ping',requireAuth,requireTenantContext,validateBody(RS.integrationPing),async(req,res)=>{"),
+  'integration settings routes are guarded by boundary validation middleware'
 );
 
 assert(
