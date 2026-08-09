@@ -603,6 +603,38 @@ const clinicalAiAsk = {
     department_id: { type: 'id', required: false }
 };
 
+// POST /api/clinical/departments
+const clinicalDepartmentUpsert = {
+    code:    { type: 'str', required: true, max: 80 },
+    name_ar: { type: 'str', required: false, max: 300 },
+    name_en: { type: 'str', required: false, max: 300 }
+};
+
+// POST /api/clinical/templates
+const clinicalTemplateCreate = {
+    department_id: { type: 'id', required: true },
+    version:       { type: 'str', required: false, max: 40 }
+};
+
+// POST /api/clinical/notes
+const clinicalNoteUpsert = {
+    id:            { type: 'id', required: false },
+    patient_id:    { type: 'id', required: true },
+    encounter_ref: { type: 'id', required: false },
+    type:          { type: 'str', required: false, max: 20 },
+    subjective:    { type: 'str', required: false, max: 8000 },
+    objective:     { type: 'str', required: false, max: 8000 },
+    assessment:    { type: 'str', required: false, max: 8000 },
+    plan:          { type: 'str', required: false, max: 8000 }
+};
+
+// POST /api/clinical/smart-templates
+const clinicalSmartTemplateUpsert = {
+    id:            { type: 'id', required: false },
+    shortcut:      { type: 'str', required: true, max: 80 },
+    template_text: { type: 'str', required: true, max: 12000 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -670,5 +702,9 @@ module.exports = {
     labOrderUpdate,
     orderApprovePayment,
     clinicalKnowledgeCreate,
-    clinicalAiAsk
+    clinicalAiAsk,
+    clinicalDepartmentUpsert,
+    clinicalTemplateCreate,
+    clinicalNoteUpsert,
+    clinicalSmartTemplateUpsert
 };

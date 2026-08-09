@@ -19012,7 +19012,7 @@ app.get('/api/clinical/departments', requireAuth, requireTenantScope, async (req
 });
 
 // 2. POST /api/clinical/departments - Create clinical department (Admin only)
-app.post('/api/clinical/departments', requireAuth, requireRole('Admin'), requireTenantScope, async (req, res) => {
+app.post('/api/clinical/departments', requireAuth, requireRole('Admin'), requireTenantScope, validateBody(RS.clinicalDepartmentUpsert), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { code, name_ar, name_en } = req.body;
@@ -19046,7 +19046,7 @@ app.get('/api/clinical/templates', requireAuth, requireTenantScope, async (req, 
 });
 
 // 4. POST /api/clinical/templates - Create/Update template (Admin only)
-app.post('/api/clinical/templates', requireAuth, requireRole('Admin'), requireTenantScope, async (req, res) => {
+app.post('/api/clinical/templates', requireAuth, requireRole('Admin'), requireTenantScope, validateBody(RS.clinicalTemplateCreate), idempotencyGuard, async (req, res) => {
     try {
         const { department_id, form_structure, version } = req.body;
         if (!department_id || !form_structure) {
@@ -19214,7 +19214,7 @@ app.get('/api/clinical/notes', requireAuth, requireRole('patients'), requireTena
     }
 });
 
-app.post('/api/clinical/notes', requireAuth, requireRole('patients'), requireTenantScope, async (req, res) => {
+app.post('/api/clinical/notes', requireAuth, requireRole('patients'), requireTenantScope, validateBody(RS.clinicalNoteUpsert), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { id, patient_id, encounter_ref, type, subjective, objective, assessment, plan } = req.body;
@@ -19261,7 +19261,7 @@ app.post('/api/clinical/notes', requireAuth, requireRole('patients'), requireTen
     }
 });
 
-app.post('/api/clinical/notes/:id/lock', requireAuth, requireRole('patients'), requireTenantScope, async (req, res) => {
+app.post('/api/clinical/notes/:id/lock', requireAuth, requireRole('patients'), requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const noteId = parseInt(req.params.id);
@@ -19316,7 +19316,7 @@ app.get('/api/clinical/smart-templates', requireAuth, requireRole('patients'), r
     }
 });
 
-app.post('/api/clinical/smart-templates', requireAuth, requireRole('patients'), requireTenantScope, async (req, res) => {
+app.post('/api/clinical/smart-templates', requireAuth, requireRole('patients'), requireTenantScope, validateBody(RS.clinicalSmartTemplateUpsert), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const doctorId = req.session.user?.id;
