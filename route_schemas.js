@@ -897,6 +897,62 @@ const nursingHandoverCreate = {
     news2_score:  { type: 'int', required: false, min: 0 }
 };
 
+// POST /api/telemedicine/sessions
+const telemedicineSessionCreate = {
+    patient_id:        { type: 'id', required: false },
+    patient_name:      { type: 'str', required: false, max: 300 },
+    speciality:        { type: 'str', required: false, max: 120 },
+    session_type:      { type: 'str', required: false, max: 80 },
+    scheduled_date:    { type: 'dateStr', required: false },
+    scheduled_time:    { type: 'str', required: false, max: 20 },
+    duration_minutes:  { type: 'int', required: false, min: 1 },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
+
+// PUT /api/telemedicine/sessions/:id
+const telemedicineSessionUpdate = {
+    status:       { type: 'str', required: false, max: 80 },
+    diagnosis:    { type: 'str', required: false, max: 4000 },
+    prescription: { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/emar/orders
+const emarOrderCreate = {
+    patient_id:   { type: 'id', required: true },
+    patient_name: { type: 'str', required: false, max: 300 },
+    medication:   { type: 'str', required: false, max: 300 },
+    dose:         { type: 'str', required: false, max: 120 },
+    route:        { type: 'str', required: false, max: 80 },
+    frequency:    { type: 'str', required: false, max: 80 },
+    start_date:   { type: 'dateStr', required: false }
+};
+
+// POST /api/emar/administrations
+const emarAdministrationNotGivenCreate = {
+    emar_order_id:     { type: 'id', required: true },
+    patient_id:        { type: 'id', required: true },
+    medication:        { type: 'str', required: false, max: 300 },
+    dose:              { type: 'str', required: false, max: 120 },
+    scheduled_time:    { type: 'str', required: false, max: 80 },
+    reason_not_given:  { type: 'str', required: true, max: 2000 },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/mar/administer
+const marAdminister = {
+    prescription_ref:   { type: 'id', required: false },
+    emar_order_id:      { type: 'id', required: false },
+    patient_id:         { type: 'id', required: false },
+    scanned_drug:       { type: 'str', required: false, max: 300 },
+    scanned_dose:       { type: 'str', required: false, max: 120 },
+    scanned_route:      { type: 'str', required: false, max: 80 },
+    scanned_patient_id: { type: 'id', required: false },
+    scheduled_at:       { type: 'str', required: false, max: 80 },
+    override_reason:    { type: 'str', required: false, max: 2000 },
+    witness_user_id:    { type: 'id', required: false },
+    notes:              { type: 'str', required: false, max: 4000 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -994,5 +1050,10 @@ module.exports = {
     nursingAssessmentCreate,
     nursingAssessmentScaleCreate,
     nursingIoCreate,
-    nursingHandoverCreate
+    nursingHandoverCreate,
+    telemedicineSessionCreate,
+    telemedicineSessionUpdate,
+    emarOrderCreate,
+    emarAdministrationNotGivenCreate,
+    marAdminister
 };

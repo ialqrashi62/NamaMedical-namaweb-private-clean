@@ -13279,7 +13279,7 @@ app.get('/api/telemedicine/sessions', requireAuth, requireRole('telemedicine'), 
     }
     catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/telemedicine/sessions', requireAuth, requireRole('telemedicine'), requireTenantScope, async (req, res) => {
+app.post('/api/telemedicine/sessions', requireAuth, requireRole('telemedicine'), requireTenantScope, validateBody(RS.telemedicineSessionCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
         const { patient_id, patient_name, speciality, session_type, scheduled_date, scheduled_time, duration_minutes, notes } = req.body;
@@ -13289,7 +13289,7 @@ app.post('/api/telemedicine/sessions', requireAuth, requireRole('telemedicine'),
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/telemedicine/sessions/:id', requireAuth, requireRole('telemedicine'), requireTenantScope, async (req, res) => {
+app.put('/api/telemedicine/sessions/:id', requireAuth, requireRole('telemedicine'), requireTenantScope, validateBody(RS.telemedicineSessionUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { status, diagnosis, prescription } = req.body;
@@ -13463,7 +13463,7 @@ app.get('/api/emar/orders', requireAuth, requireRole('nursing', 'doctor'), requi
         }
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/emar/orders', requireAuth, requireRole('nursing', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/emar/orders', requireAuth, requireRole('nursing', 'doctor'), requireTenantScope, validateBody(RS.emarOrderCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, patient_name, medication, dose, route, frequency, start_date } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -13512,7 +13512,7 @@ app.get('/api/emar/administrations', requireAuth, requireRole('nursing', 'doctor
 // actual administration. Any attempt to record a "Given" event is rejected (410 MAR_USE_SAFE_PATH)
 // and must go through /api/mar/administer. Role-gated, tenant-scoped, status FORCED 'Not Given',
 // every write audited.
-app.post('/api/emar/administrations', requireAuth, requireRole('nursing', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/emar/administrations', requireAuth, requireRole('nursing', 'doctor'), requireTenantScope, validateBody(RS.emarAdministrationNotGivenCreate), idempotencyGuard, async (req, res) => {
     try {
         const { emar_order_id, patient_id, medication, dose, scheduled_time, reason_not_given, notes } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -13575,7 +13575,7 @@ function isHighAlertMed(name) {
 }
 function marNorm(s) { return String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, ' '); }
 
-app.post('/api/mar/administer', requireAuth, requireRole('nursing', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/mar/administer', requireAuth, requireRole('nursing', 'doctor'), requireTenantScope, validateBody(RS.marAdminister), idempotencyGuard, async (req, res) => {
     const {
         prescription_ref, emar_order_id, patient_id,
         scanned_drug, scanned_dose, scanned_route, scanned_patient_id,
