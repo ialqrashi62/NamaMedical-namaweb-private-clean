@@ -1604,7 +1604,7 @@ app.post('/api/appointments', requireAuth, requireRole('appointments'), validate
     } catch (e) { console.error('APPOINTMENTS POST ERROR:', e); res.status(500).json({ error: 'Server error' }); }
 });
 
-app.delete('/api/appointments/:id', requireAuth, requireRole('appointments'), async (req, res) => {
+app.delete('/api/appointments/:id', requireAuth, requireRole('appointments'), requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         // --- TENANT SCOPE: verify record belongs to current tenant before delete (IDOR prevention) ---
         const { tenantId } = getRequestTenantContext(req);
@@ -7192,7 +7192,7 @@ app.get('/api/forms', requireAuth, async (req, res) => {
     catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/forms', requireAuth, async (req, res) => {
+app.post('/api/forms', requireAuth, requireTenantScope, validateBody(RS.formTemplateCreate), idempotencyGuard, async (req, res) => {
     try {
         const { template_name, department, form_fields } = req.body;
         const result = await pool.query('INSERT INTO form_templates (template_name, department, form_fields, created_by) VALUES ($1,$2,$3,$4) RETURNING id',
@@ -7201,7 +7201,7 @@ app.post('/api/forms', requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.delete('/api/forms/:id', requireAuth, async (req, res) => {
+app.delete('/api/forms/:id', requireAuth, requireTenantScope, idempotencyGuard, async (req, res) => {
     try { await pool.query('UPDATE form_templates SET is_active=0 WHERE id=$1', [req.params.id]); res.json({ success: true }); }
     catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
@@ -7789,7 +7789,7 @@ app.get('/api/settings/rooms/active', requireAuth, async (req, res) => {
     }
 });
 
-app.post('/api/settings/rooms', requireAuth, async (req, res) => {
+app.post('/api/settings/rooms', requireAuth, requireRole('settings'), requireTenantScope, validateBody(RS.settingsRoomCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { room_number, name_ar, name_en, department_id, status } = req.body;
@@ -7811,7 +7811,7 @@ app.post('/api/settings/rooms', requireAuth, async (req, res) => {
     }
 });
 
-app.put('/api/settings/rooms/:id', requireAuth, async (req, res) => {
+app.put('/api/settings/rooms/:id', requireAuth, requireRole('settings'), requireTenantScope, validateBody(RS.settingsRoomUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { room_number, name_ar, name_en, department_id, status } = req.body;
@@ -7834,7 +7834,7 @@ app.put('/api/settings/rooms/:id', requireAuth, async (req, res) => {
     }
 });
 
-app.delete('/api/settings/rooms/:id', requireAuth, async (req, res) => {
+app.delete('/api/settings/rooms/:id', requireAuth, requireRole('settings'), requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const result = await pool.query(
@@ -7857,7 +7857,7 @@ app.get('/api/queue/ads', requireAuth, async (req, res) => {
     catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/queue/ads', requireAuth, async (req, res) => {
+app.post('/api/queue/ads', requireAuth, requireRole('queue', 'settings'), validateBody(RS.queueAdCreate), idempotencyGuard, async (req, res) => {
     try {
         const { title, image_path, duration_seconds } = req.body;
         const result = await pool.query('INSERT INTO queue_advertisements (title, image_path, duration_seconds) VALUES ($1,$2,$3) RETURNING id',
@@ -16839,7 +16839,7 @@ app.get('/api/reports/aging', requireAuth, requireRole('finance'), requireTenant
 });
 
 // ===== REFERRAL SYSTEM =====
-app.post('/api/referrals', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/referrals', requireAuth, requireTenantScope, validateBody(RS.referralCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, patient_name, from_doctor, from_dept, to_dept, to_doctor, reason, urgency, notes } = req.body;
         const { tenantId } = getRequestTenantContext(req);

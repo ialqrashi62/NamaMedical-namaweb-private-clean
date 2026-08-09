@@ -2054,6 +2054,55 @@ const neurologyAssessmentCreate = {
     notes:               { type: 'str', required: false, max: 4000 }
 };
 
+// POST /api/forms (template create)
+const formTemplateCreate = {
+    template_name:   { type: 'str', required: true, max: 200 },
+    department:      { type: 'str', required: false, max: 120 },
+    form_fields:     { type: 'str', required: false, max: 100000 }
+};
+
+// POST /api/queue/ads
+const queueAdCreate = {
+    title:            { type: 'str', required: true, max: 200 },
+    image_path:       { type: 'str', required: false, max: 2000 },
+    duration_seconds: { type: 'int', required: false, min: 1, max: 600 }
+};
+
+// POST /api/referrals
+const referralCreate = {
+    patient_id:   { type: 'id', required: true },
+    patient_name: { type: 'str', required: false, max: 200 },
+    from_doctor:  { type: 'str', required: false, max: 200 },
+    from_dept:    { type: 'str', required: false, max: 120 },
+    to_dept:      { type: 'str', required: true, max: 120 },
+    to_doctor:    { type: 'str', required: false, max: 200 },
+    reason:       { type: 'str', required: true, max: 1000 },
+    urgency:      { type: 'enumOf', allowed: ['Routine', 'Urgent', 'STAT', 'Emergency', ''], required: false },
+    notes:        { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/settings/rooms
+const settingsRoomCreate = {
+    name:             { type: 'str', required: true, max: 200 },
+    room_number:      { type: 'str', required: false, max: 40 },
+    department:       { type: 'str', required: false, max: 120 },
+    floor:            { type: 'str', required: false, max: 40 },
+    capacity:         { type: 'int', required: false, min: 0, max: 1000 },
+    room_type:        { type: 'enumOf', allowed: ['Exam', 'Procedure', 'OR', 'Recovery', 'Consultation', 'Ward', 'ICU', 'Other', ''], required: false },
+    is_active:        { type: 'bool', required: false }
+};
+
+// PUT /api/settings/rooms/:id
+const settingsRoomUpdate = {
+    name:             { type: 'str', required: false, max: 200 },
+    room_number:      { type: 'str', required: false, max: 40 },
+    department:       { type: 'str', required: false, max: 120 },
+    floor:            { type: 'str', required: false, max: 40 },
+    capacity:         { type: 'int', required: false, min: 0, max: 1000 },
+    room_type:        { type: 'enumOf', allowed: ['Exam', 'Procedure', 'OR', 'Recovery', 'Consultation', 'Ward', 'ICU', 'Other', ''], required: false },
+    is_active:        { type: 'bool', required: false }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -2258,4 +2307,9 @@ module.exports = {
     ,pulmonologyPftCreate
     ,rheumatologyJointCreate
     ,neurologyAssessmentCreate
+    ,formTemplateCreate
+    ,queueAdCreate
+    ,referralCreate
+    ,settingsRoomCreate
+    ,settingsRoomUpdate
 };
