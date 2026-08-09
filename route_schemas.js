@@ -972,6 +972,46 @@ const pathologyCaseUpdate = {
     status:                { type: 'str', required: false, max: 80 }
 };
 
+// POST /api/pathology/specimens
+const pathologySpecimenCreate = {
+    patient_id:        { type: 'id', required: true },
+    visit_id:          { type: 'id', required: false },
+    specimen_type:     { type: 'str', required: false, max: 200 },
+    site:              { type: 'str', required: false, max: 300 },
+    clinical_details:  { type: 'str', required: false, max: 4000 },
+    priority:          { type: 'str', required: false, max: 40 }
+};
+
+// POST /api/pathology/specimens/:id/blocks
+const pathologyBlockCreate = {
+    block_no:        { type: 'str', required: false, max: 32 },
+    cassette_label:  { type: 'str', required: false, max: 300 },
+    embedding_type:  { type: 'str', required: false, max: 80 }
+};
+
+// POST /api/pathology/blocks/:blockId/slides
+const pathologySlideCreate = {
+    slide_no:    { type: 'str', required: false, max: 32 },
+    stain_type:  { type: 'str', required: false, max: 120 }
+};
+
+// PUT /api/pathology/specimens/:id/state
+const pathologySpecimenStateUpdate = {
+    state: { type: 'str', required: true, max: 80 }
+};
+
+// PUT /api/pathology/specimens/:id/report
+const pathologyReportUpdate = {
+    gross_text:  { type: 'str', required: false, max: 12000 },
+    micro_text:  { type: 'str', required: false, max: 12000 },
+    diagnosis:   { type: 'str', required: false, max: 8000 }
+};
+
+// POST /api/pathology/specimens/:id/addendum
+const pathologyAddendumCreate = {
+    text: { type: 'str', required: true, max: 8000 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -1076,5 +1116,11 @@ module.exports = {
     emarAdministrationNotGivenCreate,
     marAdminister,
     pathologyCaseCreate,
-    pathologyCaseUpdate
+    pathologyCaseUpdate,
+    pathologySpecimenCreate,
+    pathologyBlockCreate,
+    pathologySlideCreate,
+    pathologySpecimenStateUpdate,
+    pathologyReportUpdate,
+    pathologyAddendumCreate
 };

@@ -17942,7 +17942,7 @@ app.get('/api/pathology/specimens/:id', requireAuth, requireRole('pathology', 'l
 });
 
 // CREATE specimen — accession server-generated; patient validated same-tenant (IDOR -> 404).
-app.post('/api/pathology/specimens', requireAuth, requireRole('pathology', 'lab'), requireTenantScope, async (req, res) => {
+app.post('/api/pathology/specimens', requireAuth, requireRole('pathology', 'lab'), requireTenantScope, validateBody(RS.pathologySpecimenCreate), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -17999,7 +17999,7 @@ app.post('/api/pathology/specimens', requireAuth, requireRole('pathology', 'lab'
 });
 
 // ADD block to specimen (tenant-scoped; specimen must be same-tenant -> 404 else).
-app.post('/api/pathology/specimens/:id/blocks', requireAuth, requireRole('pathology', 'lab'), requireTenantScope, async (req, res) => {
+app.post('/api/pathology/specimens/:id/blocks', requireAuth, requireRole('pathology', 'lab'), requireTenantScope, validateBody(RS.pathologyBlockCreate), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const { tenantId } = getRequestTenantContext(req);
@@ -18023,7 +18023,7 @@ app.post('/api/pathology/specimens/:id/blocks', requireAuth, requireRole('pathol
 });
 
 // ADD slide to a block (validates block + specimen same-tenant chain).
-app.post('/api/pathology/blocks/:blockId/slides', requireAuth, requireRole('pathology', 'lab'), requireTenantScope, async (req, res) => {
+app.post('/api/pathology/blocks/:blockId/slides', requireAuth, requireRole('pathology', 'lab'), requireTenantScope, validateBody(RS.pathologySlideCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const bid = parseInt(req.params.blockId, 10);
@@ -18041,7 +18041,7 @@ app.post('/api/pathology/blocks/:blockId/slides', requireAuth, requireRole('path
 });
 
 // STATE transition — server-authoritative; invalid -> 409. SignedOut is terminal.
-app.put('/api/pathology/specimens/:id/state', requireAuth, requireRole('pathology', 'lab'), requireTenantScope, async (req, res) => {
+app.put('/api/pathology/specimens/:id/state', requireAuth, requireRole('pathology', 'lab'), requireTenantScope, validateBody(RS.pathologySpecimenStateUpdate), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const { tenantId } = getRequestTenantContext(req);
@@ -18066,7 +18066,7 @@ app.put('/api/pathology/specimens/:id/state', requireAuth, requireRole('patholog
 });
 
 // SAVE report draft (gross/micro/diagnosis/SNOMED). Blocked once SignedOut (addendum-only).
-app.put('/api/pathology/specimens/:id/report', requireAuth, requireRole('pathology'), requireTenantScope, async (req, res) => {
+app.put('/api/pathology/specimens/:id/report', requireAuth, requireRole('pathology'), requireTenantScope, validateBody(RS.pathologyReportUpdate), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const { tenantId } = getRequestTenantContext(req);
@@ -18098,7 +18098,7 @@ app.put('/api/pathology/specimens/:id/report', requireAuth, requireRole('patholo
 });
 
 // SIGN-OUT — pathologist only; final transition Reported -> SignedOut; locks report.
-app.post('/api/pathology/specimens/:id/signout', requireAuth, requireRole('pathology'), requireTenantScope, async (req, res) => {
+app.post('/api/pathology/specimens/:id/signout', requireAuth, requireRole('pathology'), requireTenantScope, idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const { tenantId } = getRequestTenantContext(req);
@@ -18130,7 +18130,7 @@ app.post('/api/pathology/specimens/:id/signout', requireAuth, requireRole('patho
 });
 
 // ADDENDUM — only after sign-out; append-only, never edits the signed report body.
-app.post('/api/pathology/specimens/:id/addendum', requireAuth, requireRole('pathology'), requireTenantScope, async (req, res) => {
+app.post('/api/pathology/specimens/:id/addendum', requireAuth, requireRole('pathology'), requireTenantScope, validateBody(RS.pathologyAddendumCreate), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const { tenantId } = getRequestTenantContext(req);
@@ -18157,7 +18157,7 @@ app.post('/api/pathology/specimens/:id/addendum', requireAuth, requireRole('path
 
 // LEGACY GUARD: old client called PUT /api/pathology/specimens/:id { status:'completed' }.
 // That bypassed the state machine. It is now rewired to a 409 telling clients to use /state.
-app.put('/api/pathology/specimens/:id', requireAuth, requireRole('pathology', 'lab'), requireTenantScope, (req, res) => {
+app.put('/api/pathology/specimens/:id', requireAuth, requireRole('pathology', 'lab'), requireTenantScope, idempotencyGuard, (req, res) => {
     res.status(409).json({ error: 'Deprecated: use PUT /api/pathology/specimens/:id/state (server-authoritative state machine)' });
 });
 
