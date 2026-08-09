@@ -1387,7 +1387,7 @@ app.get('/api/patients/:id', requireAuth, requireRole('patients'), async (req, r
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/patients', requireAuth, requireRole('patients'), validateBody(RS.patientCreate), async (req, res) => {
+app.post('/api/patients', requireAuth, requireRole('patients'), validateBody(RS.patientCreate), idempotencyGuard, async (req, res) => {
     try {
         const { name_ar, name_en, national_id, nationality, gender, phone, department, amount, payment_method, dob, dob_hijri, blood_type, allergies, chronic_diseases, emergency_contact_name, emergency_contact_phone, address, insurance_company, insurance_policy_number, insurance_class } = req.body;
         const maxFile = (await pool.query('SELECT COALESCE(MAX(file_number), 1000) as mf FROM patients')).rows[0].mf;
@@ -1419,7 +1419,7 @@ app.post('/api/patients', requireAuth, requireRole('patients'), validateBody(RS.
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.put('/api/patients/:id', requireAuth, requireRole('patients'), async (req, res) => {
+app.put('/api/patients/:id', requireAuth, requireRole('patients'), validateBody(RS.patientUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { name_ar, name_en, national_id, nationality, gender, phone, dob, dob_hijri, department, status, blood_type, allergies, chronic_diseases, emergency_contact_name, emergency_contact_phone, address, insurance_company, insurance_policy_number, insurance_class } = req.body;
         // --- TENANT SCOPE: verify record belongs to current tenant before update (IDOR prevention) ---
@@ -4761,7 +4761,7 @@ app.get('/api/patients/:id/results', requireAuth, requireRole('patients', 'lab',
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/patients/:id/consent', requireAuth, requireRole('patients'), async (req, res) => {
+app.post('/api/patients/:id/consent', requireAuth, requireRole('patients'), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const tenantCheck = tenantId ? ' AND tenant_id=$2' : '';
@@ -7296,7 +7296,7 @@ app.get('/api/patients/:id/problems', requireAuth, requireTenantScope, async (re
  * POST /api/patients/:id/problems
  * إضافة مشكلة طبية للمريض
  */
-app.post('/api/patients/:id/problems', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/patients/:id/problems', requireAuth, requireTenantScope, validateBody(RS.patientProblemCreate), idempotencyGuard, async (req, res) => {
     try {
         const pid = parseInt(req.params.id);
         const { tenantId } = getRequestTenantContext(req);
@@ -7470,7 +7470,7 @@ app.post('/api/orders', requireAuth, requireTenantScope, validateBody(RS.clinica
  * POST /api/encounters/:id/sign
  * التوقيع الإلكتروني على الزيارة وقفل السجل السريري
  */
-app.post('/api/encounters/:id/sign', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/encounters/:id/sign', requireAuth, requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const { pin, doctor_name, signature_note } = req.body;
         if (!pin || !/^\d{4,6}$/.test(pin)) return res.status(400).json({ error: 'Invalid PIN format' });
@@ -7528,7 +7528,7 @@ app.get('/api/patients/:id/history-extended', requireAuth, requireTenantScope, a
  * POST/PUT /api/patients/:id/social-history
  * حفظ/تحديث التاريخ الاجتماعي للمريض
  */
-app.post('/api/patients/:id/social-history', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/patients/:id/social-history', requireAuth, requireTenantScope, validateBody(RS.patientSocialHistoryUpsert), idempotencyGuard, async (req, res) => {
     try {
         const pid = parseInt(req.params.id);
         const { tenantId } = getRequestTenantContext(req);
@@ -7555,7 +7555,7 @@ app.post('/api/patients/:id/social-history', requireAuth, requireTenantScope, as
  * POST /api/patients/:id/family-history
  * إضافة بند في التاريخ العائلي
  */
-app.post('/api/patients/:id/family-history', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/patients/:id/family-history', requireAuth, requireTenantScope, validateBody(RS.patientFamilyHistoryCreate), idempotencyGuard, async (req, res) => {
     try {
         const pid = parseInt(req.params.id);
         const { tenantId } = getRequestTenantContext(req);

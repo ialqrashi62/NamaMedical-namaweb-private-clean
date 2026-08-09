@@ -1412,6 +1412,57 @@ const appointmentDuplicateCheck = {
     doctor:     { type: 'str', required: true, max: 300 }
 };
 
+// PUT /api/patients/:id
+const patientUpdate = {
+    name_ar:                   { type: 'str', required: false, max: 200 },
+    name_en:                   { type: 'str', required: false, max: 200 },
+    national_id:               { type: 'str', required: false, max: 30 },
+    nationality:               { type: 'str', required: false, max: 80 },
+    gender:                    { type: 'enumOf', allowed: ['Male','Female','male','female','M','F','ذكر','أنثى',''], required: false },
+    phone:                     { type: 'phone', required: false },
+    dob:                       { type: 'str', required: false, max: 30 },
+    dob_hijri:                 { type: 'str', required: false, max: 30 },
+    department:                { type: 'str', required: false, max: 120 },
+    status:                    { type: 'str', required: false, max: 80 },
+    blood_type:                { type: 'str', required: false, max: 8 },
+    allergies:                 { type: 'str', required: false, max: 4000 },
+    chronic_diseases:          { type: 'str', required: false, max: 4000 },
+    emergency_contact_name:    { type: 'str', required: false, max: 200 },
+    emergency_contact_phone:   { type: 'phone', required: false },
+    address:                   { type: 'str', required: false, max: 2000 },
+    insurance_company:         { type: 'str', required: false, max: 300 },
+    insurance_policy_number:   { type: 'str', required: false, max: 120 },
+    insurance_class:           { type: 'str', required: false, max: 120 }
+};
+
+// POST /api/patients/:id/problems
+const patientProblemCreate = {
+    problem_name: { type: 'str', required: true, max: 300 },
+    icd_code:     { type: 'str', required: false, max: 60 },
+    status:       { type: 'str', required: false, max: 80 },
+    onset_date:   { type: 'dateStr', required: false }
+};
+
+// POST /api/patients/:id/social-history
+const patientSocialHistoryUpsert = {
+    smoking_status:    { type: 'str', required: false, max: 80 },
+    alcohol_use:       { type: 'bool', required: false },
+    exercise_frequency:{ type: 'str', required: false, max: 80 },
+    occupation:        { type: 'str', required: false, max: 200 },
+    marital_status:    { type: 'str', required: false, max: 80 },
+    education_level:   { type: 'str', required: false, max: 80 },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/patients/:id/family-history
+const patientFamilyHistoryCreate = {
+    relation:      { type: 'str', required: false, max: 80 },
+    condition:     { type: 'str', required: false, max: 300 },
+    icd_code:      { type: 'str', required: false, max: 60 },
+    age_at_onset:  { type: 'int', required: false, min: 0 },
+    notes:         { type: 'str', required: false, max: 4000 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -1565,4 +1616,8 @@ module.exports = {
     ,patientReferralStatusUpdate
     ,appointmentFollowupCreate
     ,appointmentDuplicateCheck
+    ,patientUpdate
+    ,patientProblemCreate
+    ,patientSocialHistoryUpsert
+    ,patientFamilyHistoryCreate
 };
