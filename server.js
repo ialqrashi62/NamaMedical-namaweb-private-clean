@@ -13953,7 +13953,7 @@ app.get('/api/medical-records/requests', requireAuth, requireTenantScope, async 
         res.json((await pool.query('SELECT * FROM medical_records_requests WHERE tenant_id=$1 ORDER BY requested_at DESC', [tenantId])).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/medical-records/requests', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/medical-records/requests', requireAuth, requireTenantScope, validateBody(RS.medicalRecordsRequestCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, file_number, department, purpose, notes } = req.body;
         const { tenantId } = getRequestTenantContext(req);
@@ -13963,7 +13963,7 @@ app.post('/api/medical-records/requests', requireAuth, requireTenantScope, async
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/medical-records/requests/:id', requireAuth, requireTenantScope, async (req, res) => {
+app.put('/api/medical-records/requests/:id', requireAuth, requireTenantScope, validateBody(RS.medicalRecordsRequestUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { status } = req.body;
         const { tenantId } = getRequestTenantContext(req);

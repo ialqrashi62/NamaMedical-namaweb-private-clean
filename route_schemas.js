@@ -300,6 +300,20 @@ const nphiesRemittanceCreate = {
     fhir_bundle_id:      { type: 'str', required: false, max: 200 }
 };
 
+// POST /api/medical-records/requests
+const medicalRecordsRequestCreate = {
+    patient_id:   { type: 'id', required: false },
+    file_number:  { type: 'str', required: true, max: 120 },
+    department:   { type: 'str', required: false, max: 120 },
+    purpose:      { type: 'str', required: false, max: 300 },
+    notes:        { type: 'str', required: false, max: 2000 }
+};
+
+// PUT /api/medical-records/requests/:id
+const medicalRecordsRequestUpdate = {
+    status: { type: 'enumOf', required: true, allowed: ['Requested', 'In Progress', 'Delivered', 'Returned', 'Cancelled'] }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -334,5 +348,7 @@ module.exports = {
     insuranceClaimTransitionUpdate,
     insuranceClaimLineCreate,
     nphiesClaimStatusInquiry,
-    nphiesRemittanceCreate
+    nphiesRemittanceCreate,
+    medicalRecordsRequestCreate,
+    medicalRecordsRequestUpdate
 };
