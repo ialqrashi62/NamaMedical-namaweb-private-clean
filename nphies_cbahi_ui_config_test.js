@@ -71,6 +71,16 @@ assert(
   'CBAHI save flow surfaces clear missing-data error'
 );
 
+assert(
+  appJs.includes("constsafeIntegrationName=escapeHTML(name||'');") &&
+    appJs.includes("value=\"'+escapeHTML(item.provider||'')+'\"") &&
+    appJs.includes("value=\"'+escapeHTML(item.endpoint_url||'')+'\"") &&
+    appJs.includes("value=\"'+escapeHTML(item.api_key||'')+'\"") &&
+    appJs.includes("value=\"'+escapeHTML(item.api_secret||'')+'\"") &&
+    appJs.includes("<textareaclass=\"form-inputw-full\"id=\"intConfig\"rows=\"3\">'+escapeHTML(item.config_json||'{}')+'</textarea>"),
+  'legacy integration modal escapes provider/url/keys/config values before innerHTML render'
+);
+
 console.log(`\n${BOLD}${BLUE}=== Result ===${RESET}`);
 console.log(`  ${GREEN}PASS${RESET}: ${passed}`);
 console.log(`  ${RED}FAIL${RESET}: ${failed}`);
