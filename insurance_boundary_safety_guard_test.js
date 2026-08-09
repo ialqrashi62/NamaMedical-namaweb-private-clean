@@ -88,6 +88,11 @@ assert(
 );
 
 assert(
+  server.includes("app.post('/api/nphies/remittance',requireAuth,requireRole('finance','accounts','insurance'),requireTenantScope,validateBody(RS.nphiesRemittanceCreate),idempotencyGuard,async(req,res)=>{"),
+  'nphies remittance create route is guarded by validateBody + idempotencyGuard'
+);
+
+assert(
   schemas.includes('constinsuranceClaimLegacyUpdate={') &&
   schemas.includes('constinsuranceDenialAppealUpdate={') &&
   schemas.includes('constinsurancePayerPricingCreate={') &&
@@ -99,6 +104,7 @@ assert(
   schemas.includes('constinsuranceClaimTransitionUpdate={') &&
   schemas.includes('constinsuranceClaimLineCreate={') &&
   schemas.includes('constnphiesClaimStatusInquiry={') &&
+  schemas.includes('constnphiesRemittanceCreate={') &&
   schemas.includes("contact_info:{type:'str',required:false,max:2000}") &&
   schemas.includes("policy_number:{type:'str',required:false,max:120}") &&
   schemas.includes("decision:{type:'enumOf',required:true,allowed:['approved','denied','partial']}") &&

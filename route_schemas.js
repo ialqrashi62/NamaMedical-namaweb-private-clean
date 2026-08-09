@@ -285,6 +285,21 @@ const nphiesClaimStatusInquiry = {
     claim_id: { type: 'id', required: true }
 };
 
+// POST /api/nphies/remittance
+const nphiesRemittanceCreate = {
+    claim_id:            { type: 'id', required: true },
+    payer_id:            { type: 'id', required: false },
+    remittance_date:     { type: 'dateStr', required: false },
+    payment_amount:      { type: 'num', required: false, min: 0 },
+    adjustment_amount:   { type: 'num', required: false, min: 0 },
+    denial_amount:       { type: 'num', required: false, min: 0 },
+    payment_date:        { type: 'dateStr', required: false },
+    payment_reference:   { type: 'str', required: false, max: 200 },
+    adjudication_status: { type: 'str', required: false, max: 40 },
+    denial_reason:       { type: 'str', required: false, max: 2000 },
+    fhir_bundle_id:      { type: 'str', required: false, max: 200 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -318,5 +333,6 @@ module.exports = {
     insuranceClaimCreate,
     insuranceClaimTransitionUpdate,
     insuranceClaimLineCreate,
-    nphiesClaimStatusInquiry
+    nphiesClaimStatusInquiry,
+    nphiesRemittanceCreate
 };

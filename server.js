@@ -19548,7 +19548,7 @@ app.get('/api/nphies/remittance', requireAuth, requireRole('finance', 'accounts'
 });
 
 // POST /api/nphies/remittance — record a remittance advice (manual or from NPHIES response)
-app.post('/api/nphies/remittance', requireAuth, requireRole('finance', 'accounts', 'insurance'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/nphies/remittance', requireAuth, requireRole('finance', 'accounts', 'insurance'), requireTenantScope, validateBody(RS.nphiesRemittanceCreate), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { claim_id, payer_id, remittance_date, payment_amount = 0, adjustment_amount = 0,
