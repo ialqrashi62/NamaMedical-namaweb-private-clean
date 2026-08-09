@@ -320,6 +320,16 @@ const medicalRecordAmend = {
     new_values_summary: { type: 'str', required: false, max: 4000 }
 };
 
+// POST /api/medical/records
+const medicalRecordCreate = {
+    patient_id:   { type: 'id', required: true },
+    doctor_id:    { type: 'id', required: false },
+    diagnosis:    { type: 'str', required: false, max: 1000 },
+    symptoms:     { type: 'str', required: false, max: 4000 },
+    icd10_codes:  { type: 'str', required: false, max: 1000 },
+    notes:        { type: 'str', required: false, max: 4000 }
+};
+
 // POST /api/medical-records/coding
 const medicalRecordsCodingCreate = {
     patient_id:           { type: 'id', required: false },
@@ -424,6 +434,7 @@ module.exports = {
     medicalRecordsRequestCreate,
     medicalRecordsRequestUpdate,
     medicalRecordAmend,
+    medicalRecordCreate,
     medicalRecordsCodingCreate,
     himCodingCreate,
     himRoiCreate,

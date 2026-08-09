@@ -28,6 +28,11 @@ const server = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8').replac
 const schemas = fs.readFileSync(path.join(__dirname, 'route_schemas.js'), 'utf8').replace(/\s+/g, '');
 
 assert(
+  server.includes("app.post('/api/medical/records',requireAuth,requireRole('doctor','nursing'),requireTenantScope,validateBody(RS.medicalRecordCreate),idempotencyGuard,async(req,res)=>{"),
+  'medical record create route is guarded by validateBody + idempotencyGuard'
+);
+
+assert(
   server.includes("app.post('/api/medical-records/:id/sign',requireAuth,requireRole('doctor'),requireTenantScope,idempotencyGuard,async(req,res)=>{"),
   'medical record sign route is idempotency-guarded'
 );
@@ -64,6 +69,7 @@ assert(
 
 assert(
   schemas.includes('constmedicalRecordAmend={') &&
+  schemas.includes('constmedicalRecordCreate={') &&
   schemas.includes('constmedicalRecordsCodingCreate={') &&
   schemas.includes('consthimCodingCreate={') &&
   schemas.includes('consthimRoiCreate={') &&

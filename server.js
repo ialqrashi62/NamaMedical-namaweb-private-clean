@@ -2428,7 +2428,7 @@ app.get('/api/medical/records', requireAuth, requireRole('doctor', 'nursing'), r
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/medical/records', requireAuth, requireRole('doctor', 'nursing'), requireTenantScope, async (req, res) => {
+app.post('/api/medical/records', requireAuth, requireRole('doctor', 'nursing'), requireTenantScope, validateBody(RS.medicalRecordCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { patient_id, doctor_id, diagnosis, symptoms, icd10_codes, notes } = req.body;
