@@ -6782,7 +6782,7 @@ app.get('/api/icu/assessments/patient/:patient_id', requireAuth, requireRole('pa
 });
 
 // ===== ORTHOPEDICS DEPARTMENT (G10) =====
-app.post('/api/orthopedics/implants', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/orthopedics/implants', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.orthopedicsImplantCreate), idempotencyGuard, async (req, res) => {
     try {
         const { 
             patient_id, implant_date, implant_type, manufacturer, model_name,
@@ -6848,7 +6848,7 @@ app.get('/api/orthopedics/implants/patient/:patient_id', requireAuth, requireRol
     }
 });
 
-app.post('/api/orthopedics/rom', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/orthopedics/rom', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.orthopedicsRomCreate), idempotencyGuard, async (req, res) => {
     try {
         const { 
             patient_id, assessment_date, joint_name, lateral_side, movement_type, angle_degrees, is_restricted
@@ -6913,7 +6913,7 @@ app.get('/api/orthopedics/rom/patient/:patient_id', requireAuth, requireRole('pa
 
 
 // ===== PULMONOLOGY DEPARTMENT =====
-app.post('/api/pulmonology/pft', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/pulmonology/pft', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.pulmonologyPftCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, test_date, fev1, fvc, fev1_fvc_ratio, pef, interpretation, notes } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -6990,7 +6990,7 @@ app.get('/api/pulmonology/pft/patient/:patient_id', requireAuth, requireRole('pa
 });
 
 // ===== RHEUMATOLOGY DEPARTMENT =====
-app.post('/api/rheumatology/joints', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/rheumatology/joints', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.rheumatologyJointCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, assessment_date, tender_joint_count, swollen_joint_count, vas_pain, das28_score, esr, crp, gh, notes } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -7083,7 +7083,7 @@ app.get('/api/rheumatology/joints/patient/:patient_id', requireAuth, requireRole
 });
 
 // ===== NEUROLOGY DEPARTMENT =====
-app.post('/api/neurology/assessments', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/neurology/assessments', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.neurologyAssessmentCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, assessment_date, gcs_eye, gcs_verbal, gcs_motor, nihss_score, reflexes_status, notes } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);

@@ -1994,6 +1994,66 @@ const icuPreventionBundlesCreate = {
     notes:               { type: 'str', required: false, max: 4000 }
 };
 
+// POST /api/orthopedics/implants
+const orthopedicsImplantCreate = {
+    patient_id:         { type: 'id', required: true },
+    implant_date:       { type: 'dateStr', required: false },
+    implant_type:       { type: 'str', required: true, max: 120 },
+    manufacturer:       { type: 'str', required: true, max: 200 },
+    model_name:         { type: 'str', required: false, max: 200 },
+    serial_number:      { type: 'str', required: true, max: 120 },
+    size_dimension:     { type: 'str', required: false, max: 80 },
+    batch_lot_number:   { type: 'str', required: false, max: 80 },
+    clinical_notes:     { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/orthopedics/rom
+const orthopedicsRomCreate = {
+    patient_id:        { type: 'id', required: true },
+    assessment_date:   { type: 'dateStr', required: false },
+    joint_name:        { type: 'str', required: true, max: 80 },
+    lateral_side:      { type: 'enumOf', allowed: ['Left', 'Right', 'Bilateral', ''], required: true },
+    movement_type:     { type: 'str', required: true, max: 80 },
+    angle_degrees:     { type: 'num', required: true, min: -30, max: 360 },
+    is_restricted:     { type: 'bool', required: false }
+};
+
+// POST /api/pulmonology/pft
+const pulmonologyPftCreate = {
+    patient_id:        { type: 'id', required: true },
+    test_date:         { type: 'dateStr', required: false },
+    fev1:              { type: 'num', required: false, min: 0, max: 12 },
+    fvc:               { type: 'num', required: false, min: 0, max: 12 },
+    pef:               { type: 'num', required: false, min: 0, max: 1000 },
+    interpretation:    { type: 'str', required: false, max: 4000 },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/rheumatology/joints
+const rheumatologyJointCreate = {
+    patient_id:               { type: 'id', required: true },
+    assessment_date:          { type: 'dateStr', required: false },
+    tender_joint_count:       { type: 'int', required: false, min: 0, max: 28 },
+    swollen_joint_count:      { type: 'int', required: false, min: 0, max: 28 },
+    vas_pain:                 { type: 'int', required: false, min: 0, max: 100 },
+    esr:                      { type: 'num', required: false, min: 0, max: 200 },
+    crp:                      { type: 'num', required: false, min: 0, max: 500 },
+    gh:                       { type: 'int', required: false, min: 0, max: 100 },
+    notes:                    { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/neurology/assessments
+const neurologyAssessmentCreate = {
+    patient_id:          { type: 'id', required: true },
+    assessment_date:     { type: 'dateStr', required: false },
+    gcs_eye:             { type: 'int', required: false, min: 1, max: 4 },
+    gcs_verbal:          { type: 'int', required: false, min: 1, max: 5 },
+    gcs_motor:           { type: 'int', required: false, min: 1, max: 6 },
+    nihss_score:         { type: 'int', required: false, min: 0, max: 42 },
+    reflexes_status:     { type: 'str', required: false, max: 1000 },
+    notes:               { type: 'str', required: false, max: 4000 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -2193,4 +2253,9 @@ module.exports = {
     ,icuFluidBalanceCreate
     ,icuDailyGoalsCreate
     ,icuPreventionBundlesCreate
+    ,orthopedicsImplantCreate
+    ,orthopedicsRomCreate
+    ,pulmonologyPftCreate
+    ,rheumatologyJointCreate
+    ,neurologyAssessmentCreate
 };
