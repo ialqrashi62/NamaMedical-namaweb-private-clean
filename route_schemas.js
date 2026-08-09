@@ -1165,6 +1165,67 @@ const cssdTrayIssue = {
     used_in_surgery_id:  { type: 'id', required: false }
 };
 
+// POST /api/bloodbank/units
+const bloodbankUnitCreate = {
+    bag_number:         { type: 'str', required: false, max: 120 },
+    blood_type:         { type: 'str', required: false, max: 8 },
+    rh_factor:          { type: 'str', required: false, max: 8 },
+    component:          { type: 'str', required: false, max: 120 },
+    donor_id:           { type: 'id', required: false },
+    collection_date:    { type: 'dateStr', required: false },
+    expiry_date:        { type: 'dateStr', required: false },
+    volume_ml:          { type: 'num', required: false, min: 0 },
+    storage_location:   { type: 'str', required: false, max: 300 },
+    notes:              { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/bloodbank/crossmatch
+const bloodbankCrossmatchCreate = {
+    patient_id:    { type: 'id', required: true },
+    units_needed:  { type: 'int', required: false, min: 1 },
+    unit_id:       { type: 'id', required: false },
+    surgery_id:    { type: 'id', required: false },
+    notes:         { type: 'str', required: false, max: 4000 }
+};
+
+// PUT /api/bloodbank/crossmatch/:id/validate
+const bloodbankCrossmatchValidate = {
+    unit_id: { type: 'id', required: true }
+};
+
+// POST /api/bloodbank/transfuse
+const bloodbankTransfuse = {
+    patient_id:    { type: 'id', required: true },
+    unit_id:       { type: 'id', required: true },
+    volume_ml:     { type: 'num', required: false, min: 0 },
+    start_time:    { type: 'str', required: false, max: 80 },
+    notes:         { type: 'str', required: false, max: 4000 },
+    crossmatch_id: { type: 'id', required: false }
+};
+
+// POST /api/bloodbank/transfusions/:id/reaction
+const bloodbankTransfusionReactionCreate = {
+    reaction_type:      { type: 'str', required: false, max: 300 },
+    severity:           { type: 'str', required: false, max: 80 },
+    reaction_details:   { type: 'str', required: false, max: 4000 },
+    vital_signs_after:  { type: 'str', required: false, max: 2000 },
+    action_taken:       { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/bloodbank/donors
+const bloodbankDonorCreate = {
+    donor_name:      { type: 'str', required: false, max: 300 },
+    donor_name_ar:   { type: 'str', required: false, max: 300 },
+    national_id:     { type: 'nationalId', required: false },
+    phone:           { type: 'phone', required: false },
+    blood_type:      { type: 'str', required: false, max: 8 },
+    rh_factor:       { type: 'str', required: false, max: 8 },
+    age:             { type: 'int', required: false, min: 0 },
+    gender:          { type: 'str', required: false, max: 40 },
+    medical_history: { type: 'str', required: false, max: 4000 },
+    notes:           { type: 'str', required: false, max: 4000 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -1293,5 +1354,11 @@ module.exports = {
     infectionControlReportUpdate,
     cssdCycleBiResultUpdate,
     cssdTrayCreate,
-    cssdTrayIssue
+    cssdTrayIssue,
+    bloodbankUnitCreate,
+    bloodbankCrossmatchCreate,
+    bloodbankCrossmatchValidate,
+    bloodbankTransfuse,
+    bloodbankTransfusionReactionCreate,
+    bloodbankDonorCreate
 };

@@ -9391,7 +9391,7 @@ app.get('/api/bloodbank/units', requireAuth, requireRole('bloodbank', 'lab', 'nu
 });
 
 // --- Inventory: create unit (tenant-stamped, audited) ---
-app.post('/api/bloodbank/units', requireAuth, requireRole('bloodbank', 'lab'), requireTenantScope, async (req, res) => {
+app.post('/api/bloodbank/units', requireAuth, requireRole('bloodbank', 'lab'), requireTenantScope, validateBody(RS.bloodbankUnitCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e13RequireTenant(req);
         const { facilityId } = getRequestTenantContext(req);
@@ -9422,7 +9422,7 @@ app.post('/api/bloodbank/units', requireAuth, requireRole('bloodbank', 'lab'), r
 });
 
 // --- Inventory: discard a unit (state machine; cannot discard a transfused unit) ---
-app.put('/api/bloodbank/units/:id/discard', requireAuth, requireRole('bloodbank', 'lab'), requireTenantScope, async (req, res) => {
+app.put('/api/bloodbank/units/:id/discard', requireAuth, requireRole('bloodbank', 'lab'), requireTenantScope, idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const tenantId = e13RequireTenant(req);
@@ -9467,7 +9467,7 @@ app.get('/api/bloodbank/crossmatch', requireAuth, requireRole('bloodbank', 'lab'
 // The critical safety route. patient ABO/Rh is read from the patients table
 // (NOT trusted from the client). If a unit is specified its ABO/Rh is read
 // from blood_bank_units. Incompatible => 422 and NO row is persisted as Compatible.
-app.post('/api/bloodbank/crossmatch', requireAuth, requireRole('bloodbank', 'lab', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/bloodbank/crossmatch', requireAuth, requireRole('bloodbank', 'lab', 'doctor'), requireTenantScope, validateBody(RS.bloodbankCrossmatchCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e13RequireTenant(req);
         const { patient_id, units_needed, unit_id, surgery_id, notes } = req.body;
@@ -9516,7 +9516,7 @@ app.post('/api/bloodbank/crossmatch', requireAuth, requireRole('bloodbank', 'lab
 
 // --- Crossmatch: validate an existing crossmatch against a unit (server-side, fail-closed) ---
 // Replaces the legacy client-marked PUT. Sets Compatible ONLY if the engine agrees.
-app.put('/api/bloodbank/crossmatch/:id/validate', requireAuth, requireRole('bloodbank', 'lab'), requireTenantScope, async (req, res) => {
+app.put('/api/bloodbank/crossmatch/:id/validate', requireAuth, requireRole('bloodbank', 'lab'), requireTenantScope, validateBody(RS.bloodbankCrossmatchValidate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e13RequireTenant(req);
         const cmId = Number(req.params.id);
@@ -9557,7 +9557,7 @@ app.get('/api/bloodbank/transfusions', requireAuth, requireRole('bloodbank', 'la
 // Locks the unit FOR UPDATE, re-checks status+expiry+ABO/Rh under the lock, flips
 // status Available -> Transfused atomically, inserts the transfusion record.
 //   incompatible -> 422 ; already issued/used -> 409 ; expired -> 422.
-app.post('/api/bloodbank/transfuse', requireAuth, requireRole('bloodbank', 'nursing', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/bloodbank/transfuse', requireAuth, requireRole('bloodbank', 'nursing', 'doctor'), requireTenantScope, validateBody(RS.bloodbankTransfuse), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const tenantId = e13RequireTenant(req);
@@ -9634,7 +9634,7 @@ app.post('/api/bloodbank/transfuse', requireAuth, requireRole('bloodbank', 'nurs
 // F1-FIX: Both writes (INSERT reaction + UPDATE transfusion) wrapped in a single
 //         BEGIN/COMMIT transaction on a pool client so an UPDATE failure cannot
 //         leave an orphaned reaction row.
-app.post('/api/bloodbank/transfusions/:id/reaction', requireAuth, requireRole('bloodbank', 'nursing', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/bloodbank/transfusions/:id/reaction', requireAuth, requireRole('bloodbank', 'nursing', 'doctor'), requireTenantScope, validateBody(RS.bloodbankTransfusionReactionCreate), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const tenantId = e13RequireTenant(req);
@@ -9686,7 +9686,7 @@ app.get('/api/bloodbank/units/:id/lookback', requireAuth, requireRole('bloodbank
 });
 
 // --- Recall a unit: mark Discarded if not yet transfused (transactional) ---
-app.put('/api/bloodbank/units/:id/recall', requireAuth, requireRole('bloodbank', 'lab'), requireTenantScope, async (req, res) => {
+app.put('/api/bloodbank/units/:id/recall', requireAuth, requireRole('bloodbank', 'lab'), requireTenantScope, idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const tenantId = e13RequireTenant(req);
@@ -9722,7 +9722,7 @@ app.get('/api/bloodbank/donors', requireAuth, requireRole('bloodbank', 'lab'), r
     } catch (e) { e13Respond(res, e); }
 });
 
-app.post('/api/bloodbank/donors', requireAuth, requireRole('bloodbank', 'lab'), requireTenantScope, async (req, res) => {
+app.post('/api/bloodbank/donors', requireAuth, requireRole('bloodbank', 'lab'), requireTenantScope, validateBody(RS.bloodbankDonorCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e13RequireTenant(req);
         const { donor_name, donor_name_ar, national_id, phone, blood_type, rh_factor, age, gender, medical_history, notes } = req.body;
