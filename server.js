@@ -2849,7 +2849,7 @@ app.get('/api/lab/orders', requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/lab/orders', requireAuth, async (req, res) => {
+app.post('/api/lab/orders', requireAuth, validateBody(RS.labOrderCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, doctor_id, order_type, description, price } = req.body;
         // --- TENANT SCOPE: stamp tenant_id from session + validate patient belongs to same tenant ---
@@ -2906,7 +2906,7 @@ app.get('/api/lab/catalog', requireAuth, async (req, res) => {
     catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.put('/api/lab/orders/:id', requireAuth, async (req, res) => {
+app.put('/api/lab/orders/:id', requireAuth, validateBody(RS.labOrderUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { status, result: testResult } = req.body;
         // --- TENANT SCOPE: verify order belongs to current tenant before update (IDOR prevention) ---
@@ -10044,7 +10044,7 @@ app.get('/api/orders/pending-payment', requireAuth, async (req, res) => {
 });
 
 // Doctor creates lab order (goes to reception first)
-app.post('/api/lab/orders', requireAuth, async (req, res) => {
+app.post('/api/lab/orders', requireAuth, validateBody(RS.labOrderCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, order_type, description } = req.body;
         // --- TENANT SCOPE: stamp tenant_id from session + validate patient belongs to same tenant ---
@@ -10067,7 +10067,7 @@ app.post('/api/lab/orders', requireAuth, async (req, res) => {
 });
 
 // Doctor creates radiology order (goes to reception first)
-app.post('/api/radiology/orders', requireAuth, async (req, res) => {
+app.post('/api/radiology/orders', requireAuth, validateBody(RS.labOrderCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, order_type, description } = req.body;
         // --- TENANT SCOPE: stamp tenant_id from session + validate patient belongs to same tenant ---
@@ -10090,7 +10090,7 @@ app.post('/api/radiology/orders', requireAuth, async (req, res) => {
 });
 
 // Direct lab order (from lab page - auto approved)
-app.post('/api/lab/orders/direct', requireAuth, async (req, res) => {
+app.post('/api/lab/orders/direct', requireAuth, validateBody(RS.labOrderDirectCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, order_type, description } = req.body;
         // --- TENANT SCOPE: stamp tenant_id from session ---
@@ -10113,7 +10113,7 @@ app.post('/api/lab/orders/direct', requireAuth, async (req, res) => {
 });
 
 // Reception approves payment → order goes to Lab/Radiology
-app.put('/api/orders/:id/approve-payment', requireAuth, async (req, res) => {
+app.put('/api/orders/:id/approve-payment', requireAuth, validateBody(RS.orderApprovePayment), idempotencyGuard, async (req, res) => {
     try {
         const { payment_method, price } = req.body;
         // --- TENANT SCOPE: verify order belongs to current tenant before approve (IDOR prevention) ---
@@ -10149,7 +10149,7 @@ app.put('/api/orders/:id/approve-payment', requireAuth, async (req, res) => {
 });
 
 // Update lab/radiology order status (In Progress, Done)
-app.put('/api/lab/orders/:id', requireAuth, async (req, res) => {
+app.put('/api/lab/orders/:id', requireAuth, validateBody(RS.labOrderUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { status, results } = req.body;
         // --- TENANT SCOPE: verify order belongs to current tenant before update (IDOR prevention) ---

@@ -565,6 +565,32 @@ const nursingRiskAssessmentCreate = {
     risk_level:      { type: 'str', required: true, max: 80 }
 };
 
+// POST /api/lab/orders and /api/radiology/orders
+const labOrderCreate = {
+    patient_id:  { type: 'id', required: true },
+    order_type:  { type: 'str', required: true, max: 200 },
+    description: { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/lab/orders/direct
+const labOrderDirectCreate = {
+    patient_id:  { type: 'id', required: false },
+    order_type:  { type: 'str', required: true, max: 200 },
+    description: { type: 'str', required: false, max: 4000 }
+};
+
+// PUT /api/lab/orders/:id
+const labOrderUpdate = {
+    status:  { type: 'str', required: false, max: 80 },
+    results: { type: 'str', required: false, max: 8000 }
+};
+
+// PUT /api/orders/:id/approve-payment
+const orderApprovePayment = {
+    payment_method: { type: 'str', required: false, max: 80 },
+    price:          { type: 'num', required: true, min: 0 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -626,5 +652,9 @@ module.exports = {
     labMicrobiologyCreate,
     clinicalProblemListCreate,
     clinicalSafetyCheck,
-    nursingRiskAssessmentCreate
+    nursingRiskAssessmentCreate,
+    labOrderCreate,
+    labOrderDirectCreate,
+    labOrderUpdate,
+    orderApprovePayment
 };
