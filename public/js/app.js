@@ -12569,30 +12569,289 @@ window.pingIntegration = async (name) => {
   }
 };
 
-window.openIntegrationConfig = (name) => {
+window.openIntegrationConfig = async (name) => {
   const item = (window.integrationsList || []).find(i => i.integration_name === name) || { integration_name: name, provider: '', api_key: '', api_secret: '', endpoint_url: '', is_enabled: 0, config_json: '{}' };
+  const integrationType = String(name || '').toUpperCase();
+  const isZatca = integrationType === 'ZATCA';
+  const isNphies = integrationType === 'NPHIES';
+  const isCbahi = integrationType === 'CBAHI';
+  let companySettings = {};
+  try { companySettings = await API.get('/api/settings'); } catch (_) { companySettings = {}; }
+  let parsedCfg = {};
+  try { parsedCfg = JSON.parse(item.config_json || '{}'); } catch (_) { parsedCfg = {}; }
+
+  const fallbackCompanyName = parsedCfg.csr_profile?.organizationName || companySettings.company_name_ar || companySettings.company_name_en || '';
+  const fallbackTaxNumber = companySettings.tax_number || '';
+  const fallbackCrNumber = companySettings.cr_number || '';
+    const serialToken = (value, fallback) => String(value || '').trim()
+      .replace(/[|\r\n]+/g, '-')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || fallback;
+    const derivedCsrCommonName = parsedCfg.csr_profile?.commonName || fallbackCompanyName || fallbackCrNumber || fallbackTaxNumber || 'EGS-Unit';
+    const derivedCsrSerialNumber = parsedCfg.csr_profile?.serialNumber || [
+      `1-${serialToken('NamaERP', 'NamaERP')}`,
+      `2-${serialToken(fallbackCrNumber, 'CR')}`,
+      `3-${serialToken(fallbackTaxNumber, 'VAT')}`
+    ].join('|');
+
+  const zatcaCfg = {
+    environment: parsedCfg.environment || 'sandbox',
+    private_key_pem: parsedCfg.private_key_pem || '',
+    public_key_pem: parsedCfg.public_key_pem || '',
+    sdk_home_path: parsedCfg.sdk_home_path || '',
+    csr_profile: {
+        commonName: derivedCsrCommonName,
+        serialNumber: derivedCsrSerialNumber,
+      organizationIdentifier: parsedCfg.csr_profile?.organizationIdentifier || fallbackTaxNumber,
+      commercialRegistrationNumber: parsedCfg.csr_profile?.commercialRegistrationNumber || fallbackCrNumber,
+      organizationUnitName: parsedCfg.csr_profile?.organizationUnitName || '',
+      organizationName: parsedCfg.csr_profile?.organizationName || fallbackCompanyName,
+      countryName: parsedCfg.csr_profile?.countryName || 'SA',
+      invoiceType: parsedCfg.csr_profile?.invoiceType || '1100',
+      location: parsedCfg.csr_profile?.location || '',
+      industry: parsedCfg.csr_profile?.industry || 'Medical'
+    }
+  };
+
+  const nphiesCfg = {
+    sandbox_mode: parsedCfg.sandbox_mode !== false,
+    fhir_version: String(parsedCfg.fhir_version || 'R4').toUpperCase(),
+    provider_license: parsedCfg.provider_license || '',
+    payer_license: parsedCfg.payer_license || '',
+    eligibility_path: parsedCfg.eligibility_path || '/CoverageEligibilityRequest',
+    prior_auth_path: parsedCfg.prior_auth_path || '/Claim/$prior-auth',
+    claim_submit_path: parsedCfg.claim_submit_path || '/Claim/$submit',
+    communication_path: parsedCfg.communication_path || '/Communication',
+    use_oauth2: parsedCfg.use_oauth2 !== false
+  };
+
+  const cbahiCfg = {
+    standards_version: parsedCfg.standards_version || '',
+    facility_license_number: parsedCfg.facility_license_number || '',
+    self_assessment_frequency: String(parsedCfg.self_assessment_frequency || 'quarterly').toLowerCase(),
+    sentinel_reporting_enabled: parsedCfg.sentinel_reporting_enabled !== false,
+    quality_committee_owner: parsedCfg.quality_committee_owner || ''
+  };
+
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center';
-  modal.innerHTML = '<div style="background:var(--bg-card,#fff);border-radius:16px;padding:24px;width:500px;max-height:90vh;overflow-y:auto;direction:rtl">' +
-    '<h3 style="margin:0 0 16px;color:var(--primary)">' + tr(`Configure ${name} Integration`, `إعدادات ربط ${name}`) + '</h3>' +
-    '<div class="form-group mb-3"><label class="block text-xs font-bold text-on-surface-variant mb-1">' + tr('Provider Name', 'اسم المزود') + '</label>' +
-    '<input class="form-input w-full" id="intProvider" value="' + (item.provider || '') + '"></div>' +
-    '<div class="form-group mb-3"><label class="block text-xs font-bold text-on-surface-variant mb-1">' + tr('Endpoint URL', 'رابط الخدمة') + '</label>' +
-    '<input class="form-input w-full" id="intUrl" value="' + (item.endpoint_url || '') + '"></div>' +
-    '<div class="form-group mb-3"><label class="block text-xs font-bold text-on-surface-variant mb-1">' + tr('API Key / Client ID', 'مفتاح API') + '</label>' +
-    '<input class="form-input w-full" id="intKey" value="' + (item.api_key || '') + '" type="password"></div>' +
-    '<div class="form-group mb-3"><label class="block text-xs font-bold text-on-surface-variant mb-1">' + tr('API Secret / Client Secret', 'السر البرمجي') + '</label>' +
-    '<input class="form-input w-full" id="intSecret" value="' + (item.api_secret || '') + '" type="password"></div>' +
-    '<div class="form-group mb-3"><label class="block text-xs font-bold text-on-surface-variant mb-1">' + tr('Custom Configurations (JSON)', 'إعدادات إضافية (JSON)') + '</label>' +
-    '<textarea class="form-input w-full" id="intConfig" rows="3">' + (item.config_json || '{}') + '</textarea></div>' +
-    '<div style="display:flex;gap:12px;margin-top:16px">' +
-    '<button class="btn btn-primary" id="btnSaveInt" style="flex:1">💾 ' + tr('Save Settings', 'حفظ الإعدادات') + '</button>' +
-    '<button class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()" style="flex:1">' + tr('Cancel', 'إلغاء') + '</button>' +
-    '</div></div>';
+
+  if (isNphies) {
+    modal.innerHTML = `
+      <div style="background:var(--bg-card,#fff);border-radius:16px;padding:24px;width:min(900px,96vw);max-height:92vh;overflow-y:auto;direction:rtl">
+        <h3 style="margin:0 0 8px;color:var(--primary)">${tr('NPHIES Configuration', 'إعدادات نفيس NPHIES')}</h3>
+        <p style="margin:0 0 14px;color:var(--text-dim,#666);font-size:12px">${tr('Configure payer/provider profile and FHIR R4 bundle paths. Credentials are stored securely and redacted on read.', 'قم بإعداد ملف مقدم/دافع التأمين ومسارات FHIR R4. بيانات الاعتماد تُخزن بأمان وتُحجب عند العرض.')}</p>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">
+          <div class="form-group">
+            <label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Provider Name', 'اسم المزود')}</label>
+            <input class="form-input w-full" id="intProvider" value="${escapeHTML(item.provider || 'NPHIES')}">
+          </div>
+          <div class="form-group">
+            <label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('FHIR Version', 'إصدار FHIR')}</label>
+            <select class="form-input w-full" id="nphiesFhirVersion">
+              <option value="R4" ${nphiesCfg.fhir_version === 'R4' ? 'selected' : ''}>R4</option>
+            </select>
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Gateway Endpoint URL', 'رابط بوابة الخدمة')}</label>
+            <input class="form-input w-full" id="intUrl" value="${escapeHTML(item.endpoint_url || '')}" placeholder="https://nphies.sa/api/v1/fhir">
+          </div>
+          <div class="form-group">
+            <label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('API Key / Client ID', 'معرف العميل / API Key')}</label>
+            <input class="form-input w-full" id="intKey" value="${escapeHTML(item.api_key || '')}" type="password">
+          </div>
+          <div class="form-group">
+            <label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('API Secret / Client Secret', 'سر العميل / API Secret')}</label>
+            <input class="form-input w-full" id="intSecret" value="${escapeHTML(item.api_secret || '')}" type="password">
+          </div>
+        </div>
+
+        <h4 style="margin:18px 0 8px;color:var(--primary)">🆔 ${tr('Licensing Profile', 'بيانات الترخيص')}</h4>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px">
+          <div class="form-group">
+            <label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Provider License', 'ترخيص مقدم الخدمة')}</label>
+            <input class="form-input w-full" id="nphiesProviderLicense" value="${escapeHTML(nphiesCfg.provider_license || '')}" placeholder="PRV-12345">
+          </div>
+          <div class="form-group">
+            <label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Payer License', 'ترخيص شركة التأمين')}</label>
+            <input class="form-input w-full" id="nphiesPayerLicense" value="${escapeHTML(nphiesCfg.payer_license || '')}" placeholder="PAY-98765">
+          </div>
+        </div>
+
+        <h4 style="margin:18px 0 8px;color:var(--primary)">🧭 ${tr('FHIR Bundle Paths', 'مسارات حزم FHIR')}</h4>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px">
+          <div class="form-group"><label class="block text-xs font-bold text-on-surface-variant mb-1">Eligibility</label><input class="form-input w-full" id="nphiesEligibilityPath" value="${escapeHTML(nphiesCfg.eligibility_path || '/CoverageEligibilityRequest')}"></div>
+          <div class="form-group"><label class="block text-xs font-bold text-on-surface-variant mb-1">Prior Auth</label><input class="form-input w-full" id="nphiesPriorAuthPath" value="${escapeHTML(nphiesCfg.prior_auth_path || '/Claim/$prior-auth')}"></div>
+          <div class="form-group"><label class="block text-xs font-bold text-on-surface-variant mb-1">Claim Submit</label><input class="form-input w-full" id="nphiesClaimSubmitPath" value="${escapeHTML(nphiesCfg.claim_submit_path || '/Claim/$submit')}"></div>
+          <div class="form-group"><label class="block text-xs font-bold text-on-surface-variant mb-1">Communication</label><input class="form-input w-full" id="nphiesCommunicationPath" value="${escapeHTML(nphiesCfg.communication_path || '/Communication')}"></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:12px">
+          <label class="flex items-center gap-2"><input type="checkbox" id="nphiesSandboxMode" ${nphiesCfg.sandbox_mode ? 'checked' : ''}> ${tr('Sandbox Mode', 'وضع الاختبار')}</label>
+          <label class="flex items-center gap-2"><input type="checkbox" id="nphiesUseOauth2" ${nphiesCfg.use_oauth2 ? 'checked' : ''}> ${tr('Use OAuth2', 'استخدام OAuth2')}</label>
+        </div>
+
+        <div style="display:flex;gap:12px;margin-top:16px">
+          <button class="btn btn-primary" id="btnSaveInt" style="flex:1">💾 ${tr('Save NPHIES Settings', 'حفظ إعدادات نفيس')}</button>
+          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()" style="flex:1">${tr('Cancel', 'إلغاء')}</button>
+        </div>
+      </div>`;
+  } else if (isCbahi) {
+    modal.innerHTML = `
+      <div style="background:var(--bg-card,#fff);border-radius:16px;padding:24px;width:min(880px,96vw);max-height:92vh;overflow-y:auto;direction:rtl">
+        <h3 style="margin:0 0 8px;color:var(--primary)">${tr('CBAHI Compliance Profile', 'ملف الامتثال - سباهي')}</h3>
+        <p style="margin:0 0 14px;color:var(--text-dim,#666);font-size:12px">${tr('Configure accreditation profile and recurring self-assessment cadence for quality governance.', 'قم بإعداد ملف الاعتماد وتواتر التقييم الذاتي المتكرر لحوكمة الجودة.')}</p>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">
+          <div class="form-group">
+            <label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Provider Name', 'اسم المزود')}</label>
+            <input class="form-input w-full" id="intProvider" value="${escapeHTML(item.provider || 'CBAHI')}">
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Endpoint URL (Optional)', 'رابط الخدمة (اختياري)')}</label>
+            <input class="form-input w-full" id="intUrl" value="${escapeHTML(item.endpoint_url || '')}" placeholder="https://portal.cbahi.gov.sa/">
+          </div>
+        </div>
+
+        <h4 style="margin:18px 0 8px;color:var(--primary)">🏥 ${tr('Accreditation Profile', 'ملف الاعتماد')}</h4>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px">
+          <div class="form-group">
+            <label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Standards Version', 'إصدار معايير سباهي')}</label>
+            <input class="form-input w-full" id="cbahiStandardsVersion" value="${escapeHTML(cbahiCfg.standards_version || '')}" placeholder="CBAHI-HOSPITAL-2026">
+          </div>
+          <div class="form-group">
+            <label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Facility License Number', 'رقم ترخيص المنشأة')}</label>
+            <input class="form-input w-full" id="cbahiFacilityLicense" value="${escapeHTML(cbahiCfg.facility_license_number || '')}" placeholder="MOH-123456">
+          </div>
+          <div class="form-group">
+            <label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Self-Assessment Frequency', 'تكرار التقييم الذاتي')}</label>
+            <select class="form-input w-full" id="cbahiFrequency">
+              <option value="monthly" ${cbahiCfg.self_assessment_frequency === 'monthly' ? 'selected' : ''}>${tr('Monthly', 'شهري')}</option>
+              <option value="quarterly" ${cbahiCfg.self_assessment_frequency === 'quarterly' ? 'selected' : ''}>${tr('Quarterly', 'ربع سنوي')}</option>
+              <option value="semiannual" ${cbahiCfg.self_assessment_frequency === 'semiannual' ? 'selected' : ''}>${tr('Semiannual', 'نصف سنوي')}</option>
+              <option value="annual" ${cbahiCfg.self_assessment_frequency === 'annual' ? 'selected' : ''}>${tr('Annual', 'سنوي')}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Quality Committee Owner', 'مسؤول لجنة الجودة')}</label>
+            <input class="form-input w-full" id="cbahiCommitteeOwner" value="${escapeHTML(cbahiCfg.quality_committee_owner || '')}" placeholder="Quality Officer">
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:12px">
+          <label class="flex items-center gap-2"><input type="checkbox" id="cbahiSentinelEnabled" ${cbahiCfg.sentinel_reporting_enabled ? 'checked' : ''}> ${tr('Sentinel Reporting Enabled', 'تفعيل بلاغات الأحداث الجسيمة')}</label>
+        </div>
+
+        <div style="display:flex;gap:12px;margin-top:16px">
+          <button class="btn btn-primary" id="btnSaveInt" style="flex:1">💾 ${tr('Save CBAHI Settings', 'حفظ إعدادات سباهي')}</button>
+          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()" style="flex:1">${tr('Cancel', 'إلغاء')}</button>
+        </div>
+      </div>`;
+  } else if (!isZatca) {
+    modal.innerHTML = '<div style="background:var(--bg-card,#fff);border-radius:16px;padding:24px;width:500px;max-height:90vh;overflow-y:auto;direction:rtl">' +
+      '<h3 style="margin:0 0 16px;color:var(--primary)">' + tr(`Configure ${name} Integration`, `إعدادات ربط ${name}`) + '</h3>' +
+      '<div class="form-group mb-3"><label class="block text-xs font-bold text-on-surface-variant mb-1">' + tr('Provider Name', 'اسم المزود') + '</label>' +
+      '<input class="form-input w-full" id="intProvider" value="' + (item.provider || '') + '"></div>' +
+      '<div class="form-group mb-3"><label class="block text-xs font-bold text-on-surface-variant mb-1">' + tr('Endpoint URL', 'رابط الخدمة') + '</label>' +
+      '<input class="form-input w-full" id="intUrl" value="' + (item.endpoint_url || '') + '"></div>' +
+      '<div class="form-group mb-3"><label class="block text-xs font-bold text-on-surface-variant mb-1">' + tr('API Key / Client ID', 'مفتاح API') + '</label>' +
+      '<input class="form-input w-full" id="intKey" value="' + (item.api_key || '') + '" type="password"></div>' +
+      '<div class="form-group mb-3"><label class="block text-xs font-bold text-on-surface-variant mb-1">' + tr('API Secret / Client Secret', 'السر البرمجي') + '</label>' +
+      '<input class="form-input w-full" id="intSecret" value="' + (item.api_secret || '') + '" type="password"></div>' +
+      '<div class="form-group mb-3"><label class="block text-xs font-bold text-on-surface-variant mb-1">' + tr('Custom Configurations (JSON)', 'إعدادات إضافية (JSON)') + '</label>' +
+      '<textarea class="form-input w-full" id="intConfig" rows="3">' + (item.config_json || '{}') + '</textarea></div>' +
+      '<div style="display:flex;gap:12px;margin-top:16px">' +
+      '<button class="btn btn-primary" id="btnSaveInt" style="flex:1">💾 ' + tr('Save Settings', 'حفظ الإعدادات') + '</button>' +
+      '<button class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()" style="flex:1">' + tr('Cancel', 'إلغاء') + '</button>' +
+      '</div></div>';
+  } else {
+    modal.innerHTML = `
+      <div style="background:var(--bg-card,#fff);border-radius:16px;padding:24px;width:min(920px,96vw);max-height:92vh;overflow-y:auto;direction:rtl">
+        <h3 style="margin:0 0 8px;color:var(--primary)">${tr('ZATCA / Fatoora Configuration', 'إعدادات الزكاة والدخل (فاتورة)')}</h3>
+        <p style="margin:0 0 16px;color:var(--text-dim,#666);font-size:12px">
+          ${tr('OTP is operational and temporary only: do not store it in settings. Keep it for onboarding request execution only.', 'رمز OTP تشغيلي ومؤقت فقط: لا يتم حفظه ضمن الإعدادات. يُستخدم فقط أثناء تنفيذ طلب التهيئة.')}
+        </p>
+        <div style="margin:0 0 16px;padding:12px 14px;border-radius:12px;background:rgba(15,118,110,.08);color:var(--text-dim,#666);font-size:12px;line-height:1.7">
+          <strong style="color:var(--primary)">${tr('Minimum data you should complete before enabling ZATCA:', 'البيانات الأساسية التي يجب تعبئتها قبل تفعيل ZATCA:')}</strong><br>
+          ${tr('Legal entity name, distinguished/VAT number, commercial registration, CSR common name, and the certificate keys/CSID for live submission.', 'اسم المنشأة القانوني، الرقم المميز أو الرقم الضريبي، السجل التجاري، الاسم العام للشهادة CSR، ومفاتيح الشهادة وبيانات CSID للإرسال الفعلي.')}
+          <br>${tr('Common name and CSR serial are suggested automatically from your saved company profile, then can be adjusted before onboarding.', 'سيتم اقتراح الاسم العام للشهادة والرقم التسلسلي تلقائياً من ملف المنشأة المحفوظ، ويمكن تعديلهما قبل التهيئة.')}
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">
+          <div class="form-group">
+            <label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Provider Name', 'اسم المزود')}</label>
+            <input class="form-input w-full" id="intProvider" value="${escapeHTML(item.provider || 'ZATCA')}">
+          </div>
+          <div class="form-group">
+            <label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Environment', 'البيئة')}</label>
+            <select class="form-input w-full" id="zatcaEnv">
+              <option value="sandbox" ${zatcaCfg.environment === 'sandbox' ? 'selected' : ''}>Sandbox</option>
+              <option value="simulation" ${zatcaCfg.environment === 'simulation' ? 'selected' : ''}>Simulation</option>
+              <option value="production" ${zatcaCfg.environment === 'production' ? 'selected' : ''}>Production</option>
+            </select>
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Endpoint URL', 'رابط الخدمة')}</label>
+            <input class="form-input w-full" id="intUrl" value="${escapeHTML(item.endpoint_url || '')}" placeholder="https://gw-fatoora.zatca.gov.sa/e-invoicing/...">
+          </div>
+          <div class="form-group">
+            <label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Production/Compliance CSID', 'معرف الختم CSID')}</label>
+            <input class="form-input w-full" id="intKey" value="${escapeHTML(item.api_key || '')}" type="password">
+          </div>
+          <div class="form-group">
+            <label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('CSID Secret', 'سر CSID')}</label>
+            <input class="form-input w-full" id="intSecret" value="${escapeHTML(item.api_secret || '')}" type="password">
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('SDK Home Path (Optional)', 'مسار SDK (اختياري)')}</label>
+            <input class="form-input w-full" id="zatcaSdkHome" value="${escapeHTML(zatcaCfg.sdk_home_path || '')}" placeholder="C:/Users/ice/Desktop/zatca-einvoicing-sdk-238-R4.0.0">
+          </div>
+        </div>
+
+        <h4 style="margin:18px 0 8px;color:var(--primary)">🔐 ${tr('Phase-2 Keys', 'مفاتيح المرحلة الثانية')}</h4>
+        <div style="display:grid;grid-template-columns:1fr;gap:10px">
+          <div class="form-group">
+            <label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Private Key PEM', 'المفتاح الخاص PEM')}</label>
+            <textarea class="form-input w-full" id="zatcaPrivPem" rows="4" placeholder="-----BEGIN PRIVATE KEY----- ...">${escapeHTML(zatcaCfg.private_key_pem || '')}</textarea>
+          </div>
+          <div class="form-group">
+            <label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Public Key PEM', 'المفتاح العام PEM')}</label>
+            <textarea class="form-input w-full" id="zatcaPubPem" rows="4" placeholder="-----BEGIN PUBLIC KEY----- ...">${escapeHTML(zatcaCfg.public_key_pem || '')}</textarea>
+          </div>
+        </div>
+
+        <h4 style="margin:18px 0 8px;color:var(--primary)">🧾 ${tr('CSR Profile', 'ملف CSR')}</h4>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">
+          <div class="form-group"><label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('CSR Common Name (CN)', 'الاسم العام للشهادة (CN)')}</label><input class="form-input w-full" id="csrCommonName" value="${escapeHTML(zatcaCfg.csr_profile.commonName || '')}" placeholder="${escapeHTML(derivedCsrCommonName || tr('Legal entity / branch display name', 'اسم المنشأة أو الفرع'))}"></div>
+          <div class="form-group"><label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('CSR Serial / EGS Serial (SN)', 'الرقم التسلسلي للشهادة أو جهاز الفوترة (SN)')}</label><input class="form-input w-full" id="csrSerialNumber" value="${escapeHTML(zatcaCfg.csr_profile.serialNumber || '')}" placeholder="${escapeHTML(derivedCsrSerialNumber || `1-ERP|2-${fallbackCrNumber || 'CR'}|3-${fallbackTaxNumber || 'VAT'}`)}"></div>
+          <div class="form-group"><label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Distinguished / VAT Number', 'الرقم المميز / الرقم الضريبي')}</label><input class="form-input w-full" id="csrOrgId" value="${escapeHTML(zatcaCfg.csr_profile.organizationIdentifier || '')}" placeholder="${escapeHTML(fallbackTaxNumber || '3xxxxxxxxxxxxxx')}"></div>
+          <div class="form-group"><label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Commercial Registration', 'السجل التجاري')}</label><input class="form-input w-full" id="csrCommercialReg" value="${escapeHTML(zatcaCfg.csr_profile.commercialRegistrationNumber || '')}" placeholder="${escapeHTML(fallbackCrNumber || '1010xxxxxx')}"></div>
+          <div class="form-group"><label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Organization Unit / Branch', 'الوحدة التنظيمية / الفرع')}</label><input class="form-input w-full" id="csrOu" value="${escapeHTML(zatcaCfg.csr_profile.organizationUnitName || '')}" placeholder="${tr('Main Branch', 'الفرع الرئيسي')}"></div>
+          <div class="form-group"><label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Legal Entity Name', 'الاسم القانوني للمنشأة')}</label><input class="form-input w-full" id="csrOrgName" value="${escapeHTML(zatcaCfg.csr_profile.organizationName || '')}" placeholder="${escapeHTML(fallbackCompanyName || tr('Hospital / company legal name', 'الاسم القانوني للمنشأة'))}"></div>
+          <div class="form-group"><label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Country Code', 'رمز الدولة')}</label><input class="form-input w-full" id="csrCountry" value="${escapeHTML(zatcaCfg.csr_profile.countryName || 'SA')}" placeholder="SA"></div>
+          <div class="form-group"><label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Invoice Type', 'نوع الفاتورة')}</label><input class="form-input w-full" id="csrInvoiceType" value="${escapeHTML(zatcaCfg.csr_profile.invoiceType || '1100')}"></div>
+          <div class="form-group"><label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Registered City / Location', 'المدينة / الموقع المسجل')}</label><input class="form-input w-full" id="csrLocation" value="${escapeHTML(zatcaCfg.csr_profile.location || '')}" placeholder="${tr('Riyadh', 'الرياض')}"></div>
+          <div class="form-group"><label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Industry', 'النشاط')}</label><input class="form-input w-full" id="csrIndustry" value="${escapeHTML(zatcaCfg.csr_profile.industry || 'Medical')}" placeholder="Medical"></div>
+        </div>
+
+        <div class="form-group" style="margin-top:12px">
+          <label class="block text-xs font-bold text-on-surface-variant mb-1">${tr('Operational OTP (do not save)', 'OTP تشغيلي (لا يتم حفظه)')}</label>
+          <input class="form-input w-full" id="zatcaOtpTransient" value="" type="password" placeholder="${tr('Use at runtime only in terminal/API call', 'يستخدم وقت التشغيل فقط في الطرفية/الطلب')}" autocomplete="off">
+        </div>
+
+        <div style="display:flex;gap:12px;margin-top:16px">
+          <button class="btn btn-primary" id="btnSaveInt" style="flex:1">💾 ${tr('Save ZATCA Settings', 'حفظ إعدادات الزكاة والدخل')}</button>
+          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()" style="flex:1">${tr('Cancel', 'إلغاء')}</button>
+        </div>
+      </div>`;
+  }
+
   document.body.appendChild(modal);
   modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
-  
+
   document.getElementById('btnSaveInt').onclick = async () => {
     try {
       const body = {
@@ -12600,18 +12859,122 @@ window.openIntegrationConfig = (name) => {
         provider: document.getElementById('intProvider').value,
         endpoint_url: document.getElementById('intUrl').value,
         is_enabled: item.is_enabled,
-        config_json: document.getElementById('intConfig').value
+        config_json: '{}'
       };
       body['api_key'] = document.getElementById('intKey').value;
       body['api_secret'] = document.getElementById('intSecret').value;
-      JSON.parse(body.config_json);
-      
+
+      if (isNphies) {
+        const cfg = {
+          sandbox_mode: !!document.getElementById('nphiesSandboxMode').checked,
+          fhir_version: (document.getElementById('nphiesFhirVersion').value || 'R4').toUpperCase(),
+          provider_license: (document.getElementById('nphiesProviderLicense').value || '').trim(),
+          payer_license: (document.getElementById('nphiesPayerLicense').value || '').trim(),
+          eligibility_path: (document.getElementById('nphiesEligibilityPath').value || '/CoverageEligibilityRequest').trim(),
+          prior_auth_path: (document.getElementById('nphiesPriorAuthPath').value || '/Claim/$prior-auth').trim(),
+          claim_submit_path: (document.getElementById('nphiesClaimSubmitPath').value || '/Claim/$submit').trim(),
+          communication_path: (document.getElementById('nphiesCommunicationPath').value || '/Communication').trim(),
+          use_oauth2: !!document.getElementById('nphiesUseOauth2').checked
+        };
+
+        if (parseInt(item.is_enabled, 10) === 1) {
+          const missing = [];
+          if (!cfg.provider_license) missing.push(tr('Provider License', 'ترخيص مقدم الخدمة'));
+          if (!cfg.payer_license) missing.push(tr('Payer License', 'ترخيص شركة التأمين'));
+          if (missing.length) {
+            throw new Error(tr('Missing required NPHIES data: ', 'بيانات NPHIES المطلوبة ناقصة: ') + missing.join(' , '));
+          }
+        }
+        const paths = [cfg.eligibility_path, cfg.prior_auth_path, cfg.claim_submit_path, cfg.communication_path];
+        if (paths.some((p) => !String(p || '').startsWith('/'))) {
+          throw new Error(tr('All NPHIES paths must start with "/"', 'كل مسارات NPHIES يجب أن تبدأ بـ "/"'));
+        }
+        if (cfg.fhir_version !== 'R4') {
+          throw new Error(tr('NPHIES currently supports FHIR version R4 only.', 'NPHIES يدعم حالياً إصدار FHIR R4 فقط.'));
+        }
+        body.config_json = JSON.stringify(cfg);
+      } else if (isCbahi) {
+        const cfg = {
+          standards_version: (document.getElementById('cbahiStandardsVersion').value || '').trim(),
+          facility_license_number: (document.getElementById('cbahiFacilityLicense').value || '').trim(),
+          self_assessment_frequency: String(document.getElementById('cbahiFrequency').value || 'quarterly').toLowerCase(),
+          sentinel_reporting_enabled: !!document.getElementById('cbahiSentinelEnabled').checked,
+          quality_committee_owner: (document.getElementById('cbahiCommitteeOwner').value || '').trim()
+        };
+        const allowed = new Set(['monthly', 'quarterly', 'semiannual', 'annual']);
+
+        if (parseInt(item.is_enabled, 10) === 1) {
+          const missing = [];
+          if (!cfg.standards_version) missing.push(tr('Standards Version', 'إصدار المعايير'));
+          if (!cfg.facility_license_number) missing.push(tr('Facility License Number', 'رقم ترخيص المنشأة'));
+          if (missing.length) {
+            throw new Error(tr('Missing required CBAHI data: ', 'بيانات CBAHI المطلوبة ناقصة: ') + missing.join(' , '));
+          }
+        }
+        if (!allowed.has(cfg.self_assessment_frequency)) {
+          throw new Error(tr('Invalid CBAHI self-assessment frequency.', 'قيمة تكرار التقييم الذاتي في CBAHI غير صحيحة.'));
+        }
+        body.config_json = JSON.stringify(cfg);
+      } else if (!isZatca) {
+        body.config_json = document.getElementById('intConfig').value;
+        JSON.parse(body.config_json);
+      } else {
+        const csrSerialPattern = /^1-[^|]+\|2-[^|]+\|3-[^|]+$/;
+        const csrCommonName = document.getElementById('csrCommonName').value || derivedCsrCommonName || '';
+        const csrSerialNumber = document.getElementById('csrSerialNumber').value || derivedCsrSerialNumber || '';
+        const cfg = {
+          environment: (document.getElementById('zatcaEnv').value || 'sandbox').toLowerCase(),
+          private_key_pem: document.getElementById('zatcaPrivPem').value || '',
+          public_key_pem: document.getElementById('zatcaPubPem').value || '',
+          sdk_home_path: document.getElementById('zatcaSdkHome').value || '',
+          csr_profile: {
+            commonName: csrCommonName,
+            serialNumber: csrSerialNumber,
+            organizationIdentifier: document.getElementById('csrOrgId').value || '',
+            commercialRegistrationNumber: document.getElementById('csrCommercialReg').value || '',
+            organizationUnitName: document.getElementById('csrOu').value || '',
+            organizationName: document.getElementById('csrOrgName').value || '',
+            countryName: document.getElementById('csrCountry').value || 'SA',
+            invoiceType: document.getElementById('csrInvoiceType').value || '1100',
+            location: document.getElementById('csrLocation').value || '',
+            industry: document.getElementById('csrIndustry').value || 'Medical'
+          }
+        };
+
+        if (parseInt(item.is_enabled, 10) === 1) {
+          const missing = [];
+          if (!cfg.csr_profile.commonName.trim()) missing.push(tr('CSR Common Name', 'اسم الشهادة العام'));
+          if (!cfg.csr_profile.serialNumber.trim()) missing.push(tr('CSR Serial / EGS Serial', 'الرقم التسلسلي للشهادة / جهاز الفوترة'));
+          if (!cfg.csr_profile.organizationIdentifier.trim()) missing.push(tr('Distinguished / VAT Number', 'الرقم المميز / الرقم الضريبي'));
+          if (!cfg.csr_profile.commercialRegistrationNumber.trim()) missing.push(tr('Commercial Registration', 'السجل التجاري'));
+          if (!cfg.csr_profile.organizationName.trim()) missing.push(tr('Legal Entity Name', 'الاسم القانوني للمنشأة'));
+          if (missing.length) {
+            throw new Error(tr('Missing required ZATCA data: ', 'بيانات ZATCA المطلوبة ناقصة: ') + missing.join(' , '));
+          }
+          if (!csrSerialPattern.test(cfg.csr_profile.serialNumber.trim())) {
+            throw new Error(tr('CSR Serial format must be: 1-<software>|2-<model>|3-<serial>', 'صيغة الرقم التسلسلي CSR يجب أن تكون: 1-<البرنامج>|2-<الطراز>|3-<الرقم>'));
+          }
+          const serialParts = cfg.csr_profile.serialNumber.trim().split('|');
+          const part2 = (serialParts[1] || '').replace(/^2-/, '').trim().toUpperCase();
+          const part3 = (serialParts[2] || '').replace(/^3-/, '').trim().toUpperCase();
+          if (part2 === 'CR' || part3 === 'VAT') {
+            throw new Error(tr('CSR Serial cannot use placeholder values like CR or VAT. Replace with real model and serial identifiers.', 'لا يمكن أن يحتوي الرقم التسلسلي CSR على قيم افتراضية مثل CR أو VAT. استبدلها بمعرفات حقيقية للطراز والرقم التسلسلي.'));
+          }
+        }
+
+        const otpTransient = document.getElementById('zatcaOtpTransient')?.value || '';
+        if (otpTransient) {
+          showToast(tr('OTP is intentionally not saved. Use it in runtime onboarding call only.', 'لن يتم حفظ OTP عمدًا. استخدمه فقط وقت تنفيذ طلب التهيئة.'), 'warning');
+        }
+        body.config_json = JSON.stringify(cfg);
+      }
+
       await API.post('/api/settings/integrations', body);
       showToast(tr('Integration settings saved successfully', 'تم حفظ إعدادات الربط والامتثال'));
       modal.remove();
       navigateTo(currentPage);
     } catch (e) {
-      showToast(tr('Error saving (check JSON format)', 'خطأ في الحفظ (تحقق من صياغة JSON)'), 'error');
+      showToast(e.message || tr(`Error saving ${name} settings`, `خطأ في حفظ إعدادات ${name}`), 'error');
     }
   };
 };
