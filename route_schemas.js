@@ -314,6 +314,50 @@ const medicalRecordsRequestUpdate = {
     status: { type: 'enumOf', required: true, allowed: ['Requested', 'In Progress', 'Delivered', 'Returned', 'Cancelled'] }
 };
 
+// POST /api/medical-records/:id/amend
+const medicalRecordAmend = {
+    reason:             { type: 'str', required: true, max: 500 },
+    new_values_summary: { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/medical-records/coding
+const medicalRecordsCodingCreate = {
+    patient_id:           { type: 'id', required: false },
+    visit_id:             { type: 'id', required: false },
+    primary_diagnosis:    { type: 'str', required: false, max: 500 },
+    primary_icd10:        { type: 'str', required: false, max: 60 },
+    secondary_diagnoses:  { type: 'str', required: false, max: 4000 },
+    drg_code:             { type: 'str', required: false, max: 60 },
+    notes:                { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/him/coding
+const himCodingCreate = {
+    patient_id:    { type: 'id', required: true },
+    encounter_ref: { type: 'id', required: false },
+    code_system:   { type: 'enumOf', required: false, allowed: ['ICD10', 'SNOMED', 'CPT'] },
+    code:          { type: 'str', required: true, max: 80 },
+    description:   { type: 'str', required: false, max: 1000 }
+};
+
+// POST /api/him/roi
+const himRoiCreate = {
+    patient_id: { type: 'id', required: true },
+    requester:  { type: 'str', required: true, max: 300 },
+    purpose:    { type: 'str', required: false, max: 1000 }
+};
+
+// PUT /api/him/roi/:id
+const himRoiUpdate = {
+    action: { type: 'enumOf', required: true, allowed: ['approve', 'deny', 'release'] }
+};
+
+// POST /api/him/break-glass
+const himBreakGlass = {
+    patient_id: { type: 'id', required: true },
+    reason:     { type: 'str', required: true, max: 1000 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -350,5 +394,11 @@ module.exports = {
     nphiesClaimStatusInquiry,
     nphiesRemittanceCreate,
     medicalRecordsRequestCreate,
-    medicalRecordsRequestUpdate
+    medicalRecordsRequestUpdate,
+    medicalRecordAmend,
+    medicalRecordsCodingCreate,
+    himCodingCreate,
+    himRoiCreate,
+    himRoiUpdate,
+    himBreakGlass
 };

@@ -2445,7 +2445,7 @@ app.post('/api/medical/records', requireAuth, requireRole('doctor', 'nursing'), 
 // ===== EMR LOCK / SIGNATURE (Phase A1) — sign+lock, amend (no silent edit after lock); tenant-scoped via RLS =====
 // SIGNATURE ATTRIBUTION: signing+locking a physician medical record is a PHYSICIAN act only.
 // Nurses document via nursing_vitals / assessments / MAR — they must not sign medical_records.
-app.post('/api/medical-records/:id/sign', requireAuth, requireRole('doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/medical-records/:id/sign', requireAuth, requireRole('doctor'), requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const crypto = require('crypto');
         const id = parseInt(req.params.id, 10);
@@ -2464,7 +2464,7 @@ app.post('/api/medical-records/:id/sign', requireAuth, requireRole('doctor'), re
 });
 
 // Amending a locked physician record is a PHYSICIAN act (signature attribution).
-app.post('/api/medical-records/:id/amend', requireAuth, requireRole('doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/medical-records/:id/amend', requireAuth, requireRole('doctor'), requireTenantScope, validateBody(RS.medicalRecordAmend), idempotencyGuard, async (req, res) => {
     try {
         const id = parseInt(req.params.id, 10);
         const { tenantId } = getRequestTenantContext(req);
@@ -13986,7 +13986,7 @@ app.get('/api/medical-records/coding', requireAuth, requireTenantScope, async (r
         res.json((await pool.query('SELECT * FROM medical_records_coding WHERE tenant_id=$1 ORDER BY id DESC', [tenantId])).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/medical-records/coding', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/medical-records/coding', requireAuth, requireTenantScope, validateBody(RS.medicalRecordsCodingCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, visit_id, primary_diagnosis, primary_icd10, secondary_diagnoses, drg_code, notes } = req.body;
         const { tenantId } = getRequestTenantContext(req);
@@ -14097,7 +14097,7 @@ app.get('/api/him/coding', requireAuth, requireRole('him', 'medical-records'), r
         res.json((await pool.query(sql, params)).rows);
     } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/him/coding', requireAuth, requireRole('him', 'medical-records'), requireTenantScope, async (req, res) => {
+app.post('/api/him/coding', requireAuth, requireRole('him', 'medical-records'), requireTenantScope, validateBody(RS.himCodingCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
         const actor = req.session.user;
@@ -14146,7 +14146,7 @@ app.get('/api/him/roi', requireAuth, requireRole('him', 'medical-records'), requ
         res.json((await pool.query('SELECT * FROM roi_requests WHERE tenant_id=$1 ORDER BY id DESC LIMIT 500', [tenantId])).rows);
     } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/him/roi', requireAuth, requireRole('him', 'medical-records'), requireTenantScope, async (req, res) => {
+app.post('/api/him/roi', requireAuth, requireRole('him', 'medical-records'), requireTenantScope, validateBody(RS.himRoiCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
         const actor = req.session.user;
@@ -14161,7 +14161,7 @@ app.post('/api/him/roi', requireAuth, requireRole('him', 'medical-records'), req
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/him/roi/:id', requireAuth, requireRole('him', 'medical-records'), requireTenantScope, async (req, res) => {
+app.put('/api/him/roi/:id', requireAuth, requireRole('him', 'medical-records'), requireTenantScope, validateBody(RS.himRoiUpdate), idempotencyGuard, async (req, res) => {
     try {
         const actor = req.session.user;
         const id = parseInt(req.params.id, 10);
@@ -14221,7 +14221,7 @@ app.get('/api/him/access-log', requireAuth, requireRole('him', 'medical-records'
 });
 
 // 4b) BREAK-GLASS — emergency access: REQUIRES a reason, records break_glass access + raises BREAK_GLASS audit alert.
-app.post('/api/him/break-glass', requireAuth, requireRole('him', 'medical-records'), requireTenantScope, async (req, res) => {
+app.post('/api/him/break-glass', requireAuth, requireRole('him', 'medical-records'), requireTenantScope, validateBody(RS.himBreakGlass), idempotencyGuard, async (req, res) => {
     try {
         if (!isHimOrAdmin(req)) return res.status(403).json({ error: 'Access denied' }); // strict HIM/Admin only
         const { tenantId, facilityId } = getRequestTenantContext(req);
