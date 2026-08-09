@@ -19081,7 +19081,7 @@ app.get('/api/clinical/records', requireAuth, requireRole('patients'), requireTe
 });
 
 // 6. POST /api/clinical/records - Save EMR record (insert/update)
-app.post('/api/clinical/records', requireAuth, requireRole('patients'), requireTenantScope, async (req, res) => {
+app.post('/api/clinical/records', requireAuth, requireRole('patients'), requireTenantScope, validateBody(RS.clinicalRecordUpsert), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { id, patient_id, template_id, record_data } = req.body;

@@ -30,6 +30,7 @@ const schemas = fs.readFileSync(path.join(__dirname, 'route_schemas.js'), 'utf8'
 assert(
   server.includes("app.post('/api/clinical/departments',requireAuth,requireRole('Admin'),requireTenantScope,validateBody(RS.clinicalDepartmentUpsert),idempotencyGuard,async(req,res)=>{") &&
   server.includes("app.post('/api/clinical/templates',requireAuth,requireRole('Admin'),requireTenantScope,validateBody(RS.clinicalTemplateCreate),idempotencyGuard,async(req,res)=>{") &&
+  server.includes("app.post('/api/clinical/records',requireAuth,requireRole('patients'),requireTenantScope,validateBody(RS.clinicalRecordUpsert),idempotencyGuard,async(req,res)=>{") &&
   server.includes("app.post('/api/clinical/notes',requireAuth,requireRole('patients'),requireTenantScope,validateBody(RS.clinicalNoteUpsert),idempotencyGuard,async(req,res)=>{") &&
   server.includes("app.post('/api/clinical/notes/:id/lock',requireAuth,requireRole('patients'),requireTenantScope,idempotencyGuard,async(req,res)=>{") &&
   server.includes("app.post('/api/clinical/smart-templates',requireAuth,requireRole('patients'),requireTenantScope,validateBody(RS.clinicalSmartTemplateUpsert),idempotencyGuard,async(req,res)=>{"),
@@ -39,6 +40,7 @@ assert(
 assert(
   schemas.includes('constclinicalDepartmentUpsert={') &&
   schemas.includes('constclinicalTemplateCreate={') &&
+  schemas.includes('constclinicalRecordUpsert={') &&
   schemas.includes('constclinicalNoteUpsert={') &&
   schemas.includes('constclinicalSmartTemplateUpsert={') &&
   schemas.includes("code:{type:'str',required:true,max:80}") &&

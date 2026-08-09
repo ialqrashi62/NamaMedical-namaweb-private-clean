@@ -635,6 +635,13 @@ const clinicalSmartTemplateUpsert = {
     template_text: { type: 'str', required: true, max: 12000 }
 };
 
+// POST /api/clinical/records (primary route)
+const clinicalRecordUpsert = {
+    id:         { type: 'id', required: false },
+    patient_id: { type: 'id', required: true },
+    template_id:{ type: 'id', required: false }
+};
+
 // POST /api/lab/samples
 const labSampleCreate = {
     lab_order_id: { type: 'id', required: false },
@@ -810,6 +817,7 @@ module.exports = {
     clinicalAiAsk,
     clinicalDepartmentUpsert,
     clinicalTemplateCreate,
+    clinicalRecordUpsert,
     clinicalNoteUpsert,
     clinicalSmartTemplateUpsert,
     labSampleCreate,
