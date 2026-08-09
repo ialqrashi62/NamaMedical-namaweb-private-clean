@@ -3971,7 +3971,7 @@ app.get('/api/pharmacy/low-stock', requireAuth, requireTenantScope, async (req, 
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/pharmacy/drugs', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/pharmacy/drugs', requireAuth, requireTenantScope, validateBody(RS.pharmacyDrugCreate), idempotencyGuard, async (req, res) => {
     try {
         const { drug_name, active_ingredient, category, unit, selling_price, cost_price, stock_qty } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -15370,7 +15370,7 @@ app.get('/api/pharmacy/drugs', requireAuth, requireTenantScope, async (req, res)
 });
 
 // Add drug to catalog
-app.post('/api/pharmacy/drugs', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/pharmacy/drugs', requireAuth, requireTenantScope, validateBody(RS.pharmacyDrugCreate), idempotencyGuard, async (req, res) => {
     try {
         const { drug_name, selling_price, stock_qty, category, active_ingredient } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -15442,7 +15442,7 @@ app.get('/api/pharmacy/batches', requireAuth, requireRole('pharmacy'), requireTe
 });
 
 // --- POST receive a drug batch (FEFO lot) ---
-app.post('/api/pharmacy/batches', requireAuth, requireRole('pharmacy'), requireTenantScope, async (req, res) => {
+app.post('/api/pharmacy/batches', requireAuth, requireRole('pharmacy'), requireTenantScope, validateBody(RS.pharmacyBatchCreate), idempotencyGuard, async (req, res) => {
     try {
         const { drug_id, drug_name, lot, expiry_date, qty_received, cost_price, supplier_id } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -15468,7 +15468,7 @@ app.post('/api/pharmacy/batches', requireAuth, requireRole('pharmacy'), requireT
 
 // --- PUT pharmacist VERIFY: re-run E1 CDS engine (allergy + dose + drug-drug) at the pharmacist checkpoint ---
 // Active meds are derived SERVER-SIDE (getPatientActiveMeds) — never trusted from the client (E1 CRITICAL-2 lesson).
-app.put('/api/pharmacy/queue/:id/verify', requireAuth, requireRole('pharmacy'), requireTenantScope, async (req, res) => {
+app.put('/api/pharmacy/queue/:id/verify', requireAuth, requireRole('pharmacy'), requireTenantScope, validateBody(RS.pharmacyQueueVerify), idempotencyGuard, async (req, res) => {
     try {
         const { override_reason } = req.body;
         const { tenantId } = getRequestTenantContext(req);
@@ -15529,7 +15529,7 @@ app.put('/api/pharmacy/queue/:id/verify', requireAuth, requireRole('pharmacy'), 
 
 // --- POST FEFO DISPENSE (by barcode or drug_id): single transaction, decrements earliest non-expired batch first ---
 // Requires the queue item to be 'Verified'. Controlled drugs require a witness (fail-closed).
-app.post('/api/pharmacy/dispense', requireAuth, requireRole('pharmacy'), requireTenantScope, async (req, res) => {
+app.post('/api/pharmacy/dispense', requireAuth, requireRole('pharmacy'), requireTenantScope, validateBody(RS.pharmacyDispense), idempotencyGuard, async (req, res) => {
     try {
         const { prescription_id, barcode, drug_id: bodyDrugId, quantity, witness_user_id, price, payment_method } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -15660,7 +15660,7 @@ app.post('/api/pharmacy/dispense', requireAuth, requireRole('pharmacy'), require
 
 // --- Wasfaty / NPHIES coverage stub (gated; NO external call) ---
 // Behind WASFATY_ENABLED. Records coverage INTENT only — never opens a real connection.
-app.post('/api/pharmacy/wasfaty/dispense-intent', requireAuth, requireRole('pharmacy'), requireTenantScope, async (req, res) => {
+app.post('/api/pharmacy/wasfaty/dispense-intent', requireAuth, requireRole('pharmacy'), requireTenantScope, validateBody(RS.pharmacyWasfatyDispenseIntent), idempotencyGuard, async (req, res) => {
     if (String(process.env.WASFATY_ENABLED || '').toLowerCase() !== 'true') {
         return res.status(503).json({ error: 'Wasfaty/NPHIES integration disabled', enabled: false });
     }
@@ -16036,7 +16036,7 @@ app.delete('/api/patients/:id', requireAuth, async (req, res) => {
 });
 
 // ===== PHARMACY STOCK DEDUCTION ON DISPENSE =====
-app.post('/api/pharmacy/deduct-stock', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/pharmacy/deduct-stock', requireAuth, requireTenantScope, validateBody(RS.pharmacyDeductStock), idempotencyGuard, async (req, res) => {
     try {
         const { drug_id, drug_name, quantity, patient_id, prescription_id, reason } = req.body;
         const { tenantId } = getRequestTenantContext(req);
@@ -18357,7 +18357,7 @@ app.get('/api/pharmacy/prescriptions', requireAuth, requireTenantScope, async (r
         res.json((await pool.query(query, params)).rows);
     } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/pharmacy/prescriptions', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/pharmacy/prescriptions', requireAuth, requireTenantScope, validateBody(RS.pharmacyPrescriptionCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, patient_name, medication, drug_name, dosage, frequency, duration, quantity, doctor, status, notes } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -18372,7 +18372,7 @@ app.post('/api/pharmacy/prescriptions', requireAuth, requireTenantScope, async (
         res.json(r.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/pharmacy/prescriptions/:id', requireAuth, requireTenantScope, async (req, res) => {
+app.put('/api/pharmacy/prescriptions/:id', requireAuth, requireTenantScope, validateBody(RS.pharmacyPrescriptionUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { status } = req.body;
         const { tenantId } = getRequestTenantContext(req);
@@ -20104,7 +20104,7 @@ app.get('/api/pharmacy/controlled-substances', requireAuth, requireRole('pharmac
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/pharmacy/controlled-substances/reconcile', requireAuth, requireRole('pharmacist', 'pharmacy'), requireTenantScope, async (req, res) => {
+app.post('/api/pharmacy/controlled-substances/reconcile', requireAuth, requireRole('pharmacist', 'pharmacy'), requireTenantScope, validateBody(RS.controlledSubstanceReconcile), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { drug_name, drug_code, schedule_class, dosage_form, strength, unit, opening_balance, received_qty, dispensed_qty, wasted_qty, closing_balance, discrepancy, record_date, location, witnessed_by, notes } = req.body;
@@ -20130,7 +20130,7 @@ app.post('/api/pharmacy/controlled-substances/reconcile', requireAuth, requireRo
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/pharmacy/controlled-substances/dispense', requireAuth, requireRole('pharmacist', 'pharmacy', 'nurse'), requireTenantScope, async (req, res) => {
+app.post('/api/pharmacy/controlled-substances/dispense', requireAuth, requireRole('pharmacist', 'pharmacy', 'nurse'), requireTenantScope, validateBody(RS.controlledSubstanceDispense), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { cs_id, prescription_id, patient_id, quantity, witness2_name, witness2_id, reason, waste_amount, waste_reason } = req.body;

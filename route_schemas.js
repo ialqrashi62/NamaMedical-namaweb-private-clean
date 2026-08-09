@@ -396,6 +396,110 @@ const clinicalPharmacyEducationCreate = {
     precautions:   { type: 'str', required: false, max: 4000 }
 };
 
+// POST /api/pharmacy/drugs
+const pharmacyDrugCreate = {
+    drug_name:          { type: 'str', required: true, max: 300 },
+    selling_price:      { type: 'num', required: false, min: 0 },
+    stock_qty:          { type: 'int', required: false, min: 0 },
+    category:           { type: 'str', required: false, max: 120 },
+    active_ingredient:  { type: 'str', required: false, max: 300 }
+};
+
+// POST /api/pharmacy/batches
+const pharmacyBatchCreate = {
+    drug_id:        { type: 'id', required: false },
+    drug_name:      { type: 'str', required: false, max: 300 },
+    lot:            { type: 'str', required: false, max: 120 },
+    expiry_date:    { type: 'dateStr', required: true },
+    qty_received:   { type: 'int', required: true, min: 1 },
+    cost_price:     { type: 'num', required: false, min: 0 },
+    supplier_id:    { type: 'id', required: false }
+};
+
+// PUT /api/pharmacy/queue/:id/verify
+const pharmacyQueueVerify = {
+    override_reason: { type: 'str', required: false, max: 1000 }
+};
+
+// POST /api/pharmacy/dispense
+const pharmacyDispense = {
+    prescription_id: { type: 'id', required: true },
+    barcode:         { type: 'str', required: false, max: 120 },
+    drug_id:         { type: 'id', required: false },
+    quantity:        { type: 'int', required: true, min: 1 },
+    witness_user_id: { type: 'id', required: false },
+    price:           { type: 'num', required: false, min: 0 },
+    payment_method:  { type: 'str', required: false, max: 80 }
+};
+
+// POST /api/pharmacy/wasfaty/dispense-intent
+const pharmacyWasfatyDispenseIntent = {
+    prescription_id: { type: 'id', required: true }
+};
+
+// POST /api/pharmacy/deduct-stock
+const pharmacyDeductStock = {
+    drug_id:          { type: 'id', required: true },
+    drug_name:        { type: 'str', required: false, max: 300 },
+    quantity:         { type: 'int', required: true, min: 1 },
+    patient_id:       { type: 'id', required: false },
+    prescription_id:  { type: 'id', required: false },
+    reason:           { type: 'str', required: false, max: 500 }
+};
+
+// POST /api/pharmacy/prescriptions
+const pharmacyPrescriptionCreate = {
+    patient_id:    { type: 'id', required: false },
+    patient_name:  { type: 'str', required: false, max: 200 },
+    medication:    { type: 'str', required: false, max: 300 },
+    drug_name:     { type: 'str', required: false, max: 300 },
+    dosage:        { type: 'str', required: false, max: 120 },
+    frequency:     { type: 'str', required: false, max: 120 },
+    duration:      { type: 'str', required: false, max: 120 },
+    quantity:      { type: 'num', required: false, min: 0 },
+    doctor:        { type: 'str', required: false, max: 200 },
+    status:        { type: 'str', required: false, max: 60 },
+    notes:         { type: 'str', required: false, max: 4000 }
+};
+
+// PUT /api/pharmacy/prescriptions/:id
+const pharmacyPrescriptionUpdate = {
+    status: { type: 'str', required: true, max: 60 }
+};
+
+// POST /api/pharmacy/controlled-substances/reconcile
+const controlledSubstanceReconcile = {
+    drug_name:        { type: 'str', required: true, max: 300 },
+    drug_code:        { type: 'str', required: true, max: 120 },
+    schedule_class:   { type: 'str', required: false, max: 40 },
+    dosage_form:      { type: 'str', required: false, max: 120 },
+    strength:         { type: 'str', required: false, max: 120 },
+    unit:             { type: 'str', required: false, max: 40 },
+    opening_balance:  { type: 'num', required: false, min: 0 },
+    received_qty:     { type: 'num', required: false, min: 0 },
+    dispensed_qty:    { type: 'num', required: false, min: 0 },
+    wasted_qty:       { type: 'num', required: false, min: 0 },
+    closing_balance:  { type: 'num', required: false, min: 0 },
+    discrepancy:      { type: 'num', required: false, min: 0 },
+    record_date:      { type: 'dateStr', required: false },
+    location:         { type: 'str', required: false, max: 200 },
+    witnessed_by:     { type: 'str', required: false, max: 200 },
+    notes:            { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/pharmacy/controlled-substances/dispense
+const controlledSubstanceDispense = {
+    cs_id:            { type: 'id', required: true },
+    prescription_id:  { type: 'id', required: false },
+    patient_id:       { type: 'id', required: false },
+    quantity:         { type: 'num', required: true, min: 0.000001 },
+    witness2_name:    { type: 'str', required: false, max: 200 },
+    witness2_id:      { type: 'id', required: false },
+    reason:           { type: 'str', required: false, max: 1000 },
+    waste_amount:     { type: 'num', required: false, min: 0 },
+    waste_reason:     { type: 'str', required: false, max: 1000 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -442,5 +546,15 @@ module.exports = {
     himBreakGlass,
     clinicalPharmacyReviewCreate,
     clinicalPharmacyReviewUpdate,
-    clinicalPharmacyEducationCreate
+    clinicalPharmacyEducationCreate,
+    pharmacyDrugCreate,
+    pharmacyBatchCreate,
+    pharmacyQueueVerify,
+    pharmacyDispense,
+    pharmacyWasfatyDispenseIntent,
+    pharmacyDeductStock,
+    pharmacyPrescriptionCreate,
+    pharmacyPrescriptionUpdate,
+    controlledSubstanceReconcile,
+    controlledSubstanceDispense
 };
