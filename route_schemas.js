@@ -2279,6 +2279,143 @@ const hrNitaqatCalculate = {
     sector:           { type: 'enumOf', allowed: ['Health', 'Education', 'Other', ''], required: false }
 };
 
+// POST /api/dept-requests
+const deptRequestCreate = {
+    department:  { type: 'str', required: true, max: 120 },
+    request_type:{ type: 'enumOf', allowed: ['Maintenance', 'IT', 'Housekeeping', 'Supply', 'Other', ''], required: false },
+    priority:    { type: 'enumOf', allowed: ['Low', 'Medium', 'High', 'Urgent', ''], required: false },
+    description: { type: 'str', required: true, max: 4000 }
+};
+
+// PUT /api/dept-requests/:id
+const deptRequestUpdate = {
+    status:      { type: 'enumOf', allowed: ['Open', 'In Progress', 'Resolved', 'Cancelled', 'Closed', ''], required: false },
+    assigned_to: { type: 'str', required: false, max: 200 },
+    notes:       { type: 'str', required: false, max: 4000 }
+};
+
+// PUT /api/catalog/lab/:id
+const catalogLabUpdate = {
+    test_code:    { type: 'str', required: false, max: 80 },
+    test_name:    { type: 'str', required: false, max: 200 },
+    price:        { type: 'num', required: false, min: 0 },
+    is_active:    { type: 'bool', required: false },
+    reference_range: { type: 'str', required: false, max: 1000 }
+};
+
+// PUT /api/catalog/radiology/:id
+const catalogRadiologyUpdate = {
+    study_code:   { type: 'str', required: false, max: 80 },
+    study_name:   { type: 'str', required: false, max: 200 },
+    price:        { type: 'num', required: false, min: 0 },
+    is_active:    { type: 'bool', required: false }
+};
+
+// POST /api/results/:type/:id/acknowledge
+const resultAcknowledge = {
+    comment: { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/inventory/items
+const inventoryItemCreate = {
+    item_code:    { type: 'str', required: true, max: 80 },
+    item_name:    { type: 'str', required: true, max: 200 },
+    category:     { type: 'enumOf', allowed: ['Drug', 'Supply', 'Equipment', 'Consumable', 'Other', ''], required: false },
+    unit:         { type: 'str', required: false, max: 40 },
+    unit_price:   { type: 'num', required: false, min: 0 },
+    min_stock:    { type: 'num', required: false, min: 0 },
+    max_stock:    { type: 'num', required: false, min: 0 }
+};
+
+// POST /api/inventory (legacy)
+const inventoryLegacyCreate = {
+    item_code:    { type: 'str', required: true, max: 80 },
+    item_name:    { type: 'str', required: true, max: 200 },
+    unit:         { type: 'str', required: false, max: 40 },
+    unit_price:   { type: 'num', required: false, min: 0 }
+};
+
+// PUT /api/inventory/:id
+const inventoryItemUpdate = {
+    item_name:    { type: 'str', required: false, max: 200 },
+    unit:         { type: 'str', required: false, max: 40 },
+    unit_price:   { type: 'num', required: false, min: 0 },
+    min_stock:    { type: 'num', required: false, min: 0 },
+    max_stock:    { type: 'num', required: false, min: 0 }
+};
+
+// POST /api/inventory/purchase-orders
+const inventoryPurchaseOrderCreate = {
+    supplier_id:     { type: 'id', required: true },
+    order_date:      { type: 'dateStr', required: false },
+    expected_date:   { type: 'dateStr', required: false },
+    total_amount:    { type: 'num', required: true, min: 0 },
+    notes:           { type: 'str', required: false, max: 4000 },
+    items:           { type: 'str', required: false, max: 20000 }
+};
+
+// PUT /api/inventory/purchase-orders/:id/status
+const inventoryPurchaseOrderStatusUpdate = {
+    status:          { type: 'enumOf', allowed: ['Draft', 'Submitted', 'Approved', 'Received', 'Cancelled', 'Closed', ''], required: true },
+    approval_notes:  { type: 'str', required: false, max: 2000 }
+};
+
+// POST /api/inventory/goods-receipts
+const inventoryGoodsReceiptCreate = {
+    purchase_order_id: { type: 'id', required: true },
+    receipt_date:      { type: 'dateStr', required: false },
+    received_by:       { type: 'str', required: false, max: 200 },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/inventory/movements
+const inventoryMovementCreate = {
+    item_id:        { type: 'id', required: true },
+    movement_type:  { type: 'enumOf', allowed: ['IN', 'OUT', 'TRANSFER', 'ADJUSTMENT', 'EXPIRED', 'DAMAGED', ''], required: true },
+    quantity:       { type: 'num', required: true, min: 0 },
+    from_location:  { type: 'str', required: false, max: 200 },
+    to_location:    { type: 'str', required: false, max: 200 },
+    reason:         { type: 'str', required: false, max: 1000 }
+};
+
+// POST /api/inventory/stock-counts
+const inventoryStockCountCreate = {
+    count_date:    { type: 'dateStr', required: false },
+    location:      { type: 'str', required: false, max: 200 },
+    notes:         { type: 'str', required: false, max: 4000 },
+    items:         { type: 'str', required: false, max: 20000 }
+};
+
+// POST /api/settings/users
+const settingsUserCreate = {
+    username:      { type: 'str', required: true, max: 80 },
+    password:      { type: 'str', required: true, max: 200 },
+    display_name:  { type: 'str', required: true, max: 200 },
+    role:          { type: 'str', required: true, max: 80 },
+    speciality:    { type: 'str', required: false, max: 120 },
+    email:         { type: 'str', required: false, max: 200 },
+    phone:         { type: 'phone', required: false }
+};
+
+// PUT /api/settings/users/:id
+const settingsUserUpdate = {
+    display_name:  { type: 'str', required: false, max: 200 },
+    role:          { type: 'str', required: false, max: 80 },
+    speciality:    { type: 'str', required: false, max: 120 },
+    email:         { type: 'str', required: false, max: 200 },
+    phone:         { type: 'phone', required: false },
+    is_active:     { type: 'bool', required: false }
+};
+
+// POST /api/messages
+const messageCreate = {
+    recipient_role: { type: 'str', required: false, max: 80 },
+    recipient_id:   { type: 'id', required: false },
+    title:          { type: 'str', required: true, max: 200 },
+    body:           { type: 'str', required: true, max: 8000 },
+    priority:       { type: 'enumOf', allowed: ['Low', 'Normal', 'High', 'Urgent', ''], required: false }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -2509,4 +2646,20 @@ module.exports = {
     ,hrWpsGenerate
     ,hrWpsSubmit
     ,hrNitaqatCalculate
+    ,deptRequestCreate
+    ,deptRequestUpdate
+    ,catalogLabUpdate
+    ,catalogRadiologyUpdate
+    ,resultAcknowledge
+    ,inventoryItemCreate
+    ,inventoryLegacyCreate
+    ,inventoryItemUpdate
+    ,inventoryPurchaseOrderCreate
+    ,inventoryPurchaseOrderStatusUpdate
+    ,inventoryGoodsReceiptCreate
+    ,inventoryMovementCreate
+    ,inventoryStockCountCreate
+    ,settingsUserCreate
+    ,settingsUserUpdate
+    ,messageCreate
 };

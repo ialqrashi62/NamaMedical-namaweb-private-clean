@@ -2603,7 +2603,7 @@ app.get('/api/dept-requests', requireAuth, async (req, res) => {
     } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/dept-requests', requireAuth, async (req, res) => {
+app.post('/api/dept-requests', requireAuth, requireTenantScope, validateBody(RS.deptRequestCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
         const { department, requested_by, items, notes } = req.body;
@@ -2654,7 +2654,7 @@ app.get('/api/dept-requests/:id/items', requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.put('/api/dept-requests/:id', requireAuth, async (req, res) => {
+app.put('/api/dept-requests/:id', requireAuth, requireTenantScope, validateBody(RS.deptRequestUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         if (tenantId) {
@@ -2742,7 +2742,7 @@ app.get('/api/catalog/lab', requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.put('/api/catalog/lab/:id', requireAuth, requireCatalogAccess, async (req, res) => {
+app.put('/api/catalog/lab/:id', requireAuth, requireCatalogAccess, validateBody(RS.catalogLabUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         if (!tenantId) return res.status(400).json({ error: 'Tenant context required' });
@@ -2792,7 +2792,7 @@ app.get('/api/catalog/radiology', requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.put('/api/catalog/radiology/:id', requireAuth, requireCatalogAccess, async (req, res) => {
+app.put('/api/catalog/radiology/:id', requireAuth, requireCatalogAccess, validateBody(RS.catalogRadiologyUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         if (!tenantId) return res.status(400).json({ error: 'Tenant context required' });
@@ -3271,7 +3271,7 @@ async function auditResultAckFallback(req, ctx, type, resultId, patientId, ack) 
 // POST /api/results/:type/:id/acknowledge — the ordering/covering physician documents
 // having reviewed a verified abnormal/critical result. Level comes from the server-side
 // resultLoop.ackRequirement policy, never from the client.
-app.post('/api/results/:type/:id/acknowledge', requireAuth, requireRole('doctor', 'patients', 'prescriptions'), requireTenantScope, async (req, res) => {
+app.post('/api/results/:type/:id/acknowledge', requireAuth, requireRole('doctor', 'patients', 'prescriptions'), requireTenantScope, validateBody(RS.resultAcknowledge), idempotencyGuard, async (req, res) => {
     try {
         const ctx = lisRequireTenant(req, res); if (!ctx) return;
         const type = req.params.type;
@@ -4004,7 +4004,7 @@ app.get('/api/inventory/items', requireAuth, requireRole('inventory', 'pharmacy'
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/inventory/items', requireAuth, requireRole('inventory', 'pharmacy'), requireTenantScope, async (req, res) => {
+app.post('/api/inventory/items', requireAuth, requireRole('inventory', 'pharmacy'), requireTenantScope, validateBody(RS.inventoryItemCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
         const { item_name, item_code, category, unit, cost_price, stock_qty } = req.body;
@@ -4510,7 +4510,7 @@ app.get('/api/settings/users', requireAuth, requireRole('settings'), async (req,
 
 // ===== P0 GUARD: creating system users is Admin-only (unified requireTenantAdmin; mirrors PUT/DELETE) =====
 // 'settings' perm is held by non-admin roles (e.g. IT); without the Admin gate they could create an Admin account.
-app.post('/api/settings/users', requireAuth, requireRole('settings'), requireTenantAdmin({ action: 'BLOCKED_USER_CREATE', module: 'Settings' }), userLimitGuard, async (req, res) => {
+app.post('/api/settings/users', requireAuth, requireRole('settings'), requireTenantAdmin({ action: 'BLOCKED_USER_CREATE', module: 'Settings' }), userLimitGuard, validateBody(RS.settingsUserCreate), idempotencyGuard, async (req, res) => {
     const { username, password, display_name, role, speciality, permissions, commission_type, commission_value } = req.body;
     const passCheck = validatePasswordPolicy(password, { username });
     if (!passCheck.valid) {
@@ -4538,7 +4538,7 @@ app.post('/api/settings/users', requireAuth, requireRole('settings'), requireTen
     }
 });
 
-app.put('/api/settings/users/:id', requireAuth, async (req, res) => {
+app.put('/api/settings/users/:id', requireAuth, requireRole('settings'), requireTenantScope, validateBody(RS.settingsUserUpdate), idempotencyGuard, async (req, res) => {
     try {
         const actor = req.session.user;                       // identity from session only (never from body)
         const targetId = parseInt(req.params.id, 10);
@@ -4611,7 +4611,7 @@ app.put('/api/settings/users/:id', requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.delete('/api/settings/users/:id', requireAuth, requireTenantAdmin({ action: 'BLOCKED_USER_DELETE', module: 'Settings' }), async (req, res) => {
+app.delete('/api/settings/users/:id', requireAuth, requireTenantAdmin({ action: 'BLOCKED_USER_DELETE', module: 'Settings' }), requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const userId = parseInt(req.params.id);
         if (userId === req.session.user.id) {
@@ -4696,7 +4696,7 @@ app.get('/api/messages', requireAuth, async (req, res) => {
     } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/messages', requireAuth, async (req, res) => {
+app.post('/api/messages', requireAuth, requireTenantScope, validateBody(RS.messageCreate), idempotencyGuard, async (req, res) => {
     try {
         const receiver_id = req.body.receiver_id || req.body.to_user_id;
         const body = req.body.body || req.body.content || '';
@@ -14661,7 +14661,7 @@ app.post('/api/messages', requireAuth, requireTenantScope, async (req, res) => {
         res.json({ success: true, id: result.rows[0].id });
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/messages/:id/read', requireAuth, requireTenantScope, async (req, res) => {
+app.put('/api/messages/:id/read', requireAuth, requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const userId = req.session.user.id;
         const { tenantId } = getRequestTenantContext(req);
@@ -14678,7 +14678,7 @@ app.put('/api/messages/:id/read', requireAuth, requireTenantScope, async (req, r
         res.status(500).json({ error: 'Server error' });
     }
 });
-app.delete('/api/messages/:id', requireAuth, requireTenantScope, requirePermission('messages:delete'), async (req, res) => {
+app.delete('/api/messages/:id', requireAuth, requireTenantScope, requirePermission('messages:delete'), idempotencyGuard, async (req, res) => {
     try {
         const userId = req.session.user.id;
         const { tenantId } = getRequestTenantContext(req);
@@ -18292,7 +18292,7 @@ app.get('/api/inventory', requireAuth, requireTenantScope, async (req, res) => {
         res.json((await pool.query(query, params)).rows);
     } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/inventory', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/inventory', requireAuth, requireTenantScope, validateBody(RS.inventoryLegacyCreate), idempotencyGuard, async (req, res) => {
     try {
         // inventory.tenant_id provisioned out-of-band (route_level_ddl_batch_b); no DDL in handler
         // inventory.facility_id provisioned out-of-band (route_level_ddl_batch_b); no DDL in handler
@@ -18306,7 +18306,7 @@ app.post('/api/inventory', requireAuth, requireTenantScope, async (req, res) => 
         res.json(r.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/inventory/:id', requireAuth, requireTenantScope, async (req, res) => {
+app.put('/api/inventory/:id', requireAuth, requireTenantScope, validateBody(RS.inventoryItemUpdate), idempotencyGuard, async (req, res) => {
     try {
         // inventory.tenant_id provisioned out-of-band (route_level_ddl_batch_b); no DDL in handler
         const { tenantId } = getRequestTenantContext(req);
@@ -18327,7 +18327,7 @@ app.put('/api/inventory/:id', requireAuth, requireTenantScope, async (req, res) 
         res.json(r.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.delete('/api/inventory/:id', requireAuth, requireTenantScope, async (req, res) => {
+app.delete('/api/inventory/:id', requireAuth, requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         // inventory.tenant_id provisioned out-of-band (route_level_ddl_batch_b); no DDL in handler
         const { tenantId } = getRequestTenantContext(req);
@@ -18621,7 +18621,7 @@ app.get('/api/inventory/batches', requireAuth, requireRole('inventory', 'pharmac
 });
 
 // ---- purchase orders: create (draft) ----
-app.post('/api/inventory/purchase-orders', requireAuth, requireRole('inventory', 'pharmacy'), requireTenantScope, async (req, res) => {
+app.post('/api/inventory/purchase-orders', requireAuth, requireRole('inventory', 'pharmacy'), requireTenantScope, validateBody(RS.inventoryPurchaseOrderCreate), idempotencyGuard, async (req, res) => {
     try {
         const t = e16RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
@@ -18657,7 +18657,7 @@ app.post('/api/inventory/purchase-orders', requireAuth, requireRole('inventory',
 });
 
 // ---- purchase orders: state transition (approve / cancel) — server-side state machine ----
-app.put('/api/inventory/purchase-orders/:id/status', requireAuth, requireRole('inventory', 'pharmacy'), requireTenantScope, async (req, res) => {
+app.put('/api/inventory/purchase-orders/:id/status', requireAuth, requireRole('inventory', 'pharmacy'), requireTenantScope, validateBody(RS.inventoryPurchaseOrderStatusUpdate), idempotencyGuard, async (req, res) => {
     try {
         const t = e16RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
@@ -18686,7 +18686,7 @@ app.put('/api/inventory/purchase-orders/:id/status', requireAuth, requireRole('i
 // ---- GRN: receive goods against an approved/partially-received PO (TRANSACTIONAL) ----
 // Increments stock by creating a batch + a 'receive' movement per line, advances PO line/header
 // state, all in one transaction. Receiving only valid from approved/partially_received (else 409).
-app.post('/api/inventory/goods-receipts', requireAuth, requireRole('inventory', 'pharmacy'), requireTenantScope, async (req, res) => {
+app.post('/api/inventory/goods-receipts', requireAuth, requireRole('inventory', 'pharmacy'), requireTenantScope, validateBody(RS.inventoryGoodsReceiptCreate), idempotencyGuard, async (req, res) => {
     try {
         const t = e16RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
@@ -18758,7 +18758,7 @@ app.post('/api/inventory/goods-receipts', requireAuth, requireRole('inventory', 
 // ---- stock movement: issue / adjust / transfer (TRANSACTIONAL, no-negative, FEFO) ----
 // The server is authoritative on the movement sign — a client cannot turn an 'issue' into a
 // stock-increasing op. Decrements are FEFO across batches and blocked (409) if insufficient.
-app.post('/api/inventory/movements', requireAuth, requireRole('inventory', 'pharmacy'), requireTenantScope, async (req, res) => {
+app.post('/api/inventory/movements', requireAuth, requireRole('inventory', 'pharmacy'), requireTenantScope, validateBody(RS.inventoryMovementCreate), idempotencyGuard, async (req, res) => {
     try {
         const t = e16RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
@@ -18839,7 +18839,7 @@ app.get('/api/inventory/movements', requireAuth, requireRole('inventory', 'pharm
 });
 
 // ---- periodic stock count / reconciliation (records variance; optional adjust movement) ----
-app.post('/api/inventory/stock-counts', requireAuth, requireRole('inventory', 'pharmacy'), requireTenantScope, async (req, res) => {
+app.post('/api/inventory/stock-counts', requireAuth, requireRole('inventory', 'pharmacy'), requireTenantScope, validateBody(RS.inventoryStockCountCreate), idempotencyGuard, async (req, res) => {
     try {
         const t = e16RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
