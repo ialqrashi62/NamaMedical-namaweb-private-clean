@@ -13308,7 +13308,7 @@ app.get('/api/pathology/cases', requireAuth, requireRole('pathology', 'lab', 'do
         res.json((await pool.query('SELECT * FROM pathology_cases WHERE tenant_id=$1 ORDER BY created_at DESC', [tenantId])).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/pathology/cases', requireAuth, requireRole('pathology', 'lab'), requireTenantScope, async (req, res) => {
+app.post('/api/pathology/cases', requireAuth, requireRole('pathology', 'lab'), requireTenantScope, validateBody(RS.pathologyCaseCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
         if (!tenantId) return res.status(403).json({ error: 'Tenant scope required' });
@@ -13326,7 +13326,7 @@ app.post('/api/pathology/cases', requireAuth, requireRole('pathology', 'lab'), r
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/pathology/cases/:id', requireAuth, requireRole('pathology'), requireTenantScope, async (req, res) => {
+app.put('/api/pathology/cases/:id', requireAuth, requireRole('pathology'), requireTenantScope, validateBody(RS.pathologyCaseUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const id = parseInt(req.params.id, 10);

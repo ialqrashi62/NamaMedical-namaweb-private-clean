@@ -953,6 +953,25 @@ const marAdminister = {
     notes:              { type: 'str', required: false, max: 4000 }
 };
 
+// POST /api/pathology/cases
+const pathologyCaseCreate = {
+    patient_id:       { type: 'id', required: false },
+    patient_name:     { type: 'str', required: false, max: 300 },
+    specimen_type:    { type: 'str', required: false, max: 200 },
+    collection_date:  { type: 'dateStr', required: false }
+};
+
+// PUT /api/pathology/cases/:id
+const pathologyCaseUpdate = {
+    gross_description:     { type: 'str', required: false, max: 4000 },
+    microscopic_findings:  { type: 'str', required: false, max: 4000 },
+    diagnosis:             { type: 'str', required: false, max: 4000 },
+    icd_code:              { type: 'str', required: false, max: 80 },
+    stage:                 { type: 'str', required: false, max: 120 },
+    grade:                 { type: 'str', required: false, max: 120 },
+    status:                { type: 'str', required: false, max: 80 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -1055,5 +1074,7 @@ module.exports = {
     telemedicineSessionUpdate,
     emarOrderCreate,
     emarAdministrationNotGivenCreate,
-    marAdminister
+    marAdminister,
+    pathologyCaseCreate,
+    pathologyCaseUpdate
 };
