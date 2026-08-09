@@ -358,6 +358,34 @@ const himBreakGlass = {
     reason:     { type: 'str', required: true, max: 1000 }
 };
 
+// POST /api/clinical-pharmacy/reviews
+const clinicalPharmacyReviewCreate = {
+    patient_id:      { type: 'id', required: false },
+    patient_name:    { type: 'str', required: false, max: 200 },
+    prescription_id: { type: 'id', required: false },
+    review_type:     { type: 'str', required: false, max: 120 },
+    findings:        { type: 'str', required: false, max: 4000 },
+    recommendations: { type: 'str', required: false, max: 4000 },
+    interventions:   { type: 'str', required: false, max: 4000 },
+    severity:        { type: 'enumOf', required: false, allowed: ['Low', 'Moderate', 'High', 'Critical'] }
+};
+
+// PUT /api/clinical-pharmacy/reviews/:id
+const clinicalPharmacyReviewUpdate = {
+    outcome: { type: 'str', required: false, max: 2000 },
+    status:  { type: 'enumOf', required: false, allowed: ['Open', 'In Progress', 'Closed', 'Resolved'] }
+};
+
+// POST /api/clinical-pharmacy/education
+const clinicalPharmacyEducationCreate = {
+    patient_id:    { type: 'id', required: false },
+    patient_name:  { type: 'str', required: false, max: 200 },
+    medication:    { type: 'str', required: false, max: 300 },
+    instructions:  { type: 'str', required: false, max: 4000 },
+    side_effects:  { type: 'str', required: false, max: 4000 },
+    precautions:   { type: 'str', required: false, max: 4000 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -400,5 +428,8 @@ module.exports = {
     himCodingCreate,
     himRoiCreate,
     himRoiUpdate,
-    himBreakGlass
+    himBreakGlass,
+    clinicalPharmacyReviewCreate,
+    clinicalPharmacyReviewUpdate,
+    clinicalPharmacyEducationCreate
 };

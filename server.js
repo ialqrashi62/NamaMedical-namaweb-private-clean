@@ -14248,7 +14248,7 @@ app.get('/api/clinical-pharmacy/reviews', requireAuth, requireTenantScope, async
         res.json((await pool.query('SELECT * FROM clinical_pharmacy_reviews WHERE tenant_id=$1 ORDER BY created_at DESC', [tenantId])).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/clinical-pharmacy/reviews', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/clinical-pharmacy/reviews', requireAuth, requireTenantScope, validateBody(RS.clinicalPharmacyReviewCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, patient_name, prescription_id, review_type, findings, recommendations, interventions, severity } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -14258,7 +14258,7 @@ app.post('/api/clinical-pharmacy/reviews', requireAuth, requireTenantScope, asyn
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/clinical-pharmacy/reviews/:id', requireAuth, requireTenantScope, async (req, res) => {
+app.put('/api/clinical-pharmacy/reviews/:id', requireAuth, requireTenantScope, validateBody(RS.clinicalPharmacyReviewUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { outcome, status } = req.body;
         const { tenantId } = getRequestTenantContext(req);
@@ -14279,7 +14279,7 @@ app.get('/api/clinical-pharmacy/education', requireAuth, requireTenantScope, asy
         res.json((await pool.query('SELECT * FROM patient_drug_education WHERE tenant_id=$1 ORDER BY created_at DESC', [tenantId])).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/clinical-pharmacy/education', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/clinical-pharmacy/education', requireAuth, requireTenantScope, validateBody(RS.clinicalPharmacyEducationCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, patient_name, medication, instructions, side_effects, precautions } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
