@@ -225,6 +225,49 @@ const insuranceEligibilityCreate = {
     policy_number:         { type: 'str', required: false, max: 120 }
 };
 
+// POST /api/insurance/pre-auth
+const insurancePreAuthCreate = {
+    patient_id:             { type: 'id', required: false },
+    admission_id:           { type: 'id', required: false },
+    insurance_company_id:   { type: 'id', required: false },
+    requested_amount:       { type: 'num', required: false, min: 0 },
+    clinical_justification: { type: 'str', required: false, max: 3000 }
+};
+
+// PUT /api/insurance/pre-auth/:id/decision
+const insurancePreAuthDecisionUpdate = {
+    decision:        { type: 'enumOf', required: true, allowed: ['approved', 'denied', 'partial'] },
+    approved_amount: { type: 'num', required: false, min: 0 },
+    auth_number:     { type: 'str', required: false, max: 120 }
+};
+
+// POST /api/insurance/claims
+const insuranceClaimCreate = {
+    patient_id:             { type: 'id', required: false },
+    invoice_id:             { type: 'id', required: false },
+    insurance_company_id:   { type: 'id', required: false },
+    claim_amount:           { type: 'num', required: false, min: 0 },
+    patient_name:           { type: 'str', required: false, max: 200 },
+    insurance_company:      { type: 'str', required: false, max: 200 }
+};
+
+// PUT /api/insurance/claims/:id/transition
+const insuranceClaimTransitionUpdate = {
+    target:          { type: 'enumOf', required: true, allowed: ['submitted', 'adjudicated', 'remittance_posted', 'denied', 'appealed'] },
+    approved_amount: { type: 'num', required: false, min: 0 },
+    paid_amount:     { type: 'num', required: false, min: 0 },
+    patient_share:   { type: 'num', required: false, min: 0 },
+    denial_reason:   { type: 'str', required: false, max: 2000 }
+};
+
+// POST /api/insurance/claims/:id/lines
+const insuranceClaimLineCreate = {
+    service_id:   { type: 'id', required: false },
+    quantity:     { type: 'int', required: false, min: 1, max: 100000 },
+    unit_price:   { type: 'num', required: false, min: 0 },
+    description:  { type: 'str', required: false, max: 2000 }
+};
+
 // POST /api/nphies/claim-status-inquiry
 const nphiesClaimStatusInquiry = {
     claim_id: { type: 'id', required: true }
@@ -256,5 +299,10 @@ module.exports = {
     insurancePayerPricingCreate,
     insuranceCompanyCreate,
     insuranceEligibilityCreate,
+    insurancePreAuthCreate,
+    insurancePreAuthDecisionUpdate,
+    insuranceClaimCreate,
+    insuranceClaimTransitionUpdate,
+    insuranceClaimLineCreate,
     nphiesClaimStatusInquiry
 };

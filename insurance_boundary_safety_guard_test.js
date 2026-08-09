@@ -43,6 +43,31 @@ assert(
 );
 
 assert(
+  server.includes("app.post('/api/insurance/pre-auth',requireAuth,requireRole(...E11_INS_ROLES),requireTenantScope,validateBody(RS.insurancePreAuthCreate),idempotencyGuard,async(req,res)=>{"),
+  'insurance pre-auth create route is guarded by validateBody + idempotencyGuard'
+);
+
+assert(
+  server.includes("app.put('/api/insurance/pre-auth/:id/decision',requireAuth,requireRole(...E11_INS_ROLES),requireTenantScope,validateBody(RS.insurancePreAuthDecisionUpdate),idempotencyGuard,async(req,res)=>{"),
+  'insurance pre-auth decision route is guarded by validateBody + idempotencyGuard'
+);
+
+assert(
+  server.includes("app.post('/api/insurance/claims',requireAuth,requireRole(...E11_INS_ROLES),requireTenantScope,validateBody(RS.insuranceClaimCreate),idempotencyGuard,async(req,res)=>{"),
+  'insurance claim create route is guarded by validateBody + idempotencyGuard'
+);
+
+assert(
+  server.includes("app.put('/api/insurance/claims/:id/transition',requireAuth,requireRole(...E11_INS_ROLES),requireTenantScope,validateBody(RS.insuranceClaimTransitionUpdate),idempotencyGuard,async(req,res)=>{"),
+  'insurance claim transition route is guarded by validateBody + idempotencyGuard'
+);
+
+assert(
+  server.includes("app.post('/api/insurance/claims/:id/lines',requireAuth,requireRole(...E11_INS_ROLES),requireTenantScope,validateBody(RS.insuranceClaimLineCreate),idempotencyGuard,async(req,res)=>{"),
+  'insurance claim line create route is guarded by validateBody + idempotencyGuard'
+);
+
+assert(
   server.includes("app.put('/api/insurance/claims/:id',requireAuth,requireRole(...E11_INS_ROLES),requireTenantScope,validateBody(RS.insuranceClaimLegacyUpdate),idempotencyGuard,async(req,res)=>{"),
   'legacy claim update route is guarded by validateBody + idempotencyGuard'
 );
@@ -68,9 +93,16 @@ assert(
   schemas.includes('constinsurancePayerPricingCreate={') &&
   schemas.includes('constinsuranceCompanyCreate={') &&
   schemas.includes('constinsuranceEligibilityCreate={') &&
+  schemas.includes('constinsurancePreAuthCreate={') &&
+  schemas.includes('constinsurancePreAuthDecisionUpdate={') &&
+  schemas.includes('constinsuranceClaimCreate={') &&
+  schemas.includes('constinsuranceClaimTransitionUpdate={') &&
+  schemas.includes('constinsuranceClaimLineCreate={') &&
   schemas.includes('constnphiesClaimStatusInquiry={') &&
   schemas.includes("contact_info:{type:'str',required:false,max:2000}") &&
   schemas.includes("policy_number:{type:'str',required:false,max:120}") &&
+  schemas.includes("decision:{type:'enumOf',required:true,allowed:['approved','denied','partial']}") &&
+  schemas.includes("target:{type:'enumOf',required:true,allowed:['submitted','adjudicated','remittance_posted','denied','appealed']}") &&
   schemas.includes("status:{type:'enumOf',required:true,allowed:['Approved','Rejected']}") &&
   schemas.includes("appeal_status:{type:'enumOf',required:true,allowed:['appealed','upheld','overturned','closed']}") &&
   schemas.includes("payer_price:{type:'num',required:true,min:0}"),

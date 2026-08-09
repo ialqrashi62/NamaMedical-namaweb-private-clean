@@ -1970,7 +1970,7 @@ app.get('/api/insurance/pre-auth', requireAuth, requireRole(...E11_INS_ROLES), r
     } catch (e) { if (optionalReadFallback(res, e)) return; return e11Err(res, e); }
 });
 
-app.post('/api/insurance/pre-auth', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/insurance/pre-auth', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, validateBody(RS.insurancePreAuthCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e11RequireTenant(req);
         const patientId = e11IntId(req.body.patient_id);
@@ -2040,7 +2040,7 @@ app.post('/api/insurance/pre-auth', requireAuth, requireRole(...E11_INS_ROLES), 
 });
 
 // pre-auth decision — server-authoritative state machine (requested -> approved/denied/partial)
-app.put('/api/insurance/pre-auth/:id/decision', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.put('/api/insurance/pre-auth/:id/decision', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, validateBody(RS.insurancePreAuthDecisionUpdate), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const tenantId = e11RequireTenant(req);
@@ -2077,7 +2077,7 @@ app.get('/api/insurance/claims', requireAuth, requireRole(...E11_INS_ROLES), req
 });
 
 // create claim — always 'draft'/'Pending'; amounts requested only, adjudication is server-side later
-app.post('/api/insurance/claims', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/insurance/claims', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, validateBody(RS.insuranceClaimCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e11RequireTenant(req);
         const patientId = e11IntId(req.body.patient_id);
@@ -2114,7 +2114,7 @@ app.post('/api/insurance/claims', requireAuth, requireRole(...E11_INS_ROLES), re
 });
 
 // claim state transition — single server-authoritative endpoint (replaces direct status PUT)
-app.put('/api/insurance/claims/:id/transition', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.put('/api/insurance/claims/:id/transition', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, validateBody(RS.insuranceClaimTransitionUpdate), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const tenantId = e11RequireTenant(req);
@@ -2247,7 +2247,7 @@ app.get('/api/insurance/claims/:id/lines', requireAuth, requireRole(...E11_INS_R
     } catch (e) { return e11Err(res, e); }
 });
 
-app.post('/api/insurance/claims/:id/lines', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/insurance/claims/:id/lines', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, validateBody(RS.insuranceClaimLineCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e11RequireTenant(req);
         const claimId = e11IntId(req.params.id);
