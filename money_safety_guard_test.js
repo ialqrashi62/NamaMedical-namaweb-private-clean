@@ -32,11 +32,14 @@ const down = downRaw.replace(/\s+/g, '');
 const validate = fs.readFileSync(path.join(__dirname, 'migrations', 'e22_01_operational_money_numeric_validate.sql'), 'utf8').replace(/\s+/g, '');
 
 assert(
+  server.includes("app.post('/api/invoices',requireAuth,requireRole('invoices','accounts'),validateBody(RS.invoiceCreate),idempotencyGuard,async(req,res)=>{") &&
   server.includes("app.post('/api/invoices/generate',requireAuth,requireRole('invoices','accounts'),idempotencyGuard,async(req,res)=>{") &&
   server.includes("app.post('/api/invoices/:id/refund',requireAuth,requireRole('invoices','accounts'),requireTenantScope,validateBody(RS.invoiceRefund),idempotencyGuard,async(req,res)=>{") &&
+  server.includes("app.post('/api/finance/journal',requireAuth,requireRole('finance','accounts'),requireTenantScope,validateBody(RS.journalCreate),idempotencyGuard,async(req,res)=>{") &&
   server.includes("app.post('/api/finance/ap',requireAuth,requireRole('finance','accounts'),requireTenantScope,validateBody(RS.financeApCreate),idempotencyGuard,async(req,res)=>{") &&
   server.includes("app.post('/api/finance/ar',requireAuth,requireRole('finance','accounts'),requireTenantScope,validateBody(RS.financeArCreate),idempotencyGuard,async(req,res)=>{") &&
-  server.includes("app.post('/api/finance/reports/generate',requireAuth,requireRole('finance','accounts','admin'),requireTenantScope,validateBody(RS.financeReportGenerate),idempotencyGuard,async(req,res)=>{"),
+  server.includes("app.post('/api/finance/reports/generate',requireAuth,requireRole('finance','accounts','admin'),requireTenantScope,validateBody(RS.financeReportGenerate),idempotencyGuard,async(req,res)=>{") &&
+  server.includes("app.post('/api/nphies/claim-status-inquiry',requireAuth,requireRole('finance','accounts','insurance'),requireTenantScope,validateBody(RS.nphiesClaimStatusInquiry),idempotencyGuard,async(req,res)=>{"),
   'critical money-mutating routes are idempotency-guarded'
 );
 

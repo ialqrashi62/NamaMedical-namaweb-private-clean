@@ -83,8 +83,8 @@ assert(
 );
 
 assert(
-  server.includes("app.post('/api/nphies/claim-status-inquiry',requireAuth,requireRole('finance','accounts','insurance'),requireTenantScope,validateBody(RS.nphiesClaimStatusInquiry),async(req,res)=>{"),
-  'nphies claim status inquiry route is guarded by validateBody schema'
+  server.includes("app.post('/api/nphies/claim-status-inquiry',requireAuth,requireRole('finance','accounts','insurance'),requireTenantScope,validateBody(RS.nphiesClaimStatusInquiry),idempotencyGuard,async(req,res)=>{"),
+  'nphies claim status inquiry route is guarded by validateBody + idempotencyGuard'
 );
 
 assert(

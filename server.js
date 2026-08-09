@@ -1731,7 +1731,7 @@ app.get('/api/invoices', requireAuth, requireRole('invoices', 'accounts'), async
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/invoices', requireAuth, requireRole('invoices', 'accounts'), validateBody(RS.invoiceCreate), async (req, res) => {
+app.post('/api/invoices', requireAuth, requireRole('invoices', 'accounts'), validateBody(RS.invoiceCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, patient_name, description, service_type, payment_method, discount_reason } = req.body;
         // --- C-2: money is validated & recomputed server-side; client total/discount are NOT trusted as opaque values ---
@@ -4162,7 +4162,7 @@ app.get('/api/finance/journal/:id', requireAuth, requireRole('finance', 'account
 // ----- General Ledger: create a balanced journal entry (DRAFT) — SERVER-SIDE balance enforcement -----
 // Body: { entry_date, description, reference, source_type?, lines:[{account_id, debit, credit, notes?}] }
 // Unbalanced (sum debit != sum credit) => 422. Created as DRAFT regardless of the posting flag.
-app.post('/api/finance/journal', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, validateBody(RS.journalCreate), async (req, res) => {
+app.post('/api/finance/journal', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, validateBody(RS.journalCreate), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const tenantId = e10RequireTenant(req);
@@ -19642,7 +19642,7 @@ app.post('/api/nphies/remittance/:id/post-to-ar', requireAuth, requireRole('fina
 });
 
 // POST /api/nphies/claim-status-inquiry — FHIR Task-based claim status inquiry (gated)
-app.post('/api/nphies/claim-status-inquiry', requireAuth, requireRole('finance', 'accounts', 'insurance'), requireTenantScope, validateBody(RS.nphiesClaimStatusInquiry), async (req, res) => {
+app.post('/api/nphies/claim-status-inquiry', requireAuth, requireRole('finance', 'accounts', 'insurance'), requireTenantScope, validateBody(RS.nphiesClaimStatusInquiry), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { claim_id } = req.body;
