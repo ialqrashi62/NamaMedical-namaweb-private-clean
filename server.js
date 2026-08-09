@@ -13921,7 +13921,7 @@ app.get('/api/finance/daily-close', requireAuth, requireRole('finance', 'account
         res.json((await pool.query('SELECT * FROM daily_close WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 30', [tenantId])).rows);
     } catch (e) { e10Err(res, e); }
 });
-app.post('/api/finance/daily-close', requireAuth, requireRole('finance', 'accounts', 'invoices'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/finance/daily-close', requireAuth, requireRole('finance', 'accounts', 'invoices'), requireTenantScope, validateBody(RS.financeDailyClose), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e10RequireTenant(req); // E10: fail-closed; aggregate only THIS tenant's invoices (no cross-tenant leak)
         const today = new Date().toISOString().split('T')[0];

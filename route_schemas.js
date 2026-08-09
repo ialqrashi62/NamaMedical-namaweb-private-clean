@@ -168,6 +168,13 @@ const financeReportGenerate = {
     period_end:   { type: 'dateStr', required: true }
 };
 
+// POST /api/finance/daily-close
+const financeDailyClose = {
+    opening_balance: { type: 'num', required: false, min: 0 },
+    closing_balance: { type: 'num', required: false, min: 0 },
+    notes:           { type: 'str', required: false, max: 2000 }
+};
+
 // POST /api/orders
 const clinicalOrderCreate = {
     patient_id:   { type: 'id', required: true },
@@ -297,6 +304,7 @@ module.exports = {
     financeArCreate,
     financeArCollect,
     financeReportGenerate,
+    financeDailyClose,
     clinicalOrderCreate,
     prescriptionCreate,
     pharmacyQueueUpdate,

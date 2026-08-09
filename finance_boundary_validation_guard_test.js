@@ -59,13 +59,19 @@ assert(
 );
 
 assert(
+  server.includes("app.post('/api/finance/daily-close',requireAuth,requireRole('finance','accounts','invoices'),requireTenantScope,validateBody(RS.financeDailyClose),idempotencyGuard,async(req,res)=>{"),
+  'Finance daily close route has validateBody(RS.financeDailyClose)'
+);
+
+assert(
   schemas.includes('constfinanceAccountCreate={') &&
     schemas.includes("account_code:{type:'str',required:true,max:80}") &&
   schemas.includes('constfinanceApCreate={') &&
     schemas.includes('constfinanceApPay={') &&
     schemas.includes('constfinanceArCreate={') &&
     schemas.includes('constfinanceArCollect={') &&
-    schemas.includes('constfinanceReportGenerate={'),
+    schemas.includes('constfinanceReportGenerate={') &&
+    schemas.includes('constfinanceDailyClose={'),
   'route_schemas defines AP/AR/report validation schemas'
 );
 
