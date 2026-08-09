@@ -43,6 +43,27 @@ const invoiceRefund = {
     reason: { type: 'str', required: false, max: 500 }
 };
 
+// PUT /api/invoices/:id/pay
+const invoicePay = {
+    payment_method: { type: 'str', required: false, max: 80 }
+};
+
+// POST /api/payments/moyasar/initiate
+const paymentMoyasarInitiate = {
+    invoiceId: { type: 'id', required: true }
+};
+
+// POST /api/invoices/cancel/:id
+const invoiceCancel = {
+    reason: { type: 'str', required: false, max: 500 }
+};
+
+// PUT /api/invoices/:id/partial-pay
+const invoicePartialPay = {
+    amount_paid:    { type: 'num', required: true, min: 0.01 },
+    payment_method: { type: 'str', required: false, max: 80 }
+};
+
 // POST /api/patients — common PHI registration fields. national_id is LENIENT (non-Saudi patients use
 // iqama/passport which are NOT 10 digits), so it is a bounded string, not the strict 10-digit validator.
 const patientCreate = {
@@ -136,6 +157,10 @@ module.exports = {
     invoiceCreate,
     journalCreate,
     invoiceRefund,
+    invoicePay,
+    paymentMoyasarInitiate,
+    invoiceCancel,
+    invoicePartialPay,
     patientCreate,
     integrationSettingsSave,
     integrationPing,

@@ -5087,7 +5087,7 @@ app.post('/api/invoices/generate', requireAuth, requireRole('invoices', 'account
     } catch (e) { sendBillingError(res, e); }
 });
 
-app.put('/api/invoices/:id/pay', requireAuth, requireRole('invoices', 'accounts'), idempotencyGuard, async (req, res) => {
+app.put('/api/invoices/:id/pay', requireAuth, requireRole('invoices', 'accounts'), validateBody(RS.invoicePay), idempotencyGuard, async (req, res) => {
     try {
         const { payment_method } = req.body;
         // --- TENANT SCOPE: verify invoice belongs to current tenant before paying (IDOR prevention) ---
@@ -5105,7 +5105,7 @@ app.put('/api/invoices/:id/pay', requireAuth, requireRole('invoices', 'accounts'
 });
 
 // ===== MOYASAR PAYMENTS =====
-app.post('/api/payments/moyasar/initiate', requireAuth, requireRole('invoices', 'accounts'), idempotencyGuard, async (req, res) => {
+app.post('/api/payments/moyasar/initiate', requireAuth, requireRole('invoices', 'accounts'), validateBody(RS.paymentMoyasarInitiate), idempotencyGuard, async (req, res) => {
     try {
         const { invoiceId } = req.body;
         const { tenantId } = getRequestTenantContext(req);
@@ -16100,7 +16100,7 @@ app.get('/api/pharmacy/expiring', requireAuth, requireRole('pharmacy'), requireT
 });
 
 // ===== INVOICE CANCEL (Credit Note) =====
-app.post('/api/invoices/cancel/:id', requireAuth, requireRole('invoices', 'accounts'), requireTenantScope, requirePermission('invoices:cancel'), idempotencyGuard, async (req, res) => {
+app.post('/api/invoices/cancel/:id', requireAuth, requireRole('invoices', 'accounts'), requireTenantScope, requirePermission('invoices:cancel'), validateBody(RS.invoiceCancel), idempotencyGuard, async (req, res) => {
     try {
         const { reason } = req.body;
         // --- TENANT SCOPE: verify invoice belongs to current tenant before cancel (IDOR prevention) ---
@@ -17198,7 +17198,7 @@ app.post('/api/allergy-check', requireAuth, async (req, res) => {
 // ===== PARTIAL PAYMENT & REFUND =====
 // H-1: partial payment — amount validated server-side (fail-closed), outstanding computed from DB,
 // no overpayment, row-locked transaction (race-safe), tenant-scoped + RLS-bound under the manual client.
-app.put('/api/invoices/:id/partial-pay', requireAuth, requireRole('invoices', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.put('/api/invoices/:id/partial-pay', requireAuth, requireRole('invoices', 'accounts'), requireTenantScope, validateBody(RS.invoicePartialPay), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const { amount_paid, payment_method } = req.body;
