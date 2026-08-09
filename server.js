@@ -1537,7 +1537,7 @@ app.get('/api/appointments', requireAuth, requireRole('appointments'), async (re
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/appointments', requireAuth, requireRole('appointments'), async (req, res) => {
+app.post('/api/appointments', requireAuth, requireRole('appointments'), validateBody(RS.appointmentCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_name, patient_id, doctor_name, department, appt_date, appt_time, notes, fee } = req.body;
         const apptFee = parseFloat(fee) || 0;
@@ -7645,7 +7645,7 @@ app.get('/api/queue/patients', requireAuth, async (req, res) => {
     }
 });
 
-app.post('/api/queue/checkin', requireAuth, async (req, res) => {
+app.post('/api/queue/checkin', requireAuth, validateBody(RS.queueCheckinCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { patient_id, doctor, department, triage_level, exam_room_id, acuity_notes } = req.body;
@@ -7681,7 +7681,7 @@ app.post('/api/queue/checkin', requireAuth, async (req, res) => {
     }
 });
 
-app.put('/api/queue/patients/:id/status', requireAuth, async (req, res) => {
+app.put('/api/queue/patients/:id/status', requireAuth, validateBody(RS.queueStatusUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { status } = req.body;
@@ -7717,7 +7717,7 @@ app.put('/api/queue/patients/:id/status', requireAuth, async (req, res) => {
     }
 });
 
-app.put('/api/queue/patients/:id/triage', requireAuth, async (req, res) => {
+app.put('/api/queue/patients/:id/triage', requireAuth, validateBody(RS.queueTriageUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { triage_level, acuity_notes, exam_room_id } = req.body;
@@ -7740,7 +7740,7 @@ app.put('/api/queue/patients/:id/triage', requireAuth, async (req, res) => {
     }
 });
 
-app.put('/api/queue/patients/:id/call', requireAuth, async (req, res) => {
+app.put('/api/queue/patients/:id/call', requireAuth, idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const record = (await pool.query(
@@ -7867,7 +7867,7 @@ app.post('/api/queue/ads', requireAuth, async (req, res) => {
 });
 
 // ===== PATIENT REFERRAL =====
-app.put('/api/patients/:id/referral', requireAuth, requireRole('patients'), async (req, res) => {
+app.put('/api/patients/:id/referral', requireAuth, requireRole('patients'), validateBody(RS.patientReferralUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { department } = req.body;
         await pool.query('UPDATE patients SET department=$1 WHERE id=$2', [department, req.params.id]);
@@ -7936,7 +7936,7 @@ app.get('/api/reports/lab', requireAuth, requireRole('reports'), requireTenantSc
 });
 
 // ===== ONLINE BOOKINGS MANAGEMENT =====
-app.put('/api/bookings/:id', requireAuth, async (req, res) => {
+app.put('/api/bookings/:id', requireAuth, validateBody(RS.bookingUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { status } = req.body;
         await pool.query('UPDATE online_bookings SET status=$1 WHERE id=$2', [status, req.params.id]);
@@ -8050,7 +8050,7 @@ app.get('/api/referrals', requireAuth, requireTenantScope, async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/referrals', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/referrals', requireAuth, requireTenantScope, validateBody(RS.patientReferralCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, patient_name, to_department, to_doctor, reason, urgency, notes } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -8072,7 +8072,7 @@ app.post('/api/referrals', requireAuth, requireTenantScope, async (req, res) => 
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.put('/api/referrals/:id', requireAuth, requireTenantScope, async (req, res) => {
+app.put('/api/referrals/:id', requireAuth, requireTenantScope, validateBody(RS.patientReferralStatusUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { status } = req.body;
         const { tenantId } = getRequestTenantContext(req);
@@ -8089,7 +8089,7 @@ app.put('/api/referrals/:id', requireAuth, requireTenantScope, async (req, res) 
 });
 
 // ===== FOLLOW-UP APPOINTMENTS =====
-app.post('/api/appointments/followup', requireAuth, requireRole('appointments'), async (req, res) => {
+app.post('/api/appointments/followup', requireAuth, requireRole('appointments'), validateBody(RS.appointmentFollowupCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, patient_name, doctor_name, appt_date, appt_time, notes } = req.body;
         // --- TENANT SCOPE: stamp tenant_id from session for follow-up appointments ---
@@ -17389,7 +17389,7 @@ app.get('/api/visits/lifecycle/today', requireAuth, async (req, res) => {
 });
 
 // ===== APPOINTMENT CHECK-IN =====
-app.put('/api/appointments/:id/checkin', requireAuth, requireRole('appointments'), async (req, res) => {
+app.put('/api/appointments/:id/checkin', requireAuth, requireRole('appointments'), idempotencyGuard, async (req, res) => {
     try {
         // --- TENANT SCOPE: verify appointment belongs to current tenant ---
         const { tenantId } = getRequestTenantContext(req);
@@ -17421,7 +17421,7 @@ app.put('/api/appointments/:id/checkin', requireAuth, requireRole('appointments'
 });
 
 // ===== NO-SHOW MARKING =====
-app.put('/api/appointments/:id/noshow', requireAuth, requireRole('appointments'), async (req, res) => {
+app.put('/api/appointments/:id/noshow', requireAuth, requireRole('appointments'), idempotencyGuard, async (req, res) => {
     try {
         // --- TENANT SCOPE: verify appointment belongs to current tenant ---
         const { tenantId } = getRequestTenantContext(req);
@@ -17437,7 +17437,7 @@ app.put('/api/appointments/:id/noshow', requireAuth, requireRole('appointments')
 });
 
 // ===== DUPLICATE APPOINTMENT PREVENTION =====
-app.post('/api/appointments/check-duplicate', requireAuth, requireRole('appointments'), async (req, res) => {
+app.post('/api/appointments/check-duplicate', requireAuth, requireRole('appointments'), validateBody(RS.appointmentDuplicateCheck), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, date, doctor } = req.body;
         const existing = (await pool.query(

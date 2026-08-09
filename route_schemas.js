@@ -1335,6 +1335,83 @@ const orOperativeNoteUpsert = {
     postop_plan:     { type: 'str', required: false, max: 4000 }
 };
 
+// POST /api/appointments
+const appointmentCreate = {
+    patient_name: { type: 'str', required: false, max: 300 },
+    patient_id:   { type: 'id', required: false },
+    doctor_name:  { type: 'str', required: false, max: 300 },
+    department:   { type: 'str', required: false, max: 120 },
+    appt_date:    { type: 'dateStr', required: false },
+    appt_time:    { type: 'str', required: false, max: 20 },
+    notes:        { type: 'str', required: false, max: 4000 },
+    fee:          { type: 'num', required: false, min: 0 }
+};
+
+// POST /api/queue/checkin
+const queueCheckinCreate = {
+    patient_id:     { type: 'id', required: true },
+    doctor:         { type: 'str', required: false, max: 300 },
+    department:     { type: 'str', required: false, max: 120 },
+    triage_level:   { type: 'int', required: false, min: 1 },
+    exam_room_id:   { type: 'str', required: false, max: 120 },
+    acuity_notes:   { type: 'str', required: false, max: 2000 }
+};
+
+// PUT /api/queue/patients/:id/status
+const queueStatusUpdate = {
+    status: { type: 'str', required: true, max: 80 }
+};
+
+// PUT /api/queue/patients/:id/triage
+const queueTriageUpdate = {
+    triage_level: { type: 'int', required: false, min: 1 },
+    acuity_notes: { type: 'str', required: false, max: 2000 },
+    exam_room_id: { type: 'str', required: false, max: 120 }
+};
+
+// PUT /api/patients/:id/referral
+const patientReferralUpdate = {
+    department: { type: 'str', required: true, max: 120 }
+};
+
+// PUT /api/bookings/:id
+const bookingUpdate = {
+    status: { type: 'str', required: true, max: 80 }
+};
+
+// POST /api/referrals
+const patientReferralCreate = {
+    patient_id:    { type: 'id', required: false },
+    patient_name:  { type: 'str', required: false, max: 300 },
+    to_department: { type: 'str', required: false, max: 120 },
+    to_doctor:     { type: 'str', required: false, max: 300 },
+    reason:        { type: 'str', required: false, max: 2000 },
+    urgency:       { type: 'str', required: false, max: 80 },
+    notes:         { type: 'str', required: false, max: 4000 }
+};
+
+// PUT /api/referrals/:id
+const patientReferralStatusUpdate = {
+    status: { type: 'str', required: true, max: 80 }
+};
+
+// POST /api/appointments/followup
+const appointmentFollowupCreate = {
+    patient_id:   { type: 'id', required: false },
+    patient_name: { type: 'str', required: false, max: 300 },
+    doctor_name:  { type: 'str', required: false, max: 300 },
+    appt_date:    { type: 'dateStr', required: false },
+    appt_time:    { type: 'str', required: false, max: 20 },
+    notes:        { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/appointments/check-duplicate
+const appointmentDuplicateCheck = {
+    patient_id: { type: 'id', required: true },
+    date:       { type: 'dateStr', required: true },
+    doctor:     { type: 'str', required: true, max: 300 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -1478,4 +1555,14 @@ module.exports = {
     ,orSurgeryStatusUpdate
     ,orPacuUpsert
     ,orOperativeNoteUpsert
+    ,appointmentCreate
+    ,queueCheckinCreate
+    ,queueStatusUpdate
+    ,queueTriageUpdate
+    ,patientReferralUpdate
+    ,bookingUpdate
+    ,patientReferralCreate
+    ,patientReferralStatusUpdate
+    ,appointmentFollowupCreate
+    ,appointmentDuplicateCheck
 };
