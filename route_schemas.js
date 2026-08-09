@@ -747,6 +747,78 @@ const radiologyReportAddendum = {
     is_critical: { type: 'bool', required: false }
 };
 
+// POST /api/nursing/vitals
+const nursingVitalsCreate = {
+    patient_id:         { type: 'id', required: true },
+    patient_name:       { type: 'str', required: false, max: 300 },
+    bp:                 { type: 'str', required: false, max: 80 },
+    temp:               { type: 'num', required: false },
+    weight:             { type: 'num', required: false },
+    height:             { type: 'num', required: false },
+    pulse:              { type: 'int', required: false, min: 0 },
+    o2_sat:             { type: 'int', required: false, min: 0 },
+    respiratory_rate:   { type: 'int', required: false, min: 0 },
+    blood_sugar:        { type: 'num', required: false },
+    chronic_diseases:   { type: 'str', required: false, max: 2000 },
+    current_medications:{ type: 'str', required: false, max: 2000 },
+    allergies:          { type: 'str', required: false, max: 2000 },
+    notes:              { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/emergency/visits
+const emergencyVisitCreate = {
+    patient_id:             { type: 'id', required: false },
+    patient_name:           { type: 'str', required: false, max: 300 },
+    arrival_mode:           { type: 'str', required: false, max: 80 },
+    chief_complaint:        { type: 'str', required: false, max: 2000 },
+    chief_complaint_ar:     { type: 'str', required: false, max: 2000 },
+    triage_level:           { type: 'int', required: false, min: 1 },
+    triage_color:           { type: 'str', required: false, max: 40 },
+    triage_nurse:           { type: 'str', required: false, max: 300 },
+    assigned_doctor:        { type: 'str', required: false, max: 300 },
+    assigned_bed:           { type: 'str', required: false, max: 120 },
+    acuity_notes:           { type: 'str', required: false, max: 4000 }
+};
+
+// PUT /api/emergency/visits/:id
+const emergencyVisitUpdate = {
+    status:                  { type: 'str', required: false, max: 80 },
+    disposition:             { type: 'str', required: false, max: 80 },
+    assigned_doctor:         { type: 'str', required: false, max: 300 },
+    assigned_bed:            { type: 'str', required: false, max: 120 },
+    discharge_diagnosis:     { type: 'str', required: false, max: 4000 },
+    discharge_instructions:  { type: 'str', required: false, max: 4000 },
+    discharge_medications:   { type: 'str', required: false, max: 4000 },
+    followup_date:           { type: 'dateStr', required: false }
+};
+
+// POST /api/emergency/trauma/:visitId
+const emergencyTraumaAssessmentCreate = {
+    patient_id:              { type: 'id', required: false },
+    airway:                  { type: 'str', required: false, max: 1000 },
+    breathing:               { type: 'str', required: false, max: 1000 },
+    circulation:             { type: 'str', required: false, max: 1000 },
+    disability:              { type: 'str', required: false, max: 1000 },
+    exposure:                { type: 'str', required: false, max: 1000 },
+    gcs_eye:                 { type: 'int', required: false, min: 0 },
+    gcs_verbal:              { type: 'int', required: false, min: 0 },
+    gcs_motor:               { type: 'int', required: false, min: 0 },
+    mechanism_of_injury:     { type: 'str', required: false, max: 2000 },
+    trauma_team_activated:   { type: 'bool', required: false },
+    assessed_by:             { type: 'str', required: false, max: 300 }
+};
+
+// POST /api/nursing/triage
+const nursingTriageCreate = {
+    patient_id:         { type: 'id', required: false },
+    patient_name:       { type: 'str', required: false, max: 300 },
+    triage_level:       { type: 'int', required: false, min: 1 },
+    pain_score:         { type: 'int', required: false, min: 0 },
+    chief_complaint:    { type: 'str', required: false, max: 2000 },
+    notes:              { type: 'str', required: false, max: 4000 },
+    visit_id:           { type: 'id', required: false }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -832,5 +904,10 @@ module.exports = {
     radiologyDicomStudyCreate,
     radiologyReportCreate,
     radiologyReportCriticalNotify,
-    radiologyReportAddendum
+    radiologyReportAddendum,
+    nursingVitalsCreate,
+    emergencyVisitCreate,
+    emergencyVisitUpdate,
+    emergencyTraumaAssessmentCreate,
+    nursingTriageCreate
 };

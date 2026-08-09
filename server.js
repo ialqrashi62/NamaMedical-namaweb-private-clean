@@ -1500,7 +1500,7 @@ app.get('/api/nursing/vitals/:patientId', requireAuth, requireTenantScope, async
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/nursing/vitals', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/nursing/vitals', requireAuth, requireTenantScope, validateBody(RS.nursingVitalsCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, patient_name, bp, temp, weight, height, pulse, o2_sat, respiratory_rate, blood_sugar, chronic_diseases, current_medications, allergies, notes } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -10227,7 +10227,7 @@ app.get('/api/emergency/visits/:id', requireAuth, requireTenantScope, async (req
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/emergency/visits', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/emergency/visits', requireAuth, requireTenantScope, validateBody(RS.emergencyVisitCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, patient_name, arrival_mode, chief_complaint, chief_complaint_ar, triage_level, triage_color, triage_nurse, triage_vitals, assigned_doctor, assigned_bed, acuity_notes } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -10266,7 +10266,7 @@ app.post('/api/emergency/visits', requireAuth, requireTenantScope, async (req, r
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.put('/api/emergency/visits/:id', requireAuth, requireTenantScope, async (req, res) => {
+app.put('/api/emergency/visits/:id', requireAuth, requireTenantScope, validateBody(RS.emergencyVisitUpdate), idempotencyGuard, async (req, res) => {
     try {
         // Fail-closed tenant scope (E7 hardening): null tenant => 403, never an unscoped fallback.
         const { tenantId } = e7RequireTenant(req);
@@ -10374,7 +10374,7 @@ app.get('/api/emergency/stats', requireAuth, requireTenantScope, async (req, res
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/emergency/trauma/:visitId', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/emergency/trauma/:visitId', requireAuth, requireTenantScope, validateBody(RS.emergencyTraumaAssessmentCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
 
@@ -17548,7 +17548,7 @@ app.get('/api/lab/reference-ranges', requireAuth, async (req, res) => {
 });
 
 // ===== NURSING: TRIAGE + PAIN SCORE =====
-app.post('/api/nursing/triage', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/nursing/triage', requireAuth, requireTenantScope, validateBody(RS.nursingTriageCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, patient_name, triage_level, pain_score, chief_complaint, notes, visit_id } = req.body;
         const { tenantId } = getRequestTenantContext(req);
