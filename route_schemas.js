@@ -1828,6 +1828,172 @@ const obgynNstCreate = {
     action_taken:        { type: 'str', required: false, max: 1000 }
 };
 
+// POST /api/psychiatry/evaluations
+const psychiatryEvaluationCreate = {
+    patient_id:       { type: 'id', required: true },
+    evaluation_type:  { type: 'enumOf', allowed: ['Initial', 'Follow-up', 'Crisis', 'Discharge', 'Other', ''], required: false },
+    mood:             { type: 'str', required: false, max: 200 },
+    affect:           { type: 'str', required: false, max: 200 },
+    thought_process:  { type: 'str', required: false, max: 4000 },
+    thought_content:  { type: 'str', required: false, max: 4000 },
+    perception:       { type: 'str', required: false, max: 2000 },
+    cognition:        { type: 'str', required: false, max: 2000 },
+    insight:          { type: 'str', required: false, max: 1000 },
+    judgement:        { type: 'str', required: false, max: 1000 },
+    risk_assessment:  { type: 'str', required: false, max: 4000 },
+    phq9_score:       { type: 'int', required: false, min: 0, max: 27 },
+    gad7_score:       { type: 'int', required: false, min: 0, max: 21 },
+    notes:            { type: 'str', required: false, max: 8000 }
+};
+
+// POST /api/dermatology/lesions
+const dermatologyLesionCreate = {
+    patient_id:    { type: 'id', required: true },
+    body_location: { type: 'str', required: false, max: 200 },
+    size_mm:       { type: 'num', required: false, min: 0, max: 500 },
+    color:         { type: 'str', required: false, max: 80 },
+    shape:         { type: 'str', required: false, max: 80 },
+    borders:       { type: 'str', required: false, max: 80 },
+    description:   { type: 'str', required: false, max: 4000 },
+    abcde_score:   { type: 'str', required: false, max: 40 }
+};
+
+// POST /api/ent/audiograms
+const entAudiogramCreate = {
+    patient_id:           { type: 'id', required: true },
+    test_date:            { type: 'dateStr', required: false },
+    right_ear_500hz:      { type: 'int', required: false, min: -20, max: 120 },
+    right_ear_1000hz:     { type: 'int', required: false, min: -20, max: 120 },
+    right_ear_2000hz:     { type: 'int', required: false, min: -20, max: 120 },
+    right_ear_4000hz:     { type: 'int', required: false, min: -20, max: 120 },
+    left_ear_500hz:       { type: 'int', required: false, min: -20, max: 120 },
+    left_ear_1000hz:      { type: 'int', required: false, min: -20, max: 120 },
+    left_ear_2000hz:      { type: 'int', required: false, min: -20, max: 120 },
+    left_ear_4000hz:      { type: 'int', required: false, min: -20, max: 120 },
+    interpretation:       { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/plastic-burns/assessments
+const plasticBurnAssessmentCreate = {
+    patient_id:           { type: 'id', required: true },
+    burn_type:            { type: 'enumOf', allowed: ['Thermal', 'Chemical', 'Electrical', 'Radiation', 'Friction', 'Other', ''], required: false },
+    body_surface_area:    { type: 'num', required: false, min: 0, max: 100 },
+    burn_degree:          { type: 'enumOf', allowed: ['First', 'Second', 'Third', 'Fourth', ''], required: false },
+    rule_of_nines:        { type: 'str', required: false, max: 200 },
+    inhalation_injury:    { type: 'bool', required: false },
+    treatment_plan:       { type: 'str', required: false, max: 4000 },
+    notes:                { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/plastic-burns/photos
+const plasticBurnPhotoCreate = {
+    patient_id:     { type: 'id', required: true },
+    photo_url:      { type: 'str', required: false, max: 2000 },
+    body_location:  { type: 'str', required: false, max: 200 },
+    consent_signed: { type: 'bool', required: false },
+    notes:          { type: 'str', required: false, max: 2000 }
+};
+
+// POST /api/icu/assessments
+const icuAssessmentCreate = {
+    patient_id:           { type: 'id', required: true },
+    assessment_type:      { type: 'str', required: false, max: 80 },
+    gcs_total:            { type: 'int', required: false, min: 3, max: 15 },
+    apache_ii_score:      { type: 'int', required: false, min: 0, max: 71 },
+    sofa_score:           { type: 'int', required: false, min: 0, max: 24 },
+    notes:                { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/icu/flowsheet + /api/icu/monitoring
+const icuFlowsheetCreate = {
+    admission_id:   { type: 'id', required: true },
+    recorded_at:    { type: 'dateStr', required: false },
+    parameter:      { type: 'str', required: true, max: 80 },
+    value:          { type: 'num', required: false, min: -1000, max: 10000 },
+    unit:           { type: 'str', required: false, max: 20 },
+    notes:          { type: 'str', required: false, max: 1000 }
+};
+
+// POST /api/icu/ventilator
+const icuVentilatorCreate = {
+    admission_id:        { type: 'id', required: true },
+    recorded_at:         { type: 'dateStr', required: false },
+    mode:                { type: 'str', required: false, max: 40 },
+    fio2:                { type: 'num', required: false, min: 21, max: 100 },
+    peep:                { type: 'num', required: false, min: 0, max: 30 },
+    tidal_volume:        { type: 'num', required: false, min: 0, max: 1500 },
+    respiratory_rate:    { type: 'int', required: false, min: 0, max: 80 },
+    pressure_support:    { type: 'num', required: false, min: 0, max: 60 },
+    notes:               { type: 'str', required: false, max: 2000 }
+};
+
+// POST /api/icu/infusion
+const icuInfusionCreate = {
+    admission_id:     { type: 'id', required: true },
+    drug_name:        { type: 'str', required: true, max: 200 },
+    dose:             { type: 'num', required: false, min: 0 },
+    unit:             { type: 'str', required: false, max: 20 },
+    rate_ml_hr:       { type: 'num', required: false, min: 0, max: 1000 },
+    started_at:       { type: 'dateStr', required: false },
+    notes:            { type: 'str', required: false, max: 2000 }
+};
+
+// POST /api/icu/score + /api/icu/scores
+const icuScoreCreate = {
+    admission_id:    { type: 'id', required: true },
+    score_type:      { type: 'enumOf', allowed: ['SOFA', 'APACHE_II', 'GCS', 'SAPS_II', 'MODS', 'LODS', 'qSOFA', ''], required: true },
+    score_value:     { type: 'num', required: true, min: 0, max: 100 },
+    components:      { type: 'str', required: false, max: 4000 },
+    recorded_at:     { type: 'dateStr', required: false }
+};
+
+// POST /api/icu/fluid-balance
+const icuFluidBalanceCreate = {
+    admission_id:    { type: 'id', required: true },
+    recorded_at:     { type: 'dateStr', required: false },
+    iv_fluids:       { type: 'int', required: false, min: 0, max: 10000 },
+    oral_intake:     { type: 'int', required: false, min: 0, max: 10000 },
+    blood_products:  { type: 'int', required: false, min: 0, max: 10000 },
+    medications_iv:  { type: 'int', required: false, min: 0, max: 10000 },
+    urine:           { type: 'int', required: false, min: 0, max: 10000 },
+    drains:          { type: 'int', required: false, min: 0, max: 10000 },
+    ngt_output:      { type: 'int', required: false, min: 0, max: 10000 },
+    stool:           { type: 'int', required: false, min: 0, max: 10000 },
+    vomit:           { type: 'int', required: false, min: 0, max: 10000 },
+    insensible:      { type: 'int', required: false, min: 0, max: 10000 }
+};
+
+// POST /api/icu/daily-goals
+const icuDailyGoalsCreate = {
+    admission_id:       { type: 'id', required: true },
+    goals_date:         { type: 'dateStr', required: false },
+    pain_goal:          { type: 'str', required: false, max: 1000 },
+    sedation_goal:      { type: 'str', required: false, max: 1000 },
+    delirium_goal:      { type: 'str', required: false, max: 1000 },
+    mobility_goal:      { type: 'str', required: false, max: 1000 },
+    respiratory_goal:   { type: 'str', required: false, max: 1000 },
+    hemodynamic_goal:   { type: 'str', required: false, max: 1000 },
+    nutrition_goal:     { type: 'str', required: false, max: 1000 },
+    wound_goal:         { type: 'str', required: false, max: 1000 },
+    line_tubing_goal:   { type: 'str', required: false, max: 1000 },
+    medication_goal:     { type: 'str', required: false, max: 1000 },
+    disposition_plan:   { type: 'str', required: false, max: 1000 },
+    communicated_with_family: { type: 'bool', required: false }
+};
+
+// POST /api/icu/prevention-bundles
+const icuPreventionBundlesCreate = {
+    admission_id:        { type: 'id', required: true },
+    bundle_type:         { type: 'enumOf', allowed: ['VAP', 'CLABSI', 'CAUTI', 'Pressure_Injury', 'DVT', 'Stress_Ulcer', ''], required: false },
+    head_of_bed_elevated:{ type: 'bool', required: false },
+    sedation_vacation:   { type: 'bool', required: false },
+    oral_care:           { type: 'bool', required: false },
+    peptic_ulcer_prophylaxis: { type: 'bool', required: false },
+    dvt_prophylaxis:     { type: 'bool', required: false },
+    central_line_removal_review: { type: 'bool', required: false },
+    notes:               { type: 'str', required: false, max: 4000 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -2014,4 +2180,17 @@ module.exports = {
     ,obgynDeliveryCreate
     ,obgynNeonatalCreate
     ,obgynNstCreate
+    ,psychiatryEvaluationCreate
+    ,dermatologyLesionCreate
+    ,entAudiogramCreate
+    ,plasticBurnAssessmentCreate
+    ,plasticBurnPhotoCreate
+    ,icuAssessmentCreate
+    ,icuFlowsheetCreate
+    ,icuVentilatorCreate
+    ,icuInfusionCreate
+    ,icuScoreCreate
+    ,icuFluidBalanceCreate
+    ,icuDailyGoalsCreate
+    ,icuPreventionBundlesCreate
 };

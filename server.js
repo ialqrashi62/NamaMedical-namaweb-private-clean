@@ -6294,7 +6294,7 @@ app.get('/api/obgyn/pregnancies/patient/:patient_id', requireAuth, requireRole('
 });
 
 // ===== PSYCHIATRY DEPARTMENT (G24) =====
-app.post('/api/psychiatry/evaluations', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/psychiatry/evaluations', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.psychiatryEvaluationCreate), idempotencyGuard, async (req, res) => {
     try {
         const { 
             patient_id, evaluation_date, mse_appearance, mse_behavior, mse_speech, mse_mood, mse_affect,
@@ -6368,7 +6368,7 @@ app.get('/api/psychiatry/evaluations/patient/:patient_id', requireAuth, requireR
 });
 
 // ===== DERMATOLOGY DEPARTMENT (G25) =====
-app.post('/api/dermatology/lesions', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/dermatology/lesions', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.dermatologyLesionCreate), idempotencyGuard, async (req, res) => {
     try {
         const { 
             patient_id, exam_date, body_site, lesion_type, color, size_mm, distribution, biopsy_taken, notes 
@@ -6433,7 +6433,7 @@ app.get('/api/dermatology/lesions/patient/:patient_id', requireAuth, requireRole
 });
 
 // ===== ENT (OTOLARYNGOLOGY) DEPARTMENT =====
-app.post('/api/ent/audiograms', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/ent/audiograms', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.entAudiogramCreate), idempotencyGuard, async (req, res) => {
     try {
         const { 
             patient_id, test_date,
@@ -6537,7 +6537,7 @@ app.get('/api/ent/audiograms/patient/:patient_id', requireAuth, requireRole('pat
 });
 
 // ===== PLASTIC & BURNS DEPARTMENT (G12) =====
-app.post('/api/plastic-burns/assessments', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/plastic-burns/assessments', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.plasticBurnAssessmentCreate), idempotencyGuard, async (req, res) => {
     try {
         const { 
             patient_id, assessment_date, weight_kg,
@@ -6616,7 +6616,7 @@ app.get('/api/plastic-burns/assessments/patient/:patient_id', requireAuth, requi
     }
 });
 
-app.post('/api/plastic-burns/photos', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/plastic-burns/photos', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.plasticBurnPhotoCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, photo_date, body_region, description, is_confidential } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -6675,7 +6675,7 @@ app.get('/api/plastic-burns/photos/patient/:patient_id', requireAuth, requireRol
 });
 
 // ===== INTENSIVE CARE DEPARTMENT (G17) =====
-app.post('/api/icu/assessments', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/icu/assessments', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.icuAssessmentCreate), idempotencyGuard, async (req, res) => {
     try {
         const { 
             patient_id, assessment_date,
@@ -11563,8 +11563,8 @@ async function e9PostFlowsheet(req, res) {
         res.status(500).json({ error: 'Server error' });
     }
 }
-app.post('/api/icu/flowsheet', requireAuth, requireRole('icu', 'nursing', 'doctor'), requireTenantScope, e9PostFlowsheet);
-app.post('/api/icu/monitoring', requireAuth, requireRole('icu', 'nursing', 'doctor'), requireTenantScope, e9PostFlowsheet);
+app.post('/api/icu/flowsheet', requireAuth, requireRole('icu', 'nursing', 'doctor'), requireTenantScope, validateBody(RS.icuFlowsheetCreate), idempotencyGuard, e9PostFlowsheet);
+app.post('/api/icu/monitoring', requireAuth, requireRole('icu', 'nursing', 'doctor'), requireTenantScope, validateBody(RS.icuFlowsheetCreate), idempotencyGuard, e9PostFlowsheet);
 
 async function e9GetFlowsheet(req, res) {
     try {
@@ -11586,7 +11586,7 @@ app.get('/api/icu/flowsheet', requireAuth, requireRole('icu', 'nursing', 'doctor
 app.get('/api/icu/monitoring/:admissionId', requireAuth, requireRole('icu', 'nursing', 'doctor'), requireTenantScope, e9GetFlowsheet);
 
 // ----- Ventilator records (settings + measured) — icu_ventilator -----
-app.post('/api/icu/ventilator', requireAuth, requireRole('icu', 'nursing', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/icu/ventilator', requireAuth, requireRole('icu', 'nursing', 'doctor'), requireTenantScope, validateBody(RS.icuVentilatorCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = e9RequireTenant(req);
         const adm = await e9LoadActiveIcuAdmission(req.body.admission_id, tenantId);
@@ -11624,7 +11624,7 @@ app.get('/api/icu/ventilator/:admissionId', requireAuth, requireRole('icu', 'nur
 // ----- Infusions / drips (continuous IV meds) — NEW table icu_infusions -----
 // Bonus safety: if a drug name is supplied, run a server-derived allergy check (cds.checkDrugAllergy)
 // against the patient's active allergy list — fail-safe (records a warning, does NOT silently block).
-app.post('/api/icu/infusion', requireAuth, requireRole('icu', 'nursing', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/icu/infusion', requireAuth, requireRole('icu', 'nursing', 'doctor'), requireTenantScope, validateBody(RS.icuInfusionCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = e9RequireTenant(req);
         const adm = await e9LoadActiveIcuAdmission(req.body.admission_id, tenantId);
@@ -11729,8 +11729,8 @@ async function e9PostScore(req, res) {
         res.status(500).json({ error: 'Server error' });
     }
 }
-app.post('/api/icu/score', requireAuth, requireRole('icu', 'nursing', 'doctor'), requireTenantScope, e9PostScore);
-app.post('/api/icu/scores', requireAuth, requireRole('icu', 'nursing', 'doctor'), requireTenantScope, e9PostScore);
+app.post('/api/icu/score', requireAuth, requireRole('icu', 'nursing', 'doctor'), requireTenantScope, validateBody(RS.icuScoreCreate), idempotencyGuard, e9PostScore);
+app.post('/api/icu/scores', requireAuth, requireRole('icu', 'nursing', 'doctor'), requireTenantScope, validateBody(RS.icuScoreCreate), idempotencyGuard, e9PostScore);
 
 app.get('/api/icu/scores/:admissionId', requireAuth, requireRole('icu', 'nursing', 'doctor'), requireTenantScope, async (req, res) => {
     try {
@@ -11750,7 +11750,7 @@ app.get('/api/icu/scores/:admissionId', requireAuth, requireRole('icu', 'nursing
 });
 
 // ----- Fluid balance (intake/output) — icu_fluid_balance (server computes totals) -----
-app.post('/api/icu/fluid-balance', requireAuth, requireRole('icu', 'nursing', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/icu/fluid-balance', requireAuth, requireRole('icu', 'nursing', 'doctor'), requireTenantScope, validateBody(RS.icuFluidBalanceCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = e9RequireTenant(req);
         const adm = await e9LoadActiveIcuAdmission(req.body.admission_id, tenantId);
@@ -12969,7 +12969,7 @@ app.get('/api/nursing/pain-history/:patientId', requireAuth, requireRole('nursin
 // ===== A4: ICU DAILY GOALS CHECKLIST (CBAHI Requirement) =====
 
 // POST /api/icu/daily-goals — تسجيل أهداف اليوم للمريض ICU
-app.post('/api/icu/daily-goals', requireAuth, requireRole('icu', 'doctor', 'nursing'), requireTenantScope, async (req, res) => {
+app.post('/api/icu/daily-goals', requireAuth, requireRole('icu', 'doctor', 'nursing'), requireTenantScope, validateBody(RS.icuDailyGoalsCreate), idempotencyGuard, async (req, res) => {
     try {
         const {
             admission_id, patient_id, patient_name, goal_date,
@@ -19400,7 +19400,7 @@ app.get('/api/icu/prevention-bundles', requireAuth, requireRole('icu', 'doctor',
     }
 });
 
-app.post('/api/icu/prevention-bundles', requireAuth, requireRole('icu', 'doctor', 'nursing'), requireTenantScope, async (req, res) => {
+app.post('/api/icu/prevention-bundles', requireAuth, requireRole('icu', 'doctor', 'nursing'), requireTenantScope, validateBody(RS.icuPreventionBundlesCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
         const { admission_id, bundle_type, audit_date, checked_items, non_compliance_reason } = req.body;
