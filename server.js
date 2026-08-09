@@ -2965,7 +2965,7 @@ app.get('/api/lab/samples', requireAuth, requireTenantScope, async (req, res) =>
 });
 
 // ---- SAMPLES: collect (create specimen, server-generated barcode) ----
-app.post('/api/lab/samples', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/lab/samples', requireAuth, requireTenantScope, validateBody(RS.labSampleCreate), idempotencyGuard, async (req, res) => {
     try {
         const ctx = lisRequireTenant(req, res); if (!ctx) return;
         const { lab_order_id, patient_id, notes } = req.body;
@@ -2995,7 +2995,7 @@ app.post('/api/lab/samples', requireAuth, requireTenantScope, async (req, res) =
 });
 
 // ---- SAMPLES: state transition (receive / in-process / reject) ----
-app.put('/api/lab/samples/:id', requireAuth, requireTenantScope, async (req, res) => {
+app.put('/api/lab/samples/:id', requireAuth, requireTenantScope, validateBody(RS.labSampleTransition), idempotencyGuard, async (req, res) => {
     try {
         const ctx = lisRequireTenant(req, res); if (!ctx) return;
         const { action, rejected_reason } = req.body;
@@ -3044,7 +3044,7 @@ app.get('/api/lab/results', requireAuth, requireTenantScope, async (req, res) =>
 });
 
 // ---- RESULTS: enter a result (runs auto-verification; FAIL-SAFE HOLD) ----
-app.post('/api/lab/results', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/lab/results', requireAuth, requireTenantScope, validateBody(RS.labResultCreate), idempotencyGuard, async (req, res) => {
     try {
         const ctx = lisRequireTenant(req, res); if (!ctx) return;
         const { lab_sample_id, loinc, test_name, value, unit, normal_range, ref_low, ref_high, order_id } = req.body;
@@ -3133,7 +3133,7 @@ app.post('/api/lab/results', requireAuth, requireTenantScope, async (req, res) =
 });
 
 // ---- RESULTS: manual verify (for HELD results) ----
-app.put('/api/lab/results/:id/verify', requireAuth, requireTenantScope, async (req, res) => {
+app.put('/api/lab/results/:id/verify', requireAuth, requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const ctx = lisRequireTenant(req, res); if (!ctx) return;
         const r = (await pool.query('SELECT * FROM lab_results WHERE id=$1 AND tenant_id=$2', [req.params.id, ctx.tenantId])).rows[0];
@@ -3153,7 +3153,7 @@ app.put('/api/lab/results/:id/verify', requireAuth, requireTenantScope, async (r
 });
 
 // ---- CRITICAL CALL-BACK: document a call-back for a critical result ----
-app.post('/api/lab/results/:id/callback', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/lab/results/:id/callback', requireAuth, requireTenantScope, validateBody(RS.labResultCriticalCallback), idempotencyGuard, async (req, res) => {
     try {
         const ctx = lisRequireTenant(req, res); if (!ctx) return;
         const { notified_to, ack, notes } = req.body;
@@ -3172,7 +3172,7 @@ app.post('/api/lab/results/:id/callback', requireAuth, requireTenantScope, async
 });
 
 // ---- RESULTS: report/release (FAIL-CLOSED: critical needs a documented call-back) ----
-app.put('/api/lab/results/:id/report', requireAuth, requireTenantScope, async (req, res) => {
+app.put('/api/lab/results/:id/report', requireAuth, requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         const ctx = lisRequireTenant(req, res); if (!ctx) return;
         const r = (await pool.query('SELECT * FROM lab_results WHERE id=$1 AND tenant_id=$2', [req.params.id, ctx.tenantId])).rows[0];
@@ -3365,7 +3365,7 @@ app.get('/api/results/unacknowledged', requireAuth, requireRole('doctor', 'patie
 // Accepts a raw HL7 v2 ORU-style payload, parses it (lis.parseHL7ORU), matches the specimen
 // by barcode WITHIN THIS TENANT (cross-tenant barcode -> no match -> 404), and stores results
 // with auto-verification. Malformed payloads are rejected safely (400). FEATURE-GATED.
-app.post('/api/lab/hl7', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/lab/hl7', requireAuth, requireTenantScope, validateBody(RS.labHl7Ingest), idempotencyGuard, async (req, res) => {
     try {
         const ctx = lisRequireTenant(req, res); if (!ctx) return;
         // GATE: disabled unless explicitly enabled (no real analyzer/device wiring here).
@@ -3409,7 +3409,7 @@ app.get('/api/lab/qc', requireAuth, requireTenantScope, async (req, res) => {
 });
 
 // ---- QC: enter a point (Levey-Jennings / Westgard 1-3s) ----
-app.post('/api/lab/qc', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/lab/qc', requireAuth, requireTenantScope, validateBody(RS.labQcCreate), idempotencyGuard, async (req, res) => {
     try {
         const ctx = lisRequireTenant(req, res); if (!ctx) return;
         const { analyzer, analyte, level, value, target, sd, reagent_lot } = req.body;

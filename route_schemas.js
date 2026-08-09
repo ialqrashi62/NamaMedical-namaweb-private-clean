@@ -635,6 +635,55 @@ const clinicalSmartTemplateUpsert = {
     template_text: { type: 'str', required: true, max: 12000 }
 };
 
+// POST /api/lab/samples
+const labSampleCreate = {
+    lab_order_id: { type: 'id', required: false },
+    patient_id:   { type: 'id', required: false },
+    notes:        { type: 'str', required: false, max: 2000 }
+};
+
+// PUT /api/lab/samples/:id
+const labSampleTransition = {
+    action:         { type: 'str', required: true, max: 40 },
+    rejected_reason:{ type: 'str', required: false, max: 1000 }
+};
+
+// POST /api/lab/results
+const labResultCreate = {
+    lab_sample_id: { type: 'id', required: false },
+    order_id:      { type: 'id', required: false },
+    loinc:         { type: 'str', required: false, max: 80 },
+    test_name:     { type: 'str', required: true, max: 300 },
+    value:         { type: 'str', required: true, max: 200 },
+    unit:          { type: 'str', required: false, max: 80 },
+    normal_range:  { type: 'str', required: false, max: 200 },
+    ref_low:       { type: 'num', required: false },
+    ref_high:      { type: 'num', required: false }
+};
+
+// POST /api/lab/results/:id/callback
+const labResultCriticalCallback = {
+    notified_to: { type: 'str', required: true, max: 300 },
+    ack:         { type: 'bool', required: false },
+    notes:       { type: 'str', required: false, max: 2000 }
+};
+
+// POST /api/lab/hl7
+const labHl7Ingest = {
+    message: { type: 'str', required: false, max: 100000 }
+};
+
+// POST /api/lab/qc
+const labQcCreate = {
+    analyzer:    { type: 'str', required: false, max: 200 },
+    analyte:     { type: 'str', required: false, max: 200 },
+    level:       { type: 'str', required: false, max: 80 },
+    value:       { type: 'num', required: false },
+    target:      { type: 'num', required: false },
+    sd:          { type: 'num', required: false },
+    reagent_lot: { type: 'str', required: false, max: 120 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -706,5 +755,11 @@ module.exports = {
     clinicalDepartmentUpsert,
     clinicalTemplateCreate,
     clinicalNoteUpsert,
-    clinicalSmartTemplateUpsert
+    clinicalSmartTemplateUpsert,
+    labSampleCreate,
+    labSampleTransition,
+    labResultCreate,
+    labResultCriticalCallback,
+    labHl7Ingest,
+    labQcCreate
 };
