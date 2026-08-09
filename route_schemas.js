@@ -1226,6 +1226,115 @@ const bloodbankDonorCreate = {
     notes:           { type: 'str', required: false, max: 4000 }
 };
 
+// PUT /api/surgeries/:id
+const surgeryUpdate = {
+    status:          { type: 'str', required: false, max: 80 },
+    operating_room:  { type: 'str', required: false, max: 300 },
+    scheduled_date:  { type: 'dateStr', required: false },
+    scheduled_time:  { type: 'str', required: false, max: 20 },
+    actual_start:    { type: 'str', required: false, max: 80 },
+    actual_end:      { type: 'str', required: false, max: 80 },
+    post_op_notes:   { type: 'str', required: false, max: 4000 },
+    preop_status:    { type: 'str', required: false, max: 80 }
+};
+
+// POST /api/surgeries/:id/preop
+const surgeryPreopUpsert = {
+    npo_confirmed:         { type: 'bool', required: false },
+    allergies_reviewed:    { type: 'bool', required: false },
+    allergies_notes:       { type: 'str', required: false, max: 2000 },
+    medications_reviewed:  { type: 'bool', required: false },
+    medications_notes:     { type: 'str', required: false, max: 2000 },
+    labs_reviewed:         { type: 'bool', required: false },
+    labs_notes:            { type: 'str', required: false, max: 2000 },
+    imaging_reviewed:      { type: 'bool', required: false },
+    imaging_notes:         { type: 'str', required: false, max: 2000 },
+    blood_type_confirmed:  { type: 'bool', required: false },
+    blood_reserved:        { type: 'bool', required: false },
+    consent_signed:        { type: 'bool', required: false },
+    anesthesia_clearance:  { type: 'bool', required: false },
+    nursing_assessment:    { type: 'bool', required: false },
+    nursing_notes:         { type: 'str', required: false, max: 2000 },
+    cardiac_clearance:     { type: 'bool', required: false },
+    cardiac_notes:         { type: 'str', required: false, max: 2000 },
+    pulmonary_clearance:   { type: 'bool', required: false },
+    infection_screening:   { type: 'bool', required: false },
+    dvt_prophylaxis:       { type: 'bool', required: false }
+};
+
+// POST /api/surgeries/:id/preop-tests
+const surgeryPreopTestCreate = {
+    test_type: { type: 'str', required: false, max: 120 },
+    test_name: { type: 'str', required: false, max: 300 },
+    notes:     { type: 'str', required: false, max: 2000 }
+};
+
+// POST /api/surgeries/:id/anesthesia
+const surgeryAnesthesiaUpsert = {
+    anesthetist_name:   { type: 'str', required: false, max: 300 },
+    asa_class:          { type: 'str', required: false, max: 80 },
+    anesthesia_type:    { type: 'str', required: false, max: 120 },
+    airway_assessment:  { type: 'str', required: false, max: 1000 },
+    mallampati_score:   { type: 'str', required: false, max: 40 },
+    premedication:      { type: 'str', required: false, max: 1000 },
+    induction_agents:   { type: 'str', required: false, max: 1000 },
+    maintenance_agents: { type: 'str', required: false, max: 1000 },
+    muscle_relaxants:   { type: 'str', required: false, max: 1000 },
+    monitors_used:      { type: 'str', required: false, max: 1000 },
+    iv_access:          { type: 'str', required: false, max: 300 },
+    fluid_given:        { type: 'str', required: false, max: 300 },
+    blood_loss_ml:      { type: 'num', required: false, min: 0 },
+    complications:      { type: 'str', required: false, max: 2000 },
+    recovery_notes:     { type: 'str', required: false, max: 2000 },
+    notes:              { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/or/slots/reserve
+const orSlotReserve = {
+    surgery_id:        { type: 'id', required: true },
+    room_id:           { type: 'id', required: true },
+    surgeon_id:        { type: 'id', required: true },
+    slot_date:         { type: 'dateStr', required: true },
+    slot_start_time:   { type: 'str', required: true, max: 20 },
+    slot_end_time:     { type: 'str', required: true, max: 20 },
+    duration_minutes:  { type: 'int', required: false, min: 1 }
+};
+
+// PUT /api/or/surgeries/:id/status
+const orSurgeryStatusUpdate = {
+    status:                   { type: 'str', required: true, max: 80 },
+    consent_override_reason:  { type: 'str', required: false, max: 2000 },
+    override_reason:          { type: 'str', required: false, max: 2000 },
+    pacu_override_reason:     { type: 'str', required: false, max: 2000 }
+};
+
+// POST /api/or/surgeries/:id/pacu
+const orPacuUpsert = {
+    start_time:        { type: 'str', required: false, max: 80 },
+    end_time:          { type: 'str', required: false, max: 80 },
+    pain_score:        { type: 'int', required: false, min: 0 },
+    bp:                { type: 'str', required: false, max: 80 },
+    hr:                { type: 'str', required: false, max: 40 },
+    spo2:              { type: 'str', required: false, max: 40 },
+    temp:              { type: 'str', required: false, max: 40 },
+    activity:          { type: 'int', required: false, min: 0 },
+    respiration:       { type: 'int', required: false, min: 0 },
+    circulation:       { type: 'int', required: false, min: 0 },
+    consciousness:     { type: 'int', required: false, min: 0 },
+    oxygen:            { type: 'int', required: false, min: 0 },
+    discharge_status:  { type: 'str', required: false, max: 80 },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/or/surgeries/:id/operative-note
+const orOperativeNoteUpsert = {
+    counts_verified: { type: 'bool', required: false },
+    note_text:       { type: 'str', required: false, max: 12000 },
+    procedure_done:  { type: 'str', required: false, max: 2000 },
+    complications:   { type: 'str', required: false, max: 4000 },
+    postop_plan:     { type: 'str', required: false, max: 4000 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -1361,4 +1470,12 @@ module.exports = {
     bloodbankTransfuse,
     bloodbankTransfusionReactionCreate,
     bloodbankDonorCreate
+    ,surgeryUpdate
+    ,surgeryPreopUpsert
+    ,surgeryPreopTestCreate
+    ,surgeryAnesthesiaUpsert
+    ,orSlotReserve
+    ,orSurgeryStatusUpdate
+    ,orPacuUpsert
+    ,orOperativeNoteUpsert
 };

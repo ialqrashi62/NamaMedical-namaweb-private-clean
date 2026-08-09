@@ -8297,7 +8297,7 @@ app.post('/api/surgeries', requireAuth, requireTenantScope, async (req, res) => 
     } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 
-app.put('/api/surgeries/:id', requireAuth, requireTenantScope, async (req, res) => {
+app.put('/api/surgeries/:id', requireAuth, requireTenantScope, validateBody(RS.surgeryUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
 
@@ -8406,7 +8406,7 @@ app.get('/api/surgeries/:id/preop', requireAuth, requireTenantScope, async (req,
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/surgeries/:id/preop', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/surgeries/:id/preop', requireAuth, requireTenantScope, validateBody(RS.surgeryPreopUpsert), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
 
@@ -8508,7 +8508,7 @@ app.get('/api/surgeries/:id/preop-tests', requireAuth, requireTenantScope, async
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/surgeries/:id/preop-tests', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/surgeries/:id/preop-tests', requireAuth, requireTenantScope, validateBody(RS.surgeryPreopTestCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
 
@@ -8594,7 +8594,7 @@ app.get('/api/surgeries/:id/anesthesia', requireAuth, requireTenantScope, async 
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/surgeries/:id/anesthesia', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/surgeries/:id/anesthesia', requireAuth, requireTenantScope, validateBody(RS.surgeryAnesthesiaUpsert), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
 
@@ -8779,7 +8779,7 @@ app.get('/api/or/slots', requireAuth, requireRole('surgery', 'doctor', 'nursing'
 
 // Reserve a slot for a surgery: conflict detection (no double-booked room/surgeon/time -> 409),
 // transactional with SELECT ... FOR UPDATE. tenant_id stamped from session (anti mass-assignment).
-app.post('/api/or/slots/reserve', requireAuth, requireRole('surgery', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/or/slots/reserve', requireAuth, requireRole('surgery', 'doctor'), requireTenantScope, validateBody(RS.orSlotReserve), idempotencyGuard, async (req, res) => {
     let tenantCtx;
     try { tenantCtx = e12RequireTenant(req); }
     catch (e) { return res.status(e.statusCode || 500).json({ error: e.message }); }
@@ -8867,7 +8867,7 @@ app.post('/api/or/slots/reserve', requireAuth, requireRole('surgery', 'doctor'),
 });
 
 // Cancel a slot (frees the room/surgeon window). Tenant scoped.
-app.put('/api/or/slots/:id/cancel', requireAuth, requireRole('surgery', 'doctor'), requireTenantScope, requirePermission('or:cancel'), async (req, res) => {
+app.put('/api/or/slots/:id/cancel', requireAuth, requireRole('surgery', 'doctor'), requireTenantScope, requirePermission('or:cancel'), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = e12RequireTenant(req);
         const slotId = e12IntId(req.params.id);
@@ -8885,7 +8885,7 @@ app.put('/api/or/slots/:id/cancel', requireAuth, requireRole('surgery', 'doctor'
 // ===== E12: SURGERY STATE MACHINE (replaces unguarded status flips) =====
 // Server-enforced transitions. Moving to InProgress requires WHO Time-Out completed (no incision without Time-Out).
 // Moving to PACU requires a PACU record (handled by /pacu). Completed requires sign-out.
-app.put('/api/or/surgeries/:id/status', requireAuth, requireRole('surgery', 'doctor', 'nursing'), requireTenantScope, async (req, res) => {
+app.put('/api/or/surgeries/:id/status', requireAuth, requireRole('surgery', 'doctor', 'nursing'), requireTenantScope, validateBody(RS.orSurgeryStatusUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = e12RequireTenant(req);
         const surgeryId = e12IntId(req.params.id);
@@ -8992,7 +8992,7 @@ app.get('/api/or/surgeries/:id/who-checklist', requireAuth, requireRole('surgery
 });
 
 // Advance one WHO phase. :phase in {sign-in, time-out, sign-out}. Strict ordering enforced server-side (409 on skip).
-app.post('/api/or/surgeries/:id/who-checklist/:phase', requireAuth, requireRole('surgery', 'doctor', 'nursing'), requireTenantScope, async (req, res) => {
+app.post('/api/or/surgeries/:id/who-checklist/:phase', requireAuth, requireRole('surgery', 'doctor', 'nursing'), requireTenantScope, idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const { tenantId, facilityId } = e12RequireTenant(req);
@@ -9059,7 +9059,7 @@ app.get('/api/or/surgeries/:id/pacu', requireAuth, requireRole('surgery', 'docto
 });
 
 // Create/update PACU record. Requires WHO Sign-Out completed first (cannot recover before leaving OR safely).
-app.post('/api/or/surgeries/:id/pacu', requireAuth, requireRole('surgery', 'doctor', 'nursing'), requireTenantScope, async (req, res) => {
+app.post('/api/or/surgeries/:id/pacu', requireAuth, requireRole('surgery', 'doctor', 'nursing'), requireTenantScope, validateBody(RS.orPacuUpsert), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = e12RequireTenant(req);
         const surgeryId = e12IntId(req.params.id);
@@ -9130,7 +9130,7 @@ app.get('/api/or/surgeries/:id/operative-note', requireAuth, requireRole('surger
 
 // Save operative note + record consumption lines, decrementing inventory_items.stock_qty transactionally.
 // Locks inventory rows in ascending id order (deadlock avoidance). Counts-not-verified -> 'Incomplete' (never falsely reassuring).
-app.post('/api/or/surgeries/:id/operative-note', requireAuth, requireRole('surgery', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/or/surgeries/:id/operative-note', requireAuth, requireRole('surgery', 'doctor'), requireTenantScope, validateBody(RS.orOperativeNoteUpsert), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const { tenantId, facilityId } = e12RequireTenant(req);
