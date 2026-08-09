@@ -5179,7 +5179,7 @@ app.get('/api/payments/moyasar/verify', requireAuth, async (req, res) => {
 });
 
 // ===== CARDIOLOGY DEPARTMENT =====
-app.post('/api/cardiology/procedures', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/cardiology/procedures', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.cardiologyProcedureCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, procedure_type, findings, recommendations } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -5226,7 +5226,7 @@ app.get('/api/cardiology/procedures/patient/:patient_id', requireAuth, requireRo
     }
 });
 
-app.post('/api/cardiology/ecg', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/cardiology/ecg', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.cardiologyEcgCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, leads_data, heart_rate, interpretation } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -5404,7 +5404,7 @@ app.get('/api/cancer-center/patient-360/:patient_id', requireAuth, requireRole('
 });
 
 // ===== GASTROENTEROLOGY DEPARTMENT =====
-app.post('/api/gastro/endoscopy', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/gastro/endoscopy', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.gastroEndoscopyCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, endoscopy_type, indications, findings, complications, recommendations } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -5451,7 +5451,7 @@ app.get('/api/gastro/endoscopy/patient/:patient_id', requireAuth, requireRole('p
     }
 });
 
-app.post('/api/gastro/biopsy', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/gastro/biopsy', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.gastroBiopsyCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, specimen_source, clinical_notes } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -5498,7 +5498,7 @@ app.get('/api/gastro/biopsy/patient/:patient_id', requireAuth, requireRole('pati
     }
 });
 
-app.put('/api/gastro/biopsy/:id/result', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.put('/api/gastro/biopsy/:id/result', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.gastroBiopsyResultUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { id } = req.params;
         const { result_findings } = req.body;
@@ -5529,7 +5529,7 @@ app.put('/api/gastro/biopsy/:id/result', requireAuth, requireRole('patients', 'p
 });
 
 // ===== ENDOCRINOLOGY & DIABETES DEPARTMENT =====
-app.post('/api/endocrine/glucose', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/endocrine/glucose', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.endocrineGlucoseCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, glucose_value, log_type, notes } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -5576,7 +5576,7 @@ app.get('/api/endocrine/glucose/patient/:patient_id', requireAuth, requireRole('
     }
 });
 
-app.post('/api/endocrine/insulin', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/endocrine/insulin', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.endocrineInsulinCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, insulin_type, dosage } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -5623,7 +5623,7 @@ app.get('/api/endocrine/insulin/patient/:patient_id', requireAuth, requireRole('
     }
 });
 
-app.put('/api/endocrine/insulin/:id/deactivate', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.put('/api/endocrine/insulin/:id/deactivate', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.endocrineInsulinDeactivate), idempotencyGuard, async (req, res) => {
     try {
         const { id } = req.params;
         const { tenantId } = getRequestTenantContext(req);
@@ -5653,7 +5653,7 @@ app.put('/api/endocrine/insulin/:id/deactivate', requireAuth, requireRole('patie
 });
 
 // ===== NEPHROLOGY & DIALYSIS DEPARTMENT =====
-app.post('/api/nephrology/dialysis', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/nephrology/dialysis', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.nephrologyDialysisCreate), idempotencyGuard, async (req, res) => {
     try {
         const { 
             patient_id, 
@@ -5744,7 +5744,7 @@ app.get('/api/nephrology/dialysis/patient/:patient_id', requireAuth, requireRole
 });
 
 // ===== OPHTHALMOLOGY DEPARTMENT =====
-app.post('/api/ophthalmology/exams', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/ophthalmology/exams', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.ophthalmologyExamCreate), idempotencyGuard, async (req, res) => {
     try {
         const { 
             patient_id, exam_date, 
@@ -14556,7 +14556,7 @@ app.get('/api/cardiology/cath-reports/:patient_id', requireAuth, requireTenantSc
         res.json(result.rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/cardiology/cath-reports', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/cardiology/cath-reports', requireAuth, requireTenantScope, validateBody(RS.cardiologyCathReportCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, blockage_lad, blockage_lcx, blockage_rca, findings } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);

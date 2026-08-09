@@ -1463,6 +1463,98 @@ const patientFamilyHistoryCreate = {
     notes:         { type: 'str', required: false, max: 4000 }
 };
 
+// POST /api/cardiology/procedures
+const cardiologyProcedureCreate = {
+    patient_id:       { type: 'id', required: true },
+    procedure_type:   { type: 'str', required: true, max: 120 },
+    findings:         { type: 'str', required: false, max: 4000 },
+    recommendations:  { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/cardiology/ecg
+const cardiologyEcgCreate = {
+    patient_id:     { type: 'id', required: true },
+    leads_data:     { type: 'str', required: true, max: 8000 },
+    heart_rate:     { type: 'int', required: false, min: 0, max: 400 },
+    interpretation: { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/cardiology/cath-reports
+const cardiologyCathReportCreate = {
+    patient_id:        { type: 'id', required: true },
+    procedure_type:    { type: 'str', required: false, max: 120 },
+    findings:          { type: 'str', required: false, max: 8000 },
+    recommendations:   { type: 'str', required: false, max: 8000 },
+    stent_size:        { type: 'str', required: false, max: 40 },
+    contrast_volume:   { type: 'num', required: false, min: 0 },
+    fluoroscopy_time:  { type: 'num', required: false, min: 0 },
+    blockage_lad:      { type: 'int', required: false, min: 0, max: 100 },
+    blockage_lcx:      { type: 'int', required: false, min: 0, max: 100 },
+    blockage_rca:      { type: 'int', required: false, min: 0, max: 100 }
+};
+
+// POST /api/gastro/endoscopy
+const gastroEndoscopyCreate = {
+    patient_id:     { type: 'id', required: true },
+    procedure_type: { type: 'str', required: true, max: 120 },
+    findings:       { type: 'str', required: false, max: 8000 },
+    recommendations:{ type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/gastro/biopsy
+const gastroBiopsyCreate = {
+    patient_id:  { type: 'id', required: true },
+    site:        { type: 'str', required: true, max: 120 },
+    findings:    { type: 'str', required: false, max: 4000 }
+};
+
+// PUT /api/gastro/biopsy/:id/result
+const gastroBiopsyResultUpdate = {
+    result_text:  { type: 'str', required: false, max: 8000 },
+    diagnosis:    { type: 'str', required: false, max: 2000 },
+    malignant:    { type: 'bool', required: false }
+};
+
+// POST /api/endocrine/glucose
+const endocrineGlucoseCreate = {
+    patient_id: { type: 'id', required: true },
+    value_mg:   { type: 'num', required: true, min: 0, max: 1500 },
+    timestamp:  { type: 'dateStr', required: false },
+    notes:      { type: 'str', required: false, max: 1000 }
+};
+
+// POST /api/endocrine/insulin
+const endocrineInsulinCreate = {
+    patient_id: { type: 'id', required: true },
+    insulin_type: { type: 'str', required: true, max: 80 },
+    dose_units: { type: 'num', required: true, min: 0, max: 500 },
+    timestamp:  { type: 'dateStr', required: false }
+};
+
+// PUT /api/endocrine/insulin/:id/deactivate
+const endocrineInsulinDeactivate = {
+    reason: { type: 'str', required: false, max: 500 }
+};
+
+// POST /api/nephrology/dialysis
+const nephrologyDialysisCreate = {
+    patient_id:      { type: 'id', required: true },
+    session_type:    { type: 'str', required: true, max: 80 },
+    duration_hours:  { type: 'num', required: false, min: 0, max: 12 },
+    pre_weight:      { type: 'num', required: false, min: 0 },
+    post_weight:     { type: 'num', required: false, min: 0 },
+    notes:           { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/ophthalmology/exams
+const ophthalmologyExamCreate = {
+    patient_id:        { type: 'id', required: true },
+    eye_side:          { type: 'enumOf', allowed: ['OD', 'OS', 'OU', 'RE', 'LE', 'Both', ''], required: false },
+    visual_acuity:     { type: 'str', required: false, max: 20 },
+    intraocular_pressure: { type: 'num', required: false, min: 0, max: 80 },
+    findings:          { type: 'str', required: false, max: 4000 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -1620,4 +1712,15 @@ module.exports = {
     ,patientProblemCreate
     ,patientSocialHistoryUpsert
     ,patientFamilyHistoryCreate
+    ,cardiologyProcedureCreate
+    ,cardiologyEcgCreate
+    ,cardiologyCathReportCreate
+    ,gastroEndoscopyCreate
+    ,gastroBiopsyCreate
+    ,gastroBiopsyResultUpdate
+    ,endocrineGlucoseCreate
+    ,endocrineInsulinCreate
+    ,endocrineInsulinDeactivate
+    ,nephrologyDialysisCreate
+    ,ophthalmologyExamCreate
 };
