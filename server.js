@@ -2196,7 +2196,7 @@ app.put('/api/insurance/claims/:id/transition', requireAuth, requireRole(...E11_
 
 // LEGACY status PUT — HARDENED: route the old client {status} payload through the state machine (409 on invalid).
 // Pre-existing window.updateClaim still calls PUT /api/insurance/claims/:id with {status:'Approved'|'Rejected'}.
-app.put('/api/insurance/claims/:id', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, async (req, res) => {
+app.put('/api/insurance/claims/:id', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, validateBody(RS.insuranceClaimLegacyUpdate), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const tenantId = e11RequireTenant(req);
@@ -2284,7 +2284,7 @@ app.get('/api/insurance/denials', requireAuth, requireRole(...E11_INS_ROLES), re
     } catch (e) { if (optionalReadFallback(res, e)) return; return e11Err(res, e); }
 });
 
-app.put('/api/insurance/denials/:id/appeal', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, async (req, res) => {
+app.put('/api/insurance/denials/:id/appeal', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, validateBody(RS.insuranceDenialAppealUpdate), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const tenantId = e11RequireTenant(req);
@@ -2322,7 +2322,7 @@ app.get('/api/insurance/payer-pricing', requireAuth, requireRole(...E11_INS_ROLE
     } catch (e) { if (optionalReadFallback(res, e)) return; return e11Err(res, e); }
 });
 
-app.post('/api/insurance/payer-pricing', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, async (req, res) => {
+app.post('/api/insurance/payer-pricing', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, validateBody(RS.insurancePayerPricingCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e11RequireTenant(req);
         const companyId = e11IntId(req.body.insurance_company_id);
@@ -19642,7 +19642,7 @@ app.post('/api/nphies/remittance/:id/post-to-ar', requireAuth, requireRole('fina
 });
 
 // POST /api/nphies/claim-status-inquiry — FHIR Task-based claim status inquiry (gated)
-app.post('/api/nphies/claim-status-inquiry', requireAuth, requireRole('finance', 'accounts', 'insurance'), requireTenantScope, async (req, res) => {
+app.post('/api/nphies/claim-status-inquiry', requireAuth, requireRole('finance', 'accounts', 'insurance'), requireTenantScope, validateBody(RS.nphiesClaimStatusInquiry), async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { claim_id } = req.body;

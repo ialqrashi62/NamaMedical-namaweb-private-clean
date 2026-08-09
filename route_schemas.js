@@ -183,6 +183,29 @@ const pharmacyQueueUpdate = {
     patient_id:     { type: 'id', required: false }
 };
 
+// PUT /api/insurance/claims/:id (legacy status endpoint)
+const insuranceClaimLegacyUpdate = {
+    status: { type: 'enumOf', required: true, allowed: ['Approved', 'Rejected'] }
+};
+
+// PUT /api/insurance/denials/:id/appeal
+const insuranceDenialAppealUpdate = {
+    appeal_status: { type: 'enumOf', required: true, allowed: ['appealed', 'upheld', 'overturned', 'closed'] },
+    appeal_notes:  { type: 'str', required: false, max: 2000 }
+};
+
+// POST /api/insurance/payer-pricing
+const insurancePayerPricingCreate = {
+    insurance_company_id: { type: 'id', required: true },
+    service_id:           { type: 'id', required: true },
+    payer_price:          { type: 'num', required: true, min: 0 }
+};
+
+// POST /api/nphies/claim-status-inquiry
+const nphiesClaimStatusInquiry = {
+    claim_id: { type: 'id', required: true }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -202,5 +225,9 @@ module.exports = {
     financeReportGenerate,
     clinicalOrderCreate,
     prescriptionCreate,
-    pharmacyQueueUpdate
+    pharmacyQueueUpdate,
+    insuranceClaimLegacyUpdate,
+    insuranceDenialAppealUpdate,
+    insurancePayerPricingCreate,
+    nphiesClaimStatusInquiry
 };
