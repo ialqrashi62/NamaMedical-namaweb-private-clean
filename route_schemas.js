@@ -76,6 +76,62 @@ const zatcaSubmit = {
     invoice_id: { type: 'id', required: true }
 };
 
+// POST /api/finance/ap
+const financeApCreate = {
+    vendor_id:        { type: 'id', required: false },
+    vendor_name:      { type: 'str', required: true, max: 200 },
+    invoice_number:   { type: 'str', required: true, max: 120 },
+    invoice_date:     { type: 'dateStr', required: false },
+    due_date:         { type: 'dateStr', required: false },
+    po_reference:     { type: 'str', required: false, max: 120 },
+    description:      { type: 'str', required: false, max: 1000 },
+    subtotal:         { type: 'num', required: false, min: 0 },
+    vat_amount:       { type: 'num', required: false, min: 0 },
+    total_amount:     { type: 'num', required: true, min: 0.01 },
+    gl_account_code:  { type: 'str', required: false, max: 40 },
+    cost_center:      { type: 'str', required: false, max: 120 },
+    notes:            { type: 'str', required: false, max: 1000 }
+};
+
+// POST /api/finance/ap/:id/pay
+const financeApPay = {
+    payment_amount:    { type: 'num', required: true, min: 0.01 },
+    payment_method:    { type: 'str', required: false, max: 80 },
+    payment_reference: { type: 'str', required: false, max: 200 }
+};
+
+// POST /api/finance/ar
+const financeArCreate = {
+    patient_id:       { type: 'id', required: false },
+    patient_name:     { type: 'str', required: false, max: 200 },
+    payer_type:       { type: 'str', required: false, max: 80 },
+    payer_id:         { type: 'id', required: false },
+    payer_name:       { type: 'str', required: false, max: 200 },
+    invoice_number:   { type: 'str', required: true, max: 120 },
+    visit_id:         { type: 'id', required: false },
+    admission_id:     { type: 'id', required: false },
+    due_date:         { type: 'dateStr', required: false },
+    subtotal:         { type: 'num', required: false, min: 0 },
+    discount_amount:  { type: 'num', required: false, min: 0 },
+    insurance_share:  { type: 'num', required: false, min: 0 },
+    patient_share:    { type: 'num', required: false, min: 0 },
+    vat_amount:       { type: 'num', required: false, min: 0 },
+    total_amount:     { type: 'num', required: true, min: 0.01 },
+    notes:            { type: 'str', required: false, max: 1000 }
+};
+
+// POST /api/finance/ar/:id/collect
+const financeArCollect = {
+    collection_amount: { type: 'num', required: true, min: 0.01 }
+};
+
+// POST /api/finance/reports/generate
+const financeReportGenerate = {
+    report_type:  { type: 'str', required: false, max: 20 },
+    period_start: { type: 'dateStr', required: true },
+    period_end:   { type: 'dateStr', required: true }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -83,5 +139,10 @@ module.exports = {
     patientCreate,
     integrationSettingsSave,
     integrationPing,
-    zatcaSubmit
+    zatcaSubmit,
+    financeApCreate,
+    financeApPay,
+    financeArCreate,
+    financeArCollect,
+    financeReportGenerate
 };

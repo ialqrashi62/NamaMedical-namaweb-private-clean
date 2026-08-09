@@ -57,6 +57,18 @@ function int(value, { field = 'value', required = true, min = -Infinity, max = I
     return n;
 }
 
+function num(value, { field = 'value', required = true, min = -Infinity, max = Infinity } = {}) {
+    if (value === undefined || value === null || value === '') {
+        if (required) fail(field, 'is required');
+        return null;
+    }
+    const n = Number(value);
+    if (!Number.isFinite(n)) fail(field, 'must be a number');
+    if (n < min) fail(field, `must be >= ${min}`);
+    if (n > max) fail(field, `must be <= ${max}`);
+    return n;
+}
+
 // positive integer primary-key / foreign-key id
 function id(value, { field = 'id', required = true } = {}) {
     return int(value, { field, required, min: 1, max: Number.MAX_SAFE_INTEGER });
@@ -120,7 +132,7 @@ function phone(value, { field = 'phone', required = false } = {}) {
 // ---- schema runner ----
 // schema: { fieldName: (value, ctx) => cleaned } where each fn is one of the validators above bound
 // with options, OR a plain options object { type, ...opts }. Returns a NEW object of cleaned values.
-const TYPES = { str, int, id, enumOf, bool, dateStr, nationalId, phone };
+const TYPES = { str, int, num, id, enumOf, bool, dateStr, nationalId, phone };
 
 function validate(obj, schema) {
     if (!obj || typeof obj !== 'object') throw new ValidationError('body: must be an object', 'body');
@@ -162,6 +174,6 @@ function validateBody(schema) {
 
 module.exports = {
     ValidationError,
-    str, int, id, enumOf, bool, dateStr, nationalId, phone,
+    str, int, num, id, enumOf, bool, dateStr, nationalId, phone,
     validate, validateBody
 };

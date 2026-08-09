@@ -20391,7 +20391,7 @@ app.get('/api/finance/ap', requireAuth, requireRole('finance', 'accounts', 'admi
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/finance/ap', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/finance/ap', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, validateBody(RS.financeApCreate), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { vendor_id, vendor_name, invoice_number, invoice_date, due_date, po_reference, description, subtotal, vat_amount, total_amount, gl_account_code, cost_center, notes } = req.body;
@@ -20414,7 +20414,7 @@ app.post('/api/finance/ap', requireAuth, requireRole('finance', 'accounts'), req
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/finance/ap/:id/pay', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/finance/ap/:id/pay', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, validateBody(RS.financeApPay), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const { tenantId: tid } = getRequestTenantContext(req);
@@ -20483,7 +20483,7 @@ app.get('/api/finance/ar', requireAuth, requireRole('finance', 'accounts', 'admi
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/finance/ar', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/finance/ar', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, validateBody(RS.financeArCreate), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { patient_id, patient_name, payer_type = 'Patient', payer_id, payer_name, invoice_number, visit_id, admission_id, due_date, subtotal, discount_amount, insurance_share, patient_share, vat_amount, total_amount, notes } = req.body;
@@ -20506,7 +20506,7 @@ app.post('/api/finance/ar', requireAuth, requireRole('finance', 'accounts'), req
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/finance/ar/:id/collect', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/finance/ar/:id/collect', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, validateBody(RS.financeArCollect), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const { tenantId: tid } = getRequestTenantContext(req);
@@ -20597,7 +20597,7 @@ app.get('/api/finance/reports/snapshots', requireAuth, requireRole('finance', 'a
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/finance/reports/generate', requireAuth, requireRole('finance', 'accounts', 'admin'), requireTenantScope, async (req, res) => {
+app.post('/api/finance/reports/generate', requireAuth, requireRole('finance', 'accounts', 'admin'), requireTenantScope, validateBody(RS.financeReportGenerate), async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { report_type = 'PL', period_start, period_end } = req.body;
