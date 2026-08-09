@@ -83,6 +83,19 @@ const e16 = require('./e16_inventory_engine'); // E16 inventory/CSSD pure engine
 const e18 = require('./e18_hr_engine'); // E18 HR/Workforce pure engine (license expiry, leave SM, payroll, PII mask)
 const { mountOnboardingRoutes } = require('./onboarding'); // E0 Facility Onboarding Wizard (super-admin provisioning)
 const paymentAdapter = require('./payment_adapter');
+const {
+    normalizeZatcaConfig,
+    validateZatcaConfig,
+    redactZatcaConfig
+} = require('./lib/compliance/zatca_settings');
+const {
+    normalizeNphiesConfig,
+    redactNphiesConfig,
+    validateNphiesConfig,
+    normalizeCbahiConfig,
+    redactCbahiConfig,
+    validateCbahiConfig
+} = require('./lib/compliance/integration_settings');
 
 
 // Multer setup for radiology image uploads — A3A: PHI vault OUTSIDE public webroot (no static/direct access)
@@ -4304,7 +4317,29 @@ app.get('/api/settings/integrations', requireAuth, requireTenantContext, async (
     try {
         const tenantId = req.tenantId;
         const result = await pool.query('SELECT * FROM integration_settings WHERE tenant_id = $1', [tenantId]);
-        res.json(result.rows);
+        const rows = result.rows.map((row) => {
+            const integrationName = String(row.integration_name || '').toUpperCase();
+            if (!['ZATCA', 'NPHIES', 'CBAHI'].includes(integrationName)) return row;
+
+            let parsed = {};
+            try { parsed = JSON.parse(row.config_json || '{}'); } catch (_) { parsed = {}; }
+
+            let redactedConfig = parsed;
+            if (integrationName === 'ZATCA') redactedConfig = redactZatcaConfig(parsed);
+            if (integrationName === 'NPHIES') redactedConfig = redactNphiesConfig(parsed);
+            if (integrationName === 'CBAHI') redactedConfig = redactCbahiConfig(parsed);
+
+            const safeRow = {
+                ...row,
+                config_json: JSON.stringify(redactedConfig)
+            };
+            if (integrationName === 'ZATCA' || integrationName === 'NPHIES') {
+                safeRow['api_key'] = row.api_key ? '[REDACTED]' : '';
+                safeRow['api_secret'] = row.api_secret ? '[REDACTED]' : '';
+            }
+            return safeRow;
+        });
+        res.json(rows);
     } catch (e) {
         res.status(500).json({ error: 'Server error' });
     }
@@ -4315,32 +4350,85 @@ app.post('/api/settings/integrations', requireAuth, requireTenantContext, async 
         const tenantId = req.tenantId;
         const { integration_name, provider, api_key, api_secret, endpoint_url, is_enabled, config_json } = req.body;
         if (!integration_name) return res.status(400).json({ error: 'Missing integration_name' });
+        const normalizedName = String(integration_name).trim().toUpperCase();
+        if (!normalizedName) return res.status(400).json({ error: 'Missing integration_name' });
 
-        // Validate JSON
-        try {
-            JSON.parse(config_json || '{}');
-        } catch (_) {
+        // Validate/normalize config_json whether passed as string or object.
+        let parsedConfig = {};
+        if (typeof config_json === 'string' || config_json == null) {
+            try {
+                parsedConfig = JSON.parse(config_json || '{}');
+            } catch (_) {
+                return res.status(400).json({ error: 'Invalid config_json format' });
+            }
+        } else if (typeof config_json === 'object') {
+            parsedConfig = config_json;
+        } else {
             return res.status(400).json({ error: 'Invalid config_json format' });
         }
 
-        // Check if integration exists
-        const exists = (await pool.query('SELECT id FROM integration_settings WHERE tenant_id = $1 AND integration_name = $2', [tenantId, integration_name])).rows[0];
+        let configJsonToStore = JSON.stringify(parsedConfig || {});
+
+        if (normalizedName === 'ZATCA') {
+            const requiresCsr = parseInt(is_enabled, 10) === 1;
+            const v = validateZatcaConfig(parsedConfig, {
+                requireCsrProfile: requiresCsr,
+                requireKeys: false
+            });
+            if (!v.ok) {
+                return res.status(422).json({
+                    error: 'Invalid ZATCA config_json',
+                    codes: v.errors
+                });
+            }
+            configJsonToStore = JSON.stringify(normalizeZatcaConfig(v.normalized));
+        } else if (normalizedName === 'NPHIES') {
+            const requiresProfile = parseInt(is_enabled, 10) === 1;
+            const v = validateNphiesConfig(parsedConfig, { requireProfile: requiresProfile });
+            if (!v.ok) {
+                return res.status(422).json({
+                    error: 'Invalid NPHIES config_json',
+                    codes: v.errors
+                });
+            }
+            configJsonToStore = JSON.stringify(normalizeNphiesConfig(v.normalized));
+        } else if (normalizedName === 'CBAHI') {
+            const requiresProfile = parseInt(is_enabled, 10) === 1;
+            const v = validateCbahiConfig(parsedConfig, { requireProfile: requiresProfile });
+            if (!v.ok) {
+                return res.status(422).json({
+                    error: 'Invalid CBAHI config_json',
+                    codes: v.errors
+                });
+            }
+            configJsonToStore = JSON.stringify(normalizeCbahiConfig(v.normalized));
+        }
+
+        // Check if integration exists.
+        const exists = (await pool.query('SELECT id, api_key, api_secret FROM integration_settings WHERE tenant_id = $1 AND UPPER(integration_name) = $2', [tenantId, normalizedName])).rows[0];
+        const nextApiKey = (typeof api_key === 'string' && api_key.trim() && api_key !== '***REDACTED***')
+            ? api_key.trim()
+            : (exists?.api_key || '');
+        const nextApiSecret = (typeof api_secret === 'string' && api_secret.trim() && api_secret !== '***REDACTED***')
+            ? api_secret.trim()
+            : (exists?.api_secret || '');
+
         if (exists) {
             await pool.query(
                 `UPDATE integration_settings 
                  SET provider = $1, api_key = $2, api_secret = $3, endpoint_url = $4, is_enabled = $5, config_json = $6, last_sync = CURRENT_TIMESTAMP
-                 WHERE tenant_id = $7 AND integration_name = $8`,
-                [provider, api_key, api_secret, endpoint_url, parseInt(is_enabled) || 0, config_json || '{}', tenantId, integration_name]
+                 WHERE tenant_id = $7 AND UPPER(integration_name) = $8`,
+                [provider, nextApiKey, nextApiSecret, endpoint_url, parseInt(is_enabled) || 0, configJsonToStore, tenantId, normalizedName]
             );
         } else {
             await pool.query(
                 `INSERT INTO integration_settings (tenant_id, integration_name, provider, api_key, api_secret, endpoint_url, is_enabled, config_json, last_sync)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)`,
-                [tenantId, integration_name, provider, api_key, api_secret, endpoint_url, parseInt(is_enabled) || 0, config_json || '{}']
+                [tenantId, normalizedName, provider, nextApiKey, nextApiSecret, endpoint_url, parseInt(is_enabled) || 0, configJsonToStore]
             );
         }
 
-        logAudit(req.session.user?.id, req.session.user?.display_name, 'UPDATE_INTEGRATION_SETTINGS', 'Settings', `Updated integration ${integration_name} settings`, req.ip);
+        logAudit(req.session.user?.id, req.session.user?.display_name, 'UPDATE_INTEGRATION_SETTINGS', 'Settings', `Updated integration ${normalizedName} settings`, req.ip);
         res.json({ success: true });
     } catch (e) {
         console.error(e);
@@ -13063,12 +13151,12 @@ app.post('/api/zatca/submit', requireAuth, requireRole('finance', 'accounts'), r
         if (!z) return res.status(404).json({ error: 'E-invoice not generated yet' });
         
         // 1. Fetch ZATCA settings for the current tenant
-        const settings = (await pool.query('SELECT * FROM integration_settings WHERE tenant_id=$1 AND integration_name=$2', [tenantId, 'ZATCA'])).rows[0];
-        
-        // 2. Fallback check: if ZATCA is not enabled, or not configured, or ZATCA_ENABLED environment variable is off:
-        const isZatcaEnabled = e10ZatcaEnabled() && settings && settings.is_enabled === 1 && settings.api_key && settings.api_secret;
-        
-        if (!isZatcaEnabled) {
+        const settings = (await pool.query('SELECT * FROM integration_settings WHERE tenant_id=$1 AND UPPER(integration_name)=$2', [tenantId, 'ZATCA'])).rows[0];
+
+        // 2. Environment/feature gating: if globally disabled or integration disabled, keep safe mock mode.
+        const integrationEnabled = Boolean(settings && parseInt(settings.is_enabled, 10) === 1);
+        const globalEnabled = e10ZatcaEnabled();
+        if (!globalEnabled || !integrationEnabled) {
             // Safe fallback / mock submission:
             await pool.query(
                 `UPDATE zatca_invoices 
@@ -13084,21 +13172,36 @@ app.post('/api/zatca/submit', requireAuth, requireRole('finance', 'accounts'), r
                 message: 'ZATCA clearance simulated or disabled (sandbox/mock mode)' 
             });
         }
+
+        // 3. Fail-closed onboarding checks when integration is enabled.
+        if (!settings?.api_key || !settings?.api_secret) {
+            return res.status(422).json({
+                error: 'ZATCA onboarding incomplete: missing production credentials',
+                code: 'ZATCA_ONBOARDING_INCOMPLETE'
+            });
+        }
         
-        // 3. Real Cryptographic signing & API transmission
+        // 4. Real Cryptographic signing & API transmission
         const zatcaPhase2 = require('./zatca_phase2');
         let configJson = {};
         try {
             configJson = JSON.parse(settings.config_json || '{}');
         } catch (_) {}
-        
-        const privKey = configJson.private_key_pem;
-        const pubKey = configJson.public_key_pem;
-        const environment = configJson.environment || 'sandbox';
-        
-        if (!privKey || !pubKey) {
-            return res.status(422).json({ error: 'ZATCA private/public keys are missing in config_json' });
+
+        const configValidation = validateZatcaConfig(configJson, {
+            requireKeys: true,
+            requireCsrProfile: true
+        });
+        if (!configValidation.ok) {
+            return res.status(422).json({
+                error: 'Invalid ZATCA configuration',
+                codes: configValidation.errors
+            });
         }
+        const normalized = configValidation.normalized;
+        const privKey = normalized.private_key_pem;
+        const pubKey = normalized.public_key_pem;
+        const environment = normalized.environment;
         
         // Compute SHA-256 hash of the UBL XML
         const xmlHash = zatcaPhase2.invoiceHash(z.ubl_xml);
