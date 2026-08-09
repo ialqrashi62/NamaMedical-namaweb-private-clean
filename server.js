@@ -15303,7 +15303,7 @@ app.get('/api/pharmacy/queue', requireAuth, requireTenantScope, async (req, res)
 });
 
 // Update prescription status (Dispense with sale)
-app.put('/api/pharmacy/queue/:id', requireAuth, requireTenantScope, async (req, res) => {
+app.put('/api/pharmacy/queue/:id', requireAuth, requireTenantScope, validateBody(RS.pharmacyQueueUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { status, price, payment_method, patient_id } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);

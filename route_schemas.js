@@ -175,6 +175,14 @@ const prescriptionCreate = {
     override_reason:   { type: 'str', required: false, max: 1000 }
 };
 
+// PUT /api/pharmacy/queue/:id
+const pharmacyQueueUpdate = {
+    status:         { type: 'str', required: false, max: 40 },
+    price:          { type: 'num', required: false, min: 0 },
+    payment_method: { type: 'str', required: false, max: 80 },
+    patient_id:     { type: 'id', required: false }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -193,5 +201,6 @@ module.exports = {
     financeArCollect,
     financeReportGenerate,
     clinicalOrderCreate,
-    prescriptionCreate
+    prescriptionCreate,
+    pharmacyQueueUpdate
 };
