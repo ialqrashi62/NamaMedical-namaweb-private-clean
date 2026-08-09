@@ -12892,7 +12892,7 @@ app.get('/api/pediatrics/weight-based-dose', requireAuth, async (req, res) => {
 // ===== A3: NURSING — Pain Assessment (NRS/VAS/FLACC) =====
 
 // POST /api/nursing/pain-assessment — تسجيل تقييم الألم
-app.post('/api/nursing/pain-assessment', requireAuth, requireRole('nursing', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/nursing/pain-assessment', requireAuth, requireRole('nursing', 'doctor'), requireTenantScope, validateBody(RS.nursingPainAssessmentCreate), idempotencyGuard, async (req, res) => {
     try {
         const {
             patient_id, patient_name, admission_id,
@@ -13818,7 +13818,7 @@ app.get('/api/nursing/care-plans', requireAuth, requireTenantScope, async (req, 
         res.json((await pool.query(q, params)).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/nursing/care-plans', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/nursing/care-plans', requireAuth, requireTenantScope, validateBody(RS.nursingCarePlanCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, patient_name, diagnosis, priority, goals, interventions, expected_outcomes } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -13845,7 +13845,7 @@ app.get('/api/nursing/assessments', requireAuth, requireRole('nursing', 'doctor'
         res.json((await pool.query(q, params)).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/nursing/assessments', requireAuth, requireRole('nursing', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/nursing/assessments', requireAuth, requireRole('nursing', 'doctor'), requireTenantScope, validateBody(RS.nursingAssessmentCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, patient_name, assessment_type, pain_score, gcs_score, shift, notes } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -16206,7 +16206,7 @@ app.get('/api/pharmacy/stock-log', requireAuth, requireTenantScope, async (req, 
 });
 
 // ===== NURSING ASSESSMENT SCALES =====
-app.post('/api/nursing/assessment', requireAuth, requireRole('nursing', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/nursing/assessment', requireAuth, requireRole('nursing', 'doctor'), requireTenantScope, validateBody(RS.nursingAssessmentScaleCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, pain_scale, notes } = req.body;
         const { tenantId } = getRequestTenantContext(req);
@@ -21135,7 +21135,7 @@ app.get('/api/nursing/io/:patientId', requireAuth, requireTenantScope, async (re
 });
 
 // ===== I&O: POST — add entry =====
-app.post('/api/nursing/io', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/nursing/io', requireAuth, requireTenantScope, validateBody(RS.nursingIoCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = req.user?.tenant_id;
         const { patient_id, entry_type, source, volume_ml, entry_time, shift, notes } = req.body;
@@ -21174,7 +21174,7 @@ app.get('/api/nursing/handover/:patientId', requireAuth, requireTenantScope, asy
 });
 
 // ===== Handover SBAR: POST =====
-app.post('/api/nursing/handover', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/nursing/handover', requireAuth, requireTenantScope, validateBody(RS.nursingHandoverCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = req.user?.tenant_id;
         const { patient_id, sbar_s, sbar_b, sbar_a, sbar_r, shift, news2_score } = req.body;

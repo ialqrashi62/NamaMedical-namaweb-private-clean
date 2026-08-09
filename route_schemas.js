@@ -819,6 +819,77 @@ const nursingTriageCreate = {
     visit_id:           { type: 'id', required: false }
 };
 
+// POST /api/nursing/pain-assessment
+const nursingPainAssessmentCreate = {
+    patient_id:           { type: 'id', required: true },
+    patient_name:         { type: 'str', required: false, max: 300 },
+    admission_id:         { type: 'id', required: false },
+    pain_scale:           { type: 'str', required: false, max: 40 },
+    pain_score:           { type: 'int', required: true, min: 0 },
+    pain_location:        { type: 'str', required: false, max: 500 },
+    pain_character:       { type: 'str', required: false, max: 500 },
+    pain_radiation:       { type: 'str', required: false, max: 500 },
+    pain_onset:           { type: 'str', required: false, max: 300 },
+    pain_duration:        { type: 'str', required: false, max: 300 },
+    aggravating_factors:  { type: 'str', required: false, max: 1000 },
+    relieving_factors:    { type: 'str', required: false, max: 1000 },
+    current_analgesia:    { type: 'str', required: false, max: 1000 },
+    pain_goal:            { type: 'int', required: false, min: 0 },
+    reassessment_time:    { type: 'str', required: false, max: 80 },
+    notes:                { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/nursing/care-plans
+const nursingCarePlanCreate = {
+    patient_id:         { type: 'id', required: true },
+    patient_name:       { type: 'str', required: false, max: 300 },
+    diagnosis:          { type: 'str', required: false, max: 1000 },
+    priority:           { type: 'str', required: false, max: 80 },
+    goals:              { type: 'str', required: false, max: 4000 },
+    interventions:      { type: 'str', required: false, max: 4000 },
+    expected_outcomes:  { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/nursing/assessments
+const nursingAssessmentCreate = {
+    patient_id:       { type: 'id', required: true },
+    patient_name:     { type: 'str', required: false, max: 300 },
+    assessment_type:  { type: 'str', required: false, max: 120 },
+    pain_score:       { type: 'int', required: false, min: 0 },
+    gcs_score:        { type: 'int', required: false, min: 0 },
+    shift:            { type: 'str', required: false, max: 80 },
+    notes:            { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/nursing/assessment
+const nursingAssessmentScaleCreate = {
+    patient_id: { type: 'id', required: true },
+    pain_scale: { type: 'int', required: false, min: 0 },
+    notes:      { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/nursing/io
+const nursingIoCreate = {
+    patient_id: { type: 'id', required: true },
+    entry_type: { type: 'str', required: true, max: 40 },
+    source:     { type: 'str', required: true, max: 120 },
+    volume_ml:  { type: 'int', required: true, min: 1 },
+    entry_time: { type: 'str', required: false, max: 20 },
+    shift:      { type: 'str', required: false, max: 80 },
+    notes:      { type: 'str', required: false, max: 2000 }
+};
+
+// POST /api/nursing/handover
+const nursingHandoverCreate = {
+    patient_id:   { type: 'id', required: true },
+    sbar_s:       { type: 'str', required: false, max: 4000 },
+    sbar_b:       { type: 'str', required: false, max: 4000 },
+    sbar_a:       { type: 'str', required: false, max: 4000 },
+    sbar_r:       { type: 'str', required: false, max: 4000 },
+    shift:        { type: 'str', required: false, max: 80 },
+    news2_score:  { type: 'int', required: false, min: 0 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -909,5 +980,11 @@ module.exports = {
     emergencyVisitCreate,
     emergencyVisitUpdate,
     emergencyTraumaAssessmentCreate,
-    nursingTriageCreate
+    nursingTriageCreate,
+    nursingPainAssessmentCreate,
+    nursingCarePlanCreate,
+    nursingAssessmentCreate,
+    nursingAssessmentScaleCreate,
+    nursingIoCreate,
+    nursingHandoverCreate
 };
