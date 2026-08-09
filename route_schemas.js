@@ -839,6 +839,13 @@ const nursingPainAssessmentCreate = {
     notes:                { type: 'str', required: false, max: 4000 }
 };
 
+// POST /api/nursing/scores
+const nursingScoreCreate = {
+    patient_id: { type: 'id', required: true },
+    score_type: { type: 'str', required: true, max: 40 },
+    notes:      { type: 'str', required: false, max: 4000 }
+};
+
 // POST /api/nursing/care-plans
 const nursingCarePlanCreate = {
     patient_id:         { type: 'id', required: true },
@@ -982,6 +989,7 @@ module.exports = {
     emergencyTraumaAssessmentCreate,
     nursingTriageCreate,
     nursingPainAssessmentCreate,
+    nursingScoreCreate,
     nursingCarePlanCreate,
     nursingAssessmentCreate,
     nursingAssessmentScaleCreate,

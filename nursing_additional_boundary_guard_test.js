@@ -29,6 +29,7 @@ const schemas = fs.readFileSync(path.join(__dirname, 'route_schemas.js'), 'utf8'
 
 assert(
   server.includes("app.post('/api/nursing/pain-assessment',requireAuth,requireRole('nursing','doctor'),requireTenantScope,validateBody(RS.nursingPainAssessmentCreate),idempotencyGuard,async(req,res)=>{") &&
+  server.includes("app.post('/api/nursing/scores',requireAuth,requireRole('nursing','doctor'),requireTenantScope,validateBody(RS.nursingScoreCreate),idempotencyGuard,async(req,res)=>{") &&
   server.includes("app.post('/api/nursing/care-plans',requireAuth,requireTenantScope,validateBody(RS.nursingCarePlanCreate),idempotencyGuard,async(req,res)=>{") &&
   server.includes("app.post('/api/nursing/assessments',requireAuth,requireRole('nursing','doctor'),requireTenantScope,validateBody(RS.nursingAssessmentCreate),idempotencyGuard,async(req,res)=>{") &&
   server.includes("app.post('/api/nursing/assessment',requireAuth,requireRole('nursing','doctor'),requireTenantScope,validateBody(RS.nursingAssessmentScaleCreate),idempotencyGuard,async(req,res)=>{") &&
@@ -39,6 +40,7 @@ assert(
 
 assert(
   schemas.includes('constnursingPainAssessmentCreate={') &&
+  schemas.includes('constnursingScoreCreate={') &&
   schemas.includes('constnursingCarePlanCreate={') &&
   schemas.includes('constnursingAssessmentCreate={') &&
   schemas.includes('constnursingAssessmentScaleCreate={') &&

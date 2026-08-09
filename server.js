@@ -13765,7 +13765,7 @@ app.post('/api/mar/administer', requireAuth, requireRole('nursing', 'doctor'), r
 // (the client can NEVER forge a "score"). Writes nursing_scores (tenant_id + explicit AND
 // tenant_id predicate). Incomplete Braden (any missing subscale) => 422 (item 8, fail-closed).
 // ============================================================================
-app.post('/api/nursing/scores', requireAuth, requireRole('nursing', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/nursing/scores', requireAuth, requireRole('nursing', 'doctor'), requireTenantScope, validateBody(RS.nursingScoreCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, score_type, observations, notes } = req.body || {};
         const { tenantId, facilityId } = getRequestTenantContext(req);
