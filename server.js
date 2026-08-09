@@ -7424,7 +7424,7 @@ app.get('/api/patients/:id/active-orders', requireAuth, requireTenantScope, asyn
  * POST /api/orders  (clinical orders — lab, radiology, medication, nursing, diet, iv, referral, procedure, discharge)
  * إنشاء أمر طبي من محطة الطبيب
  */
-app.post('/api/orders', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/orders', requireAuth, requireTenantScope, validateBody(RS.clinicalOrderCreate), async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { patient_id, type, description, quantity, status, notes, urgency } = req.body;
@@ -15200,7 +15200,7 @@ async function getPatientActiveMeds(patientId, tenantId) {
 }
 
 // Doctor sends prescription → Pharmacy queue
-app.post('/api/prescriptions', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/prescriptions', requireAuth, requireTenantScope, validateBody(RS.prescriptionCreate), async (req, res) => {
     try {
         const { patient_id, medication_name, dosage, quantity_per_day, frequency, duration, override_reason } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);

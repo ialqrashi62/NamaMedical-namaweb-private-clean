@@ -153,6 +153,28 @@ const financeReportGenerate = {
     period_end:   { type: 'dateStr', required: true }
 };
 
+// POST /api/orders
+const clinicalOrderCreate = {
+    patient_id:   { type: 'id', required: true },
+    type:         { type: 'str', required: true, max: 80 },
+    description:  { type: 'str', required: true, max: 2000 },
+    quantity:     { type: 'int', required: false, min: 1, max: 1000 },
+    status:       { type: 'str', required: false, max: 80 },
+    notes:        { type: 'str', required: false, max: 2000 },
+    urgency:      { type: 'str', required: false, max: 40 }
+};
+
+// POST /api/prescriptions
+const prescriptionCreate = {
+    patient_id:        { type: 'id', required: true },
+    medication_name:   { type: 'str', required: true, max: 300 },
+    dosage:            { type: 'str', required: false, max: 200 },
+    quantity_per_day:  { type: 'str', required: false, max: 20 },
+    frequency:         { type: 'str', required: false, max: 100 },
+    duration:          { type: 'str', required: false, max: 100 },
+    override_reason:   { type: 'str', required: false, max: 1000 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -169,5 +191,7 @@ module.exports = {
     financeApPay,
     financeArCreate,
     financeArCollect,
-    financeReportGenerate
+    financeReportGenerate,
+    clinicalOrderCreate,
+    prescriptionCreate
 };

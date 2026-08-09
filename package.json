@@ -8,9 +8,10 @@
     "dev": "node server.js",
     "test": "node run_all_tests.js",
     "test:safe": "node run_safe_tests.js",
-    "test:compliance:quick": "node integration_settings_test.js && node zatca_submit_fail_closed_guard_test.js && node nphies_cbahi_ui_config_test.js",
+    "test:compliance:quick": "node integration_settings_test.js && node zatca_submit_fail_closed_guard_test.js && node nphies_cbahi_ui_config_test.js && node clinical_boundary_validation_guard_test.js",
     "test:compliance:full": "npm run test:compliance:quick && node zatca_settings_route_integration_test.js",
     "test:money:safety": "node money_safety_guard_test.js && node finance_boundary_validation_guard_test.js && node invoice_boundary_validation_guard_test.js",
+    "test:clinical:safety": "node clinical_boundary_validation_guard_test.js",
     "setup": "setup.bat",
     "build:css": "tailwindcss -i ./tailwind-input.css -o ./public/css/tailwind-compiled.css --minify",
     "postinstall": "node -e \"const fs=require('fs');if(!fs.existsSync('.env')&&fs.existsSync('.env.example')){fs.copyFileSync('.env.example','.env');console.log('✅ Created .env from .env.example')}\" && npm run build:css"
