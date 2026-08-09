@@ -5041,7 +5041,7 @@ app.post('/api/clinical/records/:id/lock', requireAuth, requireRole('patients'),
 });
 
 // ===== INVOICES (Enhanced) =====
-app.post('/api/invoices/generate', requireAuth, requireRole('invoices', 'accounts'), idempotencyGuard, async (req, res) => {
+app.post('/api/invoices/generate', requireAuth, requireRole('invoices', 'accounts'), validateBody(RS.invoiceGenerate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, items } = req.body;
         // --- TENANT SCOPE: verify patient belongs to current tenant ---

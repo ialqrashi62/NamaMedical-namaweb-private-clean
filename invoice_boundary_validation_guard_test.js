@@ -28,6 +28,11 @@ const server = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8').replac
 const schemas = fs.readFileSync(path.join(__dirname, 'route_schemas.js'), 'utf8').replace(/\s+/g, '');
 
 assert(
+  server.includes("app.post('/api/invoices/generate',requireAuth,requireRole('invoices','accounts'),validateBody(RS.invoiceGenerate),idempotencyGuard,async(req,res)=>{"),
+  'invoice generate route is guarded by validateBody(RS.invoiceGenerate)'
+);
+
+assert(
   server.includes("app.put('/api/invoices/:id/pay',requireAuth,requireRole('invoices','accounts'),validateBody(RS.invoicePay),idempotencyGuard,async(req,res)=>{"),
   'invoice pay route is guarded by validateBody(RS.invoicePay)'
 );
@@ -48,6 +53,7 @@ assert(
 );
 
 assert(
+  schemas.includes('constinvoiceGenerate={') &&
   schemas.includes('constinvoicePay={') &&
     schemas.includes('constpaymentMoyasarInitiate={') &&
     schemas.includes('constinvoiceCancel={') &&

@@ -33,7 +33,7 @@ const validate = fs.readFileSync(path.join(__dirname, 'migrations', 'e22_01_oper
 
 assert(
   server.includes("app.post('/api/invoices',requireAuth,requireRole('invoices','accounts'),validateBody(RS.invoiceCreate),idempotencyGuard,async(req,res)=>{") &&
-  server.includes("app.post('/api/invoices/generate',requireAuth,requireRole('invoices','accounts'),idempotencyGuard,async(req,res)=>{") &&
+  server.includes("app.post('/api/invoices/generate',requireAuth,requireRole('invoices','accounts'),validateBody(RS.invoiceGenerate),idempotencyGuard,async(req,res)=>{") &&
   server.includes("app.post('/api/invoices/:id/refund',requireAuth,requireRole('invoices','accounts'),requireTenantScope,validateBody(RS.invoiceRefund),idempotencyGuard,async(req,res)=>{") &&
   server.includes("app.post('/api/finance/journal',requireAuth,requireRole('finance','accounts'),requireTenantScope,validateBody(RS.journalCreate),idempotencyGuard,async(req,res)=>{") &&
   server.includes("app.post('/api/finance/ap',requireAuth,requireRole('finance','accounts'),requireTenantScope,validateBody(RS.financeApCreate),idempotencyGuard,async(req,res)=>{") &&

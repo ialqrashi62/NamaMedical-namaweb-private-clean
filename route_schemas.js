@@ -43,6 +43,11 @@ const invoiceRefund = {
     reason: { type: 'str', required: false, max: 500 }
 };
 
+// POST /api/invoices/generate
+const invoiceGenerate = {
+    patient_id: { type: 'id', required: true }
+};
+
 // PUT /api/invoices/:id/pay
 const invoicePay = {
     payment_method: { type: 'str', required: false, max: 80 }
@@ -277,6 +282,7 @@ module.exports = {
     invoiceCreate,
     journalCreate,
     invoiceRefund,
+    invoiceGenerate,
     invoicePay,
     paymentMoyasarInitiate,
     invoiceCancel,
