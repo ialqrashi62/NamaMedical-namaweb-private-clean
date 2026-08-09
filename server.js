@@ -5825,7 +5825,7 @@ app.get('/api/ophthalmology/exams/patient/:patient_id', requireAuth, requireRole
 });
 
 // ===== GENERAL SURGERY DEPARTMENT (G09) =====
-app.post('/api/surgery/checklists', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/surgery/checklists', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.surgeryChecklistCreate), idempotencyGuard, async (req, res) => {
     try {
         const { 
             patient_id, surgery_date, procedure_name, 
@@ -5888,7 +5888,7 @@ app.get('/api/surgery/checklists/patient/:patient_id', requireAuth, requireRole(
     }
 });
 
-app.post('/api/surgery/timelogs', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/surgery/timelogs', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.surgeryTimelogCreate), idempotencyGuard, async (req, res) => {
     try {
         const { 
             patient_id, procedure_name, 
@@ -5951,7 +5951,7 @@ app.get('/api/surgery/timelogs/patient/:patient_id', requireAuth, requireRole('p
 });
 
 // ===== UROLOGY DEPARTMENT (G15) =====
-app.post('/api/urology/urodynamics', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/urology/urodynamics', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.urologyUrodynamicsCreate), idempotencyGuard, async (req, res) => {
     try {
         const { 
             patient_id, study_date, max_flow_rate, voided_volume, post_void_residual, detrusor_pressure, interpretation 
@@ -6014,7 +6014,7 @@ app.get('/api/urology/urodynamics/patient/:patient_id', requireAuth, requireRole
 });
 
 // ===== CARDIOTHORACIC & VASCULAR DEPARTMENT (G16) =====
-app.post('/api/surgery/cpb', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/surgery/cpb', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.surgeryCpbCreate), idempotencyGuard, async (req, res) => {
     try {
         const { 
             patient_id, bypass_date, pump_time, cross_clamp_time, flow_rate, min_temp, notes 
@@ -6077,7 +6077,7 @@ app.get('/api/surgery/cpb/patient/:patient_id', requireAuth, requireRole('patien
 });
 
 // ===== ANESTHESIA & PAIN DEPARTMENT (G19) =====
-app.post('/api/anesthesia/pain', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/anesthesia/pain', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.anesthesiaPainCreate), idempotencyGuard, async (req, res) => {
     try {
         const { 
             patient_id, assessment_time, pain_score_vas, pca_pump_used, pca_demands, pca_deliveries, notes 
@@ -6140,7 +6140,7 @@ app.get('/api/anesthesia/pain/patient/:patient_id', requireAuth, requireRole('pa
 });
 
 // ===== NEONATAL & PEDIATRICS DEPARTMENT (G20) =====
-app.post('/api/pediatrics/growth', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/pediatrics/growth', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.pediatricsGrowthCreate), idempotencyGuard, async (req, res) => {
     try {
         const { 
             patient_id, record_date, apgar_1min, apgar_5min, weight_kg, height_cm, head_circ_cm 
@@ -6210,7 +6210,7 @@ app.get('/api/pediatrics/growth/patient/:patient_id', requireAuth, requireRole('
 });
 
 // ===== OBGYN DEPARTMENT (G21) =====
-app.post('/api/obgyn/pregnancies', requireAuth, requireRole('patients', 'prescriptions'), async (req, res) => {
+app.post('/api/obgyn/pregnancies', requireAuth, requireRole('patients', 'prescriptions'), validateBody(RS.obgynPregnancyCreate), idempotencyGuard, async (req, res) => {
     try {
         // NOTE: this is the EFFECTIVE handler for POST /api/obgyn/pregnancies — a second,
         // richer registration exists further down (~14203) but Express routes to the FIRST
@@ -8535,7 +8535,7 @@ app.post('/api/surgeries/:id/preop-tests', requireAuth, requireTenantScope, vali
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.put('/api/surgery-preop-tests/:id', requireAuth, requireTenantScope, async (req, res) => {
+app.put('/api/surgery-preop-tests/:id', requireAuth, requireTenantScope, validateBody(RS.surgeryPreopTestUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
 
@@ -12832,7 +12832,7 @@ app.get('/api/pediatrics/immunization-records/:patientId', requireAuth, requireT
 });
 
 // POST /api/pediatrics/immunization — تسجيل تطعيم جديد
-app.post('/api/pediatrics/immunization', requireAuth, requireRole('doctor', 'nursing', 'patients'), requireTenantScope, async (req, res) => {
+app.post('/api/pediatrics/immunization', requireAuth, requireRole('doctor', 'nursing', 'patients'), requireTenantScope, validateBody(RS.pediatricsImmunizationCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, vaccine_name, dose_number, given_date, batch_number, site, route, next_due, notes } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -16304,7 +16304,7 @@ app.get('/api/obgyn/pregnancies', requireAuth, requireRole(...OB_RBAC), requireT
 // registered first, so Express never routes here. Kept for reference until the OB endpoints
 // are consolidated onto a single handler+schema (tracked as a Wave-2 schema-conflict item);
 // the effective handler above was hardened to accept this route's payload shape too.
-app.post('/api/obgyn/pregnancies', requireAuth, requireRole(...OB_RBAC), requireTenantScope, async (req, res) => {
+app.post('/api/obgyn/pregnancies', requireAuth, requireRole(...OB_RBAC), requireTenantScope, validateBody(RS.obgynPregnancyCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e14RequireTenant(req);
         if (tenantId === null) return res.status(403).json({ error: 'Tenant scope required' });
@@ -16340,7 +16340,7 @@ app.post('/api/obgyn/pregnancies', requireAuth, requireRole(...OB_RBAC), require
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.put('/api/obgyn/pregnancies/:id', requireAuth, requireRole(...OB_RBAC), requireTenantScope, async (req, res) => {
+app.put('/api/obgyn/pregnancies/:id', requireAuth, requireRole(...OB_RBAC), requireTenantScope, validateBody(RS.obgynPregnancyUpdate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e14RequireTenant(req);
         if (tenantId === null) return res.status(403).json({ error: 'Tenant scope required' });
@@ -16394,7 +16394,7 @@ app.get('/api/obgyn/antenatal/:pregnancy_id', requireAuth, requireRole(...OB_RBA
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/obgyn/antenatal', requireAuth, requireRole(...OB_RBAC), requireTenantScope, async (req, res) => {
+app.post('/api/obgyn/antenatal', requireAuth, requireRole(...OB_RBAC), requireTenantScope, validateBody(RS.obgynAntenatalCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e14RequireTenant(req);
         if (tenantId === null) return res.status(403).json({ error: 'Tenant scope required' });
@@ -16447,7 +16447,7 @@ app.get('/api/obgyn/partogram/:pregnancy_id', requireAuth, requireRole(...OB_RBA
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/obgyn/partogram', requireAuth, requireRole(...OB_RBAC), requireTenantScope, async (req, res) => {
+app.post('/api/obgyn/partogram', requireAuth, requireRole(...OB_RBAC), requireTenantScope, validateBody(RS.obgynPartogramCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e14RequireTenant(req);
         if (tenantId === null) return res.status(403).json({ error: 'Tenant scope required' });
@@ -16485,7 +16485,7 @@ app.get('/api/obgyn/ultrasounds/:pregnancy_id', requireAuth, requireRole(...OB_R
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/obgyn/ultrasounds', requireAuth, requireRole(...OB_RBAC), requireTenantScope, async (req, res) => {
+app.post('/api/obgyn/ultrasounds', requireAuth, requireRole(...OB_RBAC), requireTenantScope, validateBody(RS.obgynUltrasoundCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e14RequireTenant(req);
         if (tenantId === null) return res.status(403).json({ error: 'Tenant scope required' });
@@ -16515,7 +16515,7 @@ app.post('/api/obgyn/ultrasounds', requireAuth, requireRole(...OB_RBAC), require
 });
 
 // Delivery Records — state machine (Active -> Delivered) + SELECT...FOR UPDATE; server APGAR
-app.post('/api/obgyn/deliveries', requireAuth, requireRole(...OB_RBAC), requireTenantScope, async (req, res) => {
+app.post('/api/obgyn/deliveries', requireAuth, requireRole(...OB_RBAC), requireTenantScope, validateBody(RS.obgynDeliveryCreate), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const tenantId = e14RequireTenant(req);
@@ -16599,7 +16599,7 @@ app.get('/api/obgyn/neonatal/:delivery_id', requireAuth, requireRole(...OB_RBAC)
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/obgyn/neonatal', requireAuth, requireRole(...OB_RBAC), requireTenantScope, async (req, res) => {
+app.post('/api/obgyn/neonatal', requireAuth, requireRole(...OB_RBAC), requireTenantScope, validateBody(RS.obgynNeonatalCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e14RequireTenant(req);
         if (tenantId === null) return res.status(403).json({ error: 'Tenant scope required' });
@@ -16645,7 +16645,7 @@ app.post('/api/obgyn/neonatal', requireAuth, requireRole(...OB_RBAC), requireTen
 });
 
 // NST Records
-app.post('/api/obgyn/nst', requireAuth, requireRole(...OB_RBAC), requireTenantScope, async (req, res) => {
+app.post('/api/obgyn/nst', requireAuth, requireRole(...OB_RBAC), requireTenantScope, validateBody(RS.obgynNstCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e14RequireTenant(req);
         if (tenantId === null) return res.status(403).json({ error: 'Tenant scope required' });
@@ -20920,7 +20920,7 @@ app.get('/api/nursing/risk-assessments', requireAuth, requireTenantScope, async 
 });
 
 // POST /api/surgery/count-sheet — تسجيل جرد الأدوات الجراحية والشاش
-app.post('/api/surgery/count-sheet', requireAuth, requireRole('doctor', 'nursing'), requireTenantScope, async (req, res) => {
+app.post('/api/surgery/count-sheet', requireAuth, requireRole('doctor', 'nursing'), requireTenantScope, validateBody(RS.surgeryCountSheetCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId: tid } = getRequestTenantContext(req);
         const {
@@ -20975,7 +20975,7 @@ app.get('/api/surgery/count-sheet/:surgeryId', requireAuth, requireTenantScope, 
 });
 
 // POST /api/pediatrics/apgar — تسجيل نقاط تقييم أبغار للمولود
-app.post('/api/pediatrics/apgar', requireAuth, requireRole('doctor', 'nursing'), requireTenantScope, async (req, res) => {
+app.post('/api/pediatrics/apgar', requireAuth, requireRole('doctor', 'nursing'), requireTenantScope, validateBody(RS.pediatricsApgarCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId: tid } = getRequestTenantContext(req);
         const { patient_id, mother_id, apgar_1min, apgar_5min, apgar_10min, details, notes } = req.body;

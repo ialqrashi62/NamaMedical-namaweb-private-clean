@@ -1555,6 +1555,279 @@ const ophthalmologyExamCreate = {
     findings:          { type: 'str', required: false, max: 4000 }
 };
 
+// POST /api/surgery/checklists
+const surgeryChecklistCreate = {
+    patient_id:           { type: 'id', required: true },
+    procedure_name:       { type: 'str', required: true, max: 200 },
+    surgery_date:         { type: 'dateStr', required: false },
+    sign_in_confirmed:    { type: 'bool', required: false },
+    time_out_confirmed:   { type: 'bool', required: false },
+    sign_out_confirmed:   { type: 'bool', required: false },
+    notes:                { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/surgery/timelogs
+const surgeryTimelogCreate = {
+    patient_id:              { type: 'id', required: true },
+    procedure_name:          { type: 'str', required: true, max: 200 },
+    anesthesia_start_time:   { type: 'dateStr', required: false },
+    incision_time:           { type: 'dateStr', required: false },
+    closure_time:            { type: 'dateStr', required: false },
+    anesthesia_end_time:     { type: 'dateStr', required: false }
+};
+
+// POST /api/surgery/cpb (cardiopulmonary bypass)
+const surgeryCpbCreate = {
+    patient_id:        { type: 'id', required: true },
+    bypass_date:       { type: 'dateStr', required: false },
+    pump_time:         { type: 'int', required: false, min: 0 },
+    cross_clamp_time:  { type: 'int', required: false, min: 0 },
+    flow_rate:         { type: 'num', required: false, min: 0 },
+    min_temp:          { type: 'num', required: false, min: 20, max: 42 },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
+
+// PUT /api/surgery-preop-tests/:id
+const surgeryPreopTestUpdate = {
+    is_completed:    { type: 'bool', required: false },
+    result_summary:  { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/surgery/count-sheet
+const surgeryCountSheetCreate = {
+    surgery_id:               { type: 'id', required: true },
+    sponge_count_initial:     { type: 'int', required: false, min: 0 },
+    sponge_count_final:       { type: 'int', required: false, min: 0 },
+    needle_count_initial:     { type: 'int', required: false, min: 0 },
+    needle_count_final:       { type: 'int', required: false, min: 0 },
+    instrument_count_initial: { type: 'int', required: false, min: 0 },
+    instrument_count_final:   { type: 'int', required: false, min: 0 },
+    witness1_name:            { type: 'str', required: false, max: 200 },
+    witness2_name:            { type: 'str', required: false, max: 200 },
+    notes:                    { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/urology/urodynamics
+const urologyUrodynamicsCreate = {
+    patient_id:           { type: 'id', required: true },
+    study_date:           { type: 'dateStr', required: false },
+    max_flow_rate:        { type: 'num', required: false, min: 0 },
+    voided_volume:        { type: 'num', required: false, min: 0 },
+    post_void_residual:   { type: 'num', required: false, min: 0 },
+    detrusor_pressure:    { type: 'num', required: false, min: 0 },
+    interpretation:       { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/anesthesia/pain
+const anesthesiaPainCreate = {
+    patient_id:        { type: 'id', required: true },
+    assessment_time:   { type: 'dateStr', required: false },
+    pain_score_vas:    { type: 'int', required: false, min: 0, max: 10 },
+    pca_pump_used:     { type: 'bool', required: false },
+    pca_demands:       { type: 'int', required: false, min: 0 },
+    pca_deliveries:    { type: 'int', required: false, min: 0 },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/pediatrics/growth
+const pediatricsGrowthCreate = {
+    patient_id:      { type: 'id', required: true },
+    record_date:     { type: 'dateStr', required: false },
+    apgar_1min:      { type: 'int', required: false, min: 0, max: 10 },
+    apgar_5min:      { type: 'int', required: false, min: 0, max: 10 },
+    weight_kg:       { type: 'num', required: false, min: 0, max: 500 },
+    height_cm:       { type: 'num', required: false, min: 0, max: 250 },
+    head_circ_cm:    { type: 'num', required: false, min: 0, max: 100 }
+};
+
+// POST /api/pediatrics/immunization
+const pediatricsImmunizationCreate = {
+    patient_id:    { type: 'id', required: true },
+    vaccine_name:  { type: 'str', required: true, max: 200 },
+    dose_number:   { type: 'int', required: false, min: 1, max: 20 },
+    given_date:    { type: 'dateStr', required: false },
+    batch_number:  { type: 'str', required: false, max: 80 },
+    site:          { type: 'str', required: false, max: 40 },
+    route:         { type: 'enumOf', allowed: ['IM', 'SC', 'Oral', 'ID', 'IN', ''], required: false },
+    next_due:      { type: 'dateStr', required: false },
+    notes:         { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/pediatrics/apgar
+const pediatricsApgarCreate = {
+    patient_id:  { type: 'id', required: true },
+    mother_id:   { type: 'id', required: false },
+    apgar_1min:  { type: 'int', required: false, min: 0, max: 10 },
+    apgar_5min:  { type: 'int', required: false, min: 0, max: 10 },
+    apgar_10min: { type: 'int', required: false, min: 0, max: 10 },
+    details:     { type: 'str', required: false, max: 4000 },
+    notes:       { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/obgyn/pregnancies (OB-engine module, line ~16307)
+const obgynPregnancyCreate = {
+    patient_id:               { type: 'id', required: true },
+    lmp:                      { type: 'dateStr', required: false },
+    gravida:                  { type: 'int', required: false, min: 0, max: 30 },
+    para:                     { type: 'int', required: false, min: 0, max: 30 },
+    abortions:                { type: 'int', required: false, min: 0, max: 30 },
+    living_children:          { type: 'int', required: false, min: 0, max: 30 },
+    blood_group:              { type: 'enumOf', allowed: ['A', 'B', 'AB', 'O', ''], required: false },
+    rh_factor:                { type: 'enumOf', allowed: ['+', '-', 'Positive', 'Negative', ''], required: false },
+    risk_level:               { type: 'enumOf', allowed: ['Low', 'Medium', 'High', ''], required: false },
+    pre_pregnancy_weight:     { type: 'num', required: false, min: 0, max: 300 },
+    height:                   { type: 'num', required: false, min: 0, max: 250 },
+    allergies:                { type: 'str', required: false, max: 1000 },
+    chronic_conditions:       { type: 'str', required: false, max: 1000 },
+    previous_cs:              { type: 'bool', required: false },
+    previous_complications:   { type: 'str', required: false, max: 1000 },
+    husband_name:             { type: 'str', required: false, max: 200 },
+    husband_blood_group:      { type: 'str', required: false, max: 10 },
+    attending_doctor:         { type: 'str', required: false, max: 200 }
+};
+
+// PUT /api/obgyn/pregnancies/:id
+const obgynPregnancyUpdate = {
+    blood_group:              { type: 'enumOf', allowed: ['A', 'B', 'AB', 'O', ''], required: false },
+    rh_factor:                { type: 'enumOf', allowed: ['+', '-', 'Positive', 'Negative', ''], required: false },
+    risk_level:               { type: 'enumOf', allowed: ['Low', 'Medium', 'High', ''], required: false },
+    pre_pregnancy_weight:     { type: 'num', required: false, min: 0, max: 300 },
+    height:                   { type: 'num', required: false, min: 0, max: 250 },
+    allergies:                { type: 'str', required: false, max: 1000 },
+    chronic_conditions:       { type: 'str', required: false, max: 1000 },
+    previous_cs:              { type: 'bool', required: false },
+    previous_complications:   { type: 'str', required: false, max: 1000 },
+    husband_name:             { type: 'str', required: false, max: 200 },
+    husband_blood_group:      { type: 'str', required: false, max: 10 },
+    attending_doctor:         { type: 'str', required: false, max: 200 }
+};
+
+// POST /api/obgyn/antenatal
+const obgynAntenatalCreate = {
+    pregnancy_id:        { type: 'id', required: true },
+    gestational_age:     { type: 'int', required: false, min: 0, max: 50 },
+    weight:              { type: 'num', required: false, min: 0, max: 300 },
+    systolic:            { type: 'int', required: false, min: 0, max: 300 },
+    diastolic:           { type: 'int', required: false, min: 0, max: 200 },
+    fundal_height:       { type: 'num', required: false, min: 0, max: 60 },
+    fetal_heart_rate:    { type: 'int', required: false, min: 0, max: 250 },
+    fetal_presentation:  { type: 'str', required: false, max: 60 },
+    fetal_movement:      { type: 'str', required: false, max: 200 },
+    edema:               { type: 'str', required: false, max: 40 },
+    proteinuria:         { type: 'str', required: false, max: 40 },
+    glucose_urine:       { type: 'str', required: false, max: 40 },
+    hemoglobin:          { type: 'num', required: false, min: 0, max: 30 },
+    complaints:          { type: 'str', required: false, max: 4000 },
+    examination_notes:   { type: 'str', required: false, max: 4000 },
+    plan:                { type: 'str', required: false, max: 4000 },
+    next_visit:          { type: 'dateStr', required: false }
+};
+
+// POST /api/obgyn/partogram
+const obgynPartogramCreate = {
+    pregnancy_id:                  { type: 'id', required: true },
+    cervical_dilation:             { type: 'num', required: false, min: 0, max: 10 },
+    cervical_effacement:           { type: 'num', required: false, min: 0, max: 100 },
+    descent_station:               { type: 'num', required: false, min: -5, max: 5 },
+    contractions_per_10min:        { type: 'int', required: false, min: 0, max: 20 },
+    contraction_duration:          { type: 'int', required: false, min: 0, max: 300 },
+    contraction_intensity:         { type: 'str', required: false, max: 40 },
+    fetal_heart_rate_baseline:     { type: 'int', required: false, min: 0, max: 250 },
+    fetal_heart_rate_variability:  { type: 'str', required: false, max: 40 },
+    decelerations:                 { type: 'str', required: false, max: 100 },
+    molding:                       { type: 'str', required: false, max: 40 },
+    caput_succedaneum:             { type: 'str', required: false, max: 40 },
+    meconium:                      { type: 'str', required: false, max: 40 },
+    amniotic_fluid:                { type: 'str', required: false, max: 40 },
+    maternal_bp:                   { type: 'str', required: false, max: 20 },
+    maternal_hr:                   { type: 'int', required: false, min: 0, max: 250 },
+    maternal_temp:                 { type: 'num', required: false, min: 30, max: 45 },
+    oxytocin_units:                { type: 'num', required: false, min: 0 },
+    notes:                         { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/obgyn/ultrasounds
+const obgynUltrasoundCreate = {
+    pregnancy_id:          { type: 'id', required: true },
+    scan_type:             { type: 'str', required: false, max: 80 },
+    gestational_age:       { type: 'str', required: false, max: 40 },
+    bpd:                   { type: 'num', required: false, min: 0, max: 200 },
+    hc:                    { type: 'num', required: false, min: 0, max: 500 },
+    ac:                    { type: 'num', required: false, min: 0, max: 500 },
+    fl:                    { type: 'num', required: false, min: 0, max: 200 },
+    efw:                   { type: 'num', required: false, min: 0, max: 10000 },
+    amniotic_fluid_index:  { type: 'num', required: false, min: 0, max: 100 },
+    placenta_location:     { type: 'str', required: false, max: 40 },
+    placenta_grade:        { type: 'enumOf', allowed: ['0', 'I', 'II', 'III', ''], required: false },
+    fetal_heart_rate:      { type: 'int', required: false, min: 0, max: 250 },
+    fetal_presentation:    { type: 'str', required: false, max: 60 },
+    fetal_gender:          { type: 'enumOf', allowed: ['Male', 'Female', 'Not determined', ''], required: false },
+    number_of_fetuses:     { type: 'int', required: false, min: 1, max: 10 },
+    cervical_length:       { type: 'num', required: false, min: 0, max: 100 },
+    anomalies:             { type: 'str', required: false, max: 4000 },
+    findings:              { type: 'str', required: false, max: 4000 },
+    impression:            { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/obgyn/deliveries
+const obgynDeliveryCreate = {
+    pregnancy_id:           { type: 'id', required: true },
+    delivery_date:          { type: 'dateStr', required: false },
+    delivery_mode:          { type: 'enumOf', allowed: ['Vaginal', 'C-section', 'Vacuum', 'Forceps', 'VBAC', 'Other', ''], required: false },
+    presentation:           { type: 'str', required: false, max: 60 },
+    anesthesia_type:        { type: 'str', required: false, max: 80 },
+    labor_duration_hours:   { type: 'num', required: false, min: 0, max: 100 },
+    oxytocin_used:          { type: 'bool', required: false },
+    episiotomy:             { type: 'bool', required: false },
+    perineal_laceration:    { type: 'str', required: false, max: 40 },
+    blood_loss_ml:          { type: 'int', required: false, min: 0, max: 10000 },
+    placenta_complete:      { type: 'bool', required: false },
+    placenta_abnormalities: { type: 'str', required: false, max: 400 },
+    umbilical_cord:         { type: 'str', required: false, max: 200 },
+    notes:                  { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/obgyn/neonatal
+const obgynNeonatalCreate = {
+    delivery_id:                 { type: 'id', required: true },
+    baby_patient_id:             { type: 'id', required: false },
+    apgar_1min_components:       { type: 'str', required: false, max: 4000 },
+    apgar_5min_components:       { type: 'str', required: false, max: 4000 },
+    apgar_10min_components:      { type: 'str', required: false, max: 4000 },
+    birth_weight_grams:          { type: 'int', required: false, min: 0, max: 10000 },
+    length_cm:                   { type: 'num', required: false, min: 0, max: 100 },
+    head_circumference_cm:       { type: 'num', required: false, min: 0, max: 100 },
+    blood_group:                 { type: 'str', required: false, max: 10 },
+    coombs_test:                 { type: 'enumOf', allowed: ['Positive', 'Negative', 'Not Done', ''], required: false },
+    resuscitation_needed:        { type: 'bool', required: false },
+    resuscitation_type:          { type: 'str', required: false, max: 200 },
+    birth_injury:                { type: 'str', required: false, max: 400 },
+    jaundice_onset:              { type: 'str', required: false, max: 40 },
+    phototherapy_needed:         { type: 'bool', required: false },
+    hypoglycemia:                { type: 'bool', required: false },
+    hypothermia:                 { type: 'bool', required: false },
+    congenital_abnormalities:    { type: 'str', required: false, max: 1000 },
+    feeding_type:                { type: 'enumOf', allowed: ['Breast', 'Formula', 'Mixed', ''], required: false },
+    feeding_established:         { type: 'bool', required: false },
+    discharge_destination:       { type: 'str', required: false, max: 80 },
+    discharge_status:            { type: 'str', required: false, max: 80 },
+    follow_up_plan:              { type: 'str', required: false, max: 1000 }
+};
+
+// POST /api/obgyn/nst
+const obgynNstCreate = {
+    pregnancy_id:        { type: 'id', required: true },
+    duration_minutes:    { type: 'int', required: false, min: 1, max: 120 },
+    baseline_fhr:        { type: 'int', required: false, min: 0, max: 250 },
+    variability:         { type: 'str', required: false, max: 40 },
+    accelerations:       { type: 'int', required: false, min: 0, max: 50 },
+    decelerations:       { type: 'str', required: false, max: 100 },
+    contractions:        { type: 'int', required: false, min: 0, max: 20 },
+    result:              { type: 'enumOf', allowed: ['Reactive', 'Non-reactive', 'Inconclusive', ''], required: false },
+    interpretation:      { type: 'str', required: false, max: 4000 },
+    action_taken:        { type: 'str', required: false, max: 1000 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -1723,4 +1996,22 @@ module.exports = {
     ,endocrineInsulinDeactivate
     ,nephrologyDialysisCreate
     ,ophthalmologyExamCreate
+    ,surgeryChecklistCreate
+    ,surgeryTimelogCreate
+    ,surgeryCpbCreate
+    ,surgeryPreopTestUpdate
+    ,surgeryCountSheetCreate
+    ,urologyUrodynamicsCreate
+    ,anesthesiaPainCreate
+    ,pediatricsGrowthCreate
+    ,pediatricsImmunizationCreate
+    ,pediatricsApgarCreate
+    ,obgynPregnancyCreate
+    ,obgynPregnancyUpdate
+    ,obgynAntenatalCreate
+    ,obgynPartogramCreate
+    ,obgynUltrasoundCreate
+    ,obgynDeliveryCreate
+    ,obgynNeonatalCreate
+    ,obgynNstCreate
 };
