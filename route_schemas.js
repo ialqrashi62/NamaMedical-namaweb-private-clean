@@ -1012,6 +1012,73 @@ const pathologyAddendumCreate = {
     text: { type: 'str', required: true, max: 8000 }
 };
 
+// POST /api/social-work/cases
+const socialWorkCaseCreate = {
+    patient_id:    { type: 'id', required: false },
+    patient_name:  { type: 'str', required: false, max: 300 },
+    case_type:     { type: 'str', required: false, max: 120 },
+    assessment:    { type: 'str', required: false, max: 4000 },
+    plan:          { type: 'str', required: false, max: 4000 },
+    priority:      { type: 'str', required: false, max: 80 }
+};
+
+// PUT /api/social-work/cases/:id
+const socialWorkCaseUpdate = {
+    status:         { type: 'str', required: false, max: 80 },
+    interventions:  { type: 'str', required: false, max: 4000 },
+    referrals:      { type: 'str', required: false, max: 4000 },
+    follow_up_date: { type: 'dateStr', required: false }
+};
+
+// POST /api/mortuary/cases
+const mortuaryCaseCreate = {
+    patient_id:                { type: 'id', required: false },
+    deceased_name:             { type: 'str', required: false, max: 300 },
+    date_of_death:             { type: 'dateStr', required: false },
+    time_of_death:             { type: 'str', required: false, max: 20 },
+    cause_of_death:            { type: 'str', required: false, max: 2000 },
+    attending_physician:       { type: 'str', required: false, max: 300 },
+    next_of_kin:               { type: 'str', required: false, max: 300 },
+    next_of_kin_phone:         { type: 'phone', required: false },
+    notes:                     { type: 'str', required: false, max: 4000 }
+};
+
+// PUT /api/mortuary/cases/:id
+const mortuaryCaseUpdate = {
+    release_status:            { type: 'str', required: false, max: 80 },
+    released_to:               { type: 'str', required: false, max: 300 },
+    death_certificate_number:  { type: 'str', required: false, max: 120 }
+};
+
+// POST /api/cme/activities
+const cmeActivityCreate = {
+    title:             { type: 'str', required: false, max: 300 },
+    category:          { type: 'str', required: false, max: 120 },
+    provider:          { type: 'str', required: false, max: 300 },
+    credit_hours:      { type: 'num', required: false, min: 0 },
+    activity_date:     { type: 'dateStr', required: false },
+    location:          { type: 'str', required: false, max: 300 },
+    max_participants:  { type: 'int', required: false, min: 1 },
+    description:       { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/cme/registrations
+const cmeRegistrationCreate = {
+    activity_id:    { type: 'id', required: true },
+    employee_name:  { type: 'str', required: false, max: 300 }
+};
+
+// POST /api/cme/events
+const cmeEventCreate = {
+    title:       { type: 'str', required: false, max: 300 },
+    speaker:     { type: 'str', required: false, max: 300 },
+    event_date:  { type: 'dateStr', required: false },
+    cme_hours:   { type: 'num', required: false, min: 0 },
+    category:    { type: 'str', required: false, max: 120 },
+    department:  { type: 'str', required: false, max: 120 },
+    status:      { type: 'str', required: false, max: 80 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -1122,5 +1189,12 @@ module.exports = {
     pathologySlideCreate,
     pathologySpecimenStateUpdate,
     pathologyReportUpdate,
-    pathologyAddendumCreate
+    pathologyAddendumCreate,
+    socialWorkCaseCreate,
+    socialWorkCaseUpdate,
+    mortuaryCaseCreate,
+    mortuaryCaseUpdate,
+    cmeActivityCreate,
+    cmeRegistrationCreate,
+    cmeEventCreate
 };

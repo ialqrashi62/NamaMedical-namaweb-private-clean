@@ -13349,7 +13349,7 @@ app.get('/api/social-work/cases', requireAuth, requireRole('him', 'nursing'), re
     }
     catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/social-work/cases', requireAuth, requireRole('him', 'nursing'), requireTenantScope, async (req, res) => {
+app.post('/api/social-work/cases', requireAuth, requireRole('him', 'nursing'), requireTenantScope, validateBody(RS.socialWorkCaseCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
         const { patient_id, patient_name, case_type, assessment, plan, priority } = req.body;
@@ -13358,7 +13358,7 @@ app.post('/api/social-work/cases', requireAuth, requireRole('him', 'nursing'), r
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/social-work/cases/:id', requireAuth, requireRole('him', 'nursing'), requireTenantScope, async (req, res) => {
+app.put('/api/social-work/cases/:id', requireAuth, requireRole('him', 'nursing'), requireTenantScope, validateBody(RS.socialWorkCaseUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { status, interventions, referrals, follow_up_date } = req.body;
@@ -13376,7 +13376,7 @@ app.get('/api/mortuary/cases', requireAuth, requireRole('him', 'nursing'), requi
     }
     catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/mortuary/cases', requireAuth, requireRole('him', 'nursing'), requireTenantScope, async (req, res) => {
+app.post('/api/mortuary/cases', requireAuth, requireRole('him', 'nursing'), requireTenantScope, validateBody(RS.mortuaryCaseCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
         const { patient_id, deceased_name, date_of_death, time_of_death, cause_of_death, attending_physician, next_of_kin, next_of_kin_phone, notes } = req.body;
@@ -13386,7 +13386,7 @@ app.post('/api/mortuary/cases', requireAuth, requireRole('him', 'nursing'), requ
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/mortuary/cases/:id', requireAuth, requireRole('him', 'nursing'), requireTenantScope, async (req, res) => {
+app.put('/api/mortuary/cases/:id', requireAuth, requireRole('him', 'nursing'), requireTenantScope, validateBody(RS.mortuaryCaseUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { release_status, released_to, death_certificate_number } = req.body;
@@ -13404,7 +13404,7 @@ app.get('/api/cme/activities', requireAuth, requireRole('cme'), requireTenantSco
     }
     catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/cme/activities', requireAuth, requireRole('cme'), requireTenantScope, async (req, res) => {
+app.post('/api/cme/activities', requireAuth, requireRole('cme'), requireTenantScope, validateBody(RS.cmeActivityCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
         const { title, category, provider, credit_hours, activity_date, location, max_participants, description } = req.body;
@@ -13421,7 +13421,7 @@ app.get('/api/cme/registrations', requireAuth, requireRole('cme'), requireTenant
         else res.json((await pool.query('SELECT * FROM cme_registrations WHERE tenant_id=$1 ORDER BY id DESC', [tenantId])).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/cme/registrations', requireAuth, requireRole('cme'), requireTenantScope, async (req, res) => {
+app.post('/api/cme/registrations', requireAuth, requireRole('cme'), requireTenantScope, validateBody(RS.cmeRegistrationCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
         const { activity_id, employee_name } = req.body;
@@ -18209,7 +18209,7 @@ app.get('/api/cme/events', requireAuth, requireRole('cme'), requireTenantScope, 
         res.json((await pool.query('SELECT * FROM cme_events WHERE tenant_id=$1 ORDER BY event_date DESC', [tenantId])).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/cme/events', requireAuth, requireRole('cme'), requireTenantScope, async (req, res) => {
+app.post('/api/cme/events', requireAuth, requireRole('cme'), requireTenantScope, validateBody(RS.cmeEventCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
         const { title, speaker, event_date, cme_hours, category, department, status } = req.body;
