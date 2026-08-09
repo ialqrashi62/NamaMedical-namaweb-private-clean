@@ -20790,7 +20790,7 @@ app.post('/api/ai/voice-dictation/:id/finalize', requireAuth, requireRole('docto
 // ===== PHASE F1: WORLD-CLASS CLINICAL QUALITY ENDPOINTS =====
 
 // POST /api/clinical/safety-check — فحص تعارض الأدوية وحساسية المريض
-app.post('/api/clinical/safety-check', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/clinical/safety-check', requireAuth, requireTenantScope, validateBody(RS.clinicalSafetyCheck), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId: tid } = getRequestTenantContext(req);
         const { patient_id, drug_name } = req.body;
@@ -20855,7 +20855,7 @@ app.post('/api/clinical/safety-check', requireAuth, requireTenantScope, async (r
 });
 
 // POST /api/nursing/risk-assessment — تسجيل تقييم خطورة Braden Scale أو Morse Fall Risk
-app.post('/api/nursing/risk-assessment', requireAuth, requireRole('nursing', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/nursing/risk-assessment', requireAuth, requireRole('nursing', 'doctor'), requireTenantScope, validateBody(RS.nursingRiskAssessmentCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId: tid } = getRequestTenantContext(req);
         const { patient_id, admission_id, assessment_type, total_score, risk_level, details } = req.body;

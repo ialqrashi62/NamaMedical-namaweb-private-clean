@@ -550,6 +550,21 @@ const clinicalProblemListCreate = {
     principal_diagnosis:{ type: 'bool', required: false }
 };
 
+// POST /api/clinical/safety-check
+const clinicalSafetyCheck = {
+    patient_id: { type: 'id', required: true },
+    drug_name:  { type: 'str', required: true, max: 300 }
+};
+
+// POST /api/nursing/risk-assessment
+const nursingRiskAssessmentCreate = {
+    patient_id:      { type: 'id', required: true },
+    admission_id:    { type: 'id', required: false },
+    assessment_type: { type: 'str', required: true, max: 120 },
+    total_score:     { type: 'int', required: true, min: 0 },
+    risk_level:      { type: 'str', required: true, max: 80 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -609,5 +624,7 @@ module.exports = {
     controlledSubstanceDispense,
     clinicalMedicationReconciliationCreate,
     labMicrobiologyCreate,
-    clinicalProblemListCreate
+    clinicalProblemListCreate,
+    clinicalSafetyCheck,
+    nursingRiskAssessmentCreate
 };
