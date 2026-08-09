@@ -1081,7 +1081,7 @@ app.get('/api/mfa/status', requireAuth, async (req, res) => {
 });
 
 // begin enrollment: issue a fresh secret (mfa stays disabled until /verify confirms a live code)
-app.post('/api/mfa/enroll', requireAuth, async (req, res) => {
+app.post('/api/mfa/enroll', requireAuth, idempotencyGuard, async (req, res) => {
     try {
         const uid = req.session.user.id;
         const existing = (await pool.query('SELECT mfa_enabled FROM user_mfa WHERE user_id=$1', [uid])).rows[0];
@@ -1096,7 +1096,7 @@ app.post('/api/mfa/enroll', requireAuth, async (req, res) => {
 });
 
 // confirm enrollment (or re-verify): on first enable, issue one-time recovery codes (returned once; only hashes stored)
-app.post('/api/mfa/verify', requireAuth, async (req, res) => {
+app.post('/api/mfa/verify', requireAuth, validateBody(RS.mfaVerify), idempotencyGuard, async (req, res) => {
     try {
         const uid = req.session.user.id; const { token } = req.body;
         const row = (await pool.query('SELECT mfa_secret, mfa_enabled FROM user_mfa WHERE user_id=$1', [uid])).rows[0];
@@ -1154,7 +1154,7 @@ app.post('/api/auth/mfa', async (req, res) => {
 });
 
 // self-disable own MFA — requires a valid current TOTP
-app.post('/api/mfa/disable', requireAuth, async (req, res) => {
+app.post('/api/mfa/disable', requireAuth, validateBody(RS.mfaDisable), idempotencyGuard, async (req, res) => {
     try {
         const uid = req.session.user.id; const { token, password } = req.body;
         const row = (await pool.query('SELECT mfa_secret, mfa_enabled FROM user_mfa WHERE user_id=$1', [uid])).rows[0];
@@ -1171,7 +1171,7 @@ app.post('/api/mfa/disable', requireAuth, async (req, res) => {
 });
 
 // admin reset — Admin only; the recovery path so MFA can never permanently lock out any user (incl. the last admin)
-app.post('/api/mfa/admin-reset', requireAuth, requireTenantAdmin({ action: 'BLOCKED_MFA_ADMIN_RESET', module: 'Auth' }), async (req, res) => {
+app.post('/api/mfa/admin-reset', requireAuth, requireTenantAdmin({ action: 'BLOCKED_MFA_ADMIN_RESET', module: 'Auth' }), validateBody(RS.mfaAdminReset), idempotencyGuard, async (req, res) => {
     try {
         const target = parseInt(req.body.userId, 10);
         if (!Number.isInteger(target)) return res.status(400).json({ error: 'userId required' });
@@ -1699,7 +1699,7 @@ app.get('/api/employees', requireAuth, async (req, res) => {
 });
 
 // employee create/delete = HR/Admin only (requireRole('hr') passes HR + Admin='*'); GET stays open for doctor/staff lists
-app.post('/api/employees', requireAuth, requireRole('hr'), async (req, res) => {
+app.post('/api/employees', requireAuth, requireRole('hr'), requireTenantScope, validateBody(RS.employeeCreate), idempotencyGuard, async (req, res) => {
     try {
         const { name, name_ar, name_en, role, department_ar, department_en, salary, commission_type, commission_value } = req.body;
         const result = await pool.query('INSERT INTO employees (name, name_ar, name_en, role, department_ar, department_en, salary, commission_type, commission_value) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
@@ -1709,7 +1709,7 @@ app.post('/api/employees', requireAuth, requireRole('hr'), async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.delete('/api/employees/:id', requireAuth, requireRole('hr'), async (req, res) => {
+app.delete('/api/employees/:id', requireAuth, requireRole('hr'), requireTenantScope, idempotencyGuard, async (req, res) => {
     try {
         await pool.query('DELETE FROM employees WHERE id=$1', [req.params.id]);
         logAudit(req.session.user?.id, req.session.user?.display_name, 'DELETE_EMPLOYEE', 'HR', `Deleted employee #${req.params.id}`, req.ip);
@@ -4027,7 +4027,7 @@ app.get('/api/hr/employees', requireAuth, requireRole('hr'), async (req, res) =>
     catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/hr/employees', requireAuth, requireRole('hr'), async (req, res) => {
+app.post('/api/hr/employees', requireAuth, requireRole('hr'), requireTenantScope, validateBody(RS.employeeCreate), idempotencyGuard, async (req, res) => {
     try {
         const { emp_number, name_ar, name_en, national_id, phone, email, department, job_title, hire_date, basic_salary, housing_allowance, transport_allowance } = req.body;
         const result = await pool.query('INSERT INTO hr_employees (emp_number, name_ar, name_en, national_id, phone, email, department, job_title, hire_date, basic_salary, housing_allowance, transport_allowance) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id',
@@ -10821,7 +10821,7 @@ app.get('/api/admissions/:id', requireAuth, requireTenantScope, async (req, res)
     }
 });
 
-app.post('/api/admissions', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/admissions', requireAuth, requireTenantScope, validateBody(RS.admissionCreate), idempotencyGuard, async (req, res) => {
     // E8 SHADOW-PATH CLOSURE: the legacy admit path occupied a bed WITHOUT a FOR UPDATE lock
     // (double-occupy race) and did not enforce the bed/admission state machine. Admissions must
     // now go through POST /api/adt/admit (race-safe, state-validated). This route is retired for
@@ -10895,7 +10895,7 @@ app.post('/api/admissions/_legacy_disabled', requireAuth, requireTenantScope, as
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.put('/api/admissions/:id/discharge', requireAuth, requireTenantScope, async (req, res) => {
+app.put('/api/admissions/:id/discharge', requireAuth, requireTenantScope, validateBody(RS.admissionDischargeUpdate), idempotencyGuard, async (req, res) => {
     // E8 SHADOW-PATH CLOSURE: legacy discharge freed the bed to 'Available' (not 'Cleaning') and
     // did NOT reject an already-discharged admission. Discharge must now go through
     // POST /api/adt/discharge (state-validated, frees bed -> Cleaning). Fails closed.
@@ -10971,7 +10971,7 @@ app.put('/api/admissions/:id/discharge_legacy_disabled', requireAuth, requireTen
     }
 });
 
-app.post('/api/admissions/:id/rounds', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/admissions/:id/rounds', requireAuth, requireTenantScope, validateBody(RS.admissionRoundCreate), idempotencyGuard, async (req, res) => {
     try {
         // I2 fix: fail-closed — no unscoped fallback (cross-tenant IDOR otherwise).
         const { tenantId, facilityId } = e8RequireTenant(req);
@@ -14820,7 +14820,7 @@ app.get('/api/hr/licenses/alerts', requireAuth, requireRole('hr'), requireTenant
 });
 
 // ---- LICENSES: create ----
-app.post('/api/hr/licenses', requireAuth, requireRole('hr'), requireTenantScope, async (req, res) => {
+app.post('/api/hr/licenses', requireAuth, requireRole('hr'), requireTenantScope, validateBody(RS.hrLicenseCreate), idempotencyGuard, async (req, res) => {
     try {
         const t = e18RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
@@ -14857,7 +14857,7 @@ app.get('/api/hr/shifts', requireAuth, requireRole('hr'), requireTenantScope, as
 });
 
 // ---- SHIFTS: create (server validates time + rejects overlap 409) ----
-app.post('/api/hr/shifts', requireAuth, requireRole('hr'), requireTenantScope, async (req, res) => {
+app.post('/api/hr/shifts', requireAuth, requireRole('hr'), requireTenantScope, validateBody(RS.hrShiftCreate), idempotencyGuard, async (req, res) => {
     try {
         const t = e18RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
@@ -14893,7 +14893,7 @@ app.post('/api/hr/shifts', requireAuth, requireRole('hr'), requireTenantScope, a
 });
 
 // ---- ATTENDANCE: clock-in/out (worked-hours computed SERVER-SIDE, never trusted) ----
-app.post('/api/hr/attendance', requireAuth, requireRole('hr'), requireTenantScope, async (req, res) => {
+app.post('/api/hr/attendance', requireAuth, requireRole('hr'), requireTenantScope, validateBody(RS.hrAttendanceCreate), idempotencyGuard, async (req, res) => {
     try {
         const t = e18RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
@@ -14929,7 +14929,7 @@ app.get('/api/hr/leave-requests', requireAuth, requireRole('hr'), requireTenantS
 });
 
 // ---- LEAVE REQUESTS: create (status forced 'requested'; days computed server-side) ----
-app.post('/api/hr/leave-requests', requireAuth, requireRole('hr'), requireTenantScope, async (req, res) => {
+app.post('/api/hr/leave-requests', requireAuth, requireRole('hr'), requireTenantScope, validateBody(RS.hrLeaveRequestCreate), idempotencyGuard, async (req, res) => {
     try {
         const t = e18RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
@@ -14953,7 +14953,7 @@ app.post('/api/hr/leave-requests', requireAuth, requireRole('hr'), requireTenant
 });
 
 // ---- LEAVE REQUESTS: state transition (approve/deny/cancel) — 409 on invalid ----
-app.put('/api/hr/leave-requests/:id/status', requireAuth, requireRole('hr'), requireTenantScope, async (req, res) => {
+app.put('/api/hr/leave-requests/:id/status', requireAuth, requireRole('hr'), requireTenantScope, validateBody(RS.hrLeaveRequestStatusUpdate), idempotencyGuard, async (req, res) => {
     try {
         const t = e18RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
@@ -15001,7 +15001,7 @@ app.get('/api/hr/payroll-slips', requireAuth, requireRole('hr'), requireTenantSc
 
 // ---- PAYROLL SLIP: generate computed DRAFT slip (NET PAY computed SERVER-SIDE) ----
 // No GL posting here. Slips are draft/computed only. Posting is a separate, GATED step.
-app.post('/api/hr/payroll-slips', requireAuth, requireRole('hr'), requireTenantScope, async (req, res) => {
+app.post('/api/hr/payroll-slips', requireAuth, requireRole('hr'), requireTenantScope, validateBody(RS.hrPayrollSlipCreate), idempotencyGuard, async (req, res) => {
     try {
         const t = e18RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
@@ -15051,7 +15051,7 @@ app.post('/api/hr/payroll-slips', requireAuth, requireRole('hr'), requireTenantS
 });
 
 // ---- PAYROLL SLIP: status transition. POSTING ('posted') is GATED OFF by flag (E10-style) ----
-app.put('/api/hr/payroll-slips/:id/status', requireAuth, requireRole('hr'), requireTenantScope, async (req, res) => {
+app.put('/api/hr/payroll-slips/:id/status', requireAuth, requireRole('hr'), requireTenantScope, validateBody(RS.hrPayrollSlipStatusUpdate), idempotencyGuard, async (req, res) => {
     try {
         const t = e18RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
@@ -15096,7 +15096,7 @@ app.get('/api/hr/competencies', requireAuth, requireRole('hr'), requireTenantSco
     } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/hr/competencies', requireAuth, requireRole('hr'), requireTenantScope, async (req, res) => {
+app.post('/api/hr/competencies', requireAuth, requireRole('hr'), requireTenantScope, validateBody(RS.hrCompetencyCreate), idempotencyGuard, async (req, res) => {
     try {
         const t = e18RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
@@ -19868,7 +19868,7 @@ app.get('/api/hr/credentialing/alerts', requireAuth, requireRole('hr', 'admin'),
 });
 
 // POST /api/hr/credentialing — add credential
-app.post('/api/hr/credentialing', requireAuth, requireRole('hr', 'admin'), requireTenantScope, async (req, res) => {
+app.post('/api/hr/credentialing', requireAuth, requireRole('hr', 'admin'), requireTenantScope, validateBody(RS.hrCredentialingCreate), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { employee_id, credential_type, credential_number, issuing_body, issue_date, expiry_date,
@@ -19891,7 +19891,7 @@ app.post('/api/hr/credentialing', requireAuth, requireRole('hr', 'admin'), requi
 });
 
 // PUT /api/hr/credentialing/:id/verify — verify credential
-app.put('/api/hr/credentialing/:id/verify', requireAuth, requireRole('hr', 'admin'), requireTenantScope, async (req, res) => {
+app.put('/api/hr/credentialing/:id/verify', requireAuth, requireRole('hr', 'admin'), requireTenantScope, validateBody(RS.hrCredentialingVerify), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const id = parseInt(req.params.id);
@@ -19920,7 +19920,7 @@ app.get('/api/hr/gosi', requireAuth, requireRole('hr', 'finance'), requireTenant
 });
 
 // POST /api/hr/gosi/calculate — calculate GOSI contributions for a month
-app.post('/api/hr/gosi/calculate', requireAuth, requireRole('hr', 'finance'), requireTenantScope, async (req, res) => {
+app.post('/api/hr/gosi/calculate', requireAuth, requireRole('hr', 'finance'), requireTenantScope, validateBody(RS.hrGosiCalculate), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { month_year } = req.body; // e.g. '2026-07-01'
@@ -19991,7 +19991,7 @@ app.get('/api/hr/wps', requireAuth, requireRole('hr', 'finance'), requireTenantS
 });
 
 // POST /api/hr/wps/generate — generate SIF file for a payroll month
-app.post('/api/hr/wps/generate', requireAuth, requireRole('hr', 'finance'), requireTenantScope, async (req, res) => {
+app.post('/api/hr/wps/generate', requireAuth, requireRole('hr', 'finance'), requireTenantScope, validateBody(RS.hrWpsGenerate), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { payroll_month, bank_code = 'RIBL', entity_id } = req.body;
@@ -20028,7 +20028,7 @@ app.post('/api/hr/wps/generate', requireAuth, requireRole('hr', 'finance'), requ
 });
 
 // PUT /api/hr/wps/:id/submit — mark WPS file as submitted
-app.put('/api/hr/wps/:id/submit', requireAuth, requireRole('hr', 'finance'), requireTenantScope, async (req, res) => {
+app.put('/api/hr/wps/:id/submit', requireAuth, requireRole('hr', 'finance'), requireTenantScope, validateBody(RS.hrWpsSubmit), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const id = parseInt(req.params.id);
@@ -20052,7 +20052,7 @@ app.get('/api/hr/nitaqat', requireAuth, requireRole('hr', 'admin'), requireTenan
 });
 
 // POST /api/hr/nitaqat/calculate — calculate current Saudization %
-app.post('/api/hr/nitaqat/calculate', requireAuth, requireRole('hr', 'admin'), requireTenantScope, async (req, res) => {
+app.post('/api/hr/nitaqat/calculate', requireAuth, requireRole('hr', 'admin'), requireTenantScope, validateBody(RS.hrNitaqatCalculate), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { required_pct = 0, activity_code = '', facility_size = 'Medium' } = req.body;

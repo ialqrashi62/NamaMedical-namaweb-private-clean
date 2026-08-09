@@ -2103,6 +2103,182 @@ const settingsRoomUpdate = {
     is_active:        { type: 'bool', required: false }
 };
 
+// POST /api/mfa/enroll — body may be empty
+// (no schema)
+
+// POST /api/mfa/verify
+const mfaVerify = {
+    token: { type: 'str', required: true, max: 20 }
+};
+
+// POST /api/mfa/disable (step-up: password + TOTP)
+const mfaDisable = {
+    token:    { type: 'str', required: true, max: 20 },
+    password: { type: 'str', required: true, max: 200 }
+};
+
+// POST /api/mfa/admin-reset
+const mfaAdminReset = {
+    userId: { type: 'id', required: true }
+};
+
+// POST /api/employees + /api/hr/employees
+const employeeCreate = {
+    name_ar:           { type: 'str', required: false, max: 200 },
+    name_en:           { type: 'str', required: true, max: 200 },
+    national_id:       { type: 'str', required: false, max: 30 },
+    phone:             { type: 'phone', required: false },
+    email:             { type: 'str', required: false, max: 200 },
+    role:              { type: 'str', required: true, max: 80 },
+    department:        { type: 'str', required: false, max: 120 },
+    speciality:        { type: 'str', required: false, max: 120 },
+    hire_date:         { type: 'dateStr', required: false },
+    employee_number:   { type: 'str', required: false, max: 40 }
+};
+
+// POST /api/admissions
+const admissionCreate = {
+    patient_id:        { type: 'id', required: true },
+    admission_date:    { type: 'dateStr', required: false },
+    admission_type:    { type: 'enumOf', allowed: ['Emergency', 'Elective', 'Transfer', 'Day-care', ''], required: false },
+    ward_id:           { type: 'id', required: false },
+    bed_id:            { type: 'id', required: false },
+    attending_doctor:  { type: 'id', required: false },
+    diagnosis:         { type: 'str', required: false, max: 4000 },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
+
+// PUT /api/admissions/:id/discharge
+const admissionDischargeUpdate = {
+    discharge_date:    { type: 'dateStr', required: false },
+    discharge_type:    { type: 'enumOf', allowed: ['Home', 'Transfer', 'AMA', 'Deceased', 'Referred', ''], required: false },
+    discharge_notes:   { type: 'str', required: false, max: 4000 },
+    follow_up_plan:    { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/admissions/:id/rounds
+const admissionRoundCreate = {
+    round_time:        { type: 'dateStr', required: false },
+    clinical_notes:    { type: 'str', required: false, max: 8000 },
+    plan:              { type: 'str', required: false, max: 4000 },
+    vitals_summary:    { type: 'str', required: false, max: 1000 }
+};
+
+// POST /api/hr/licenses
+const hrLicenseCreate = {
+    employee_id:   { type: 'id', required: true },
+    license_type:  { type: 'str', required: true, max: 200 },
+    license_number:{ type: 'str', required: true, max: 200 },
+    issued_by:     { type: 'str', required: false, max: 200 },
+    issue_date:    { type: 'dateStr', required: false },
+    expiry_date:   { type: 'dateStr', required: false }
+};
+
+// POST /api/hr/shifts
+const hrShiftCreate = {
+    employee_id:  { type: 'id', required: true },
+    shift_date:   { type: 'dateStr', required: true },
+    start_time:   { type: 'str', required: true, max: 20 },
+    end_time:     { type: 'str', required: true, max: 20 },
+    department:   { type: 'str', required: false, max: 120 },
+    notes:        { type: 'str', required: false, max: 1000 }
+};
+
+// POST /api/hr/attendance
+const hrAttendanceCreate = {
+    employee_id:  { type: 'id', required: true },
+    attendance_date: { type: 'dateStr', required: true },
+    check_in:     { type: 'str', required: false, max: 20 },
+    check_out:    { type: 'str', required: false, max: 20 },
+    status:       { type: 'enumOf', allowed: ['Present', 'Absent', 'Late', 'Leave', 'Holiday', ''], required: false }
+};
+
+// POST /api/hr/leave-requests
+const hrLeaveRequestCreate = {
+    employee_id:  { type: 'id', required: true },
+    leave_type:   { type: 'enumOf', allowed: ['Annual', 'Sick', 'Emergency', 'Maternity', 'Paternity', 'Unpaid', ''], required: true },
+    start_date:   { type: 'dateStr', required: true },
+    end_date:     { type: 'dateStr', required: true },
+    reason:       { type: 'str', required: false, max: 2000 }
+};
+
+// PUT /api/hr/leave-requests/:id/status
+const hrLeaveRequestStatusUpdate = {
+    status:       { type: 'enumOf', allowed: ['Pending', 'Approved', 'Rejected', 'Cancelled', ''], required: true },
+    approver_notes: { type: 'str', required: false, max: 2000 }
+};
+
+// POST /api/hr/payroll-slips
+const hrPayrollSlipCreate = {
+    employee_id:  { type: 'id', required: true },
+    pay_period_start: { type: 'dateStr', required: true },
+    pay_period_end:   { type: 'dateStr', required: true },
+    basic_salary:     { type: 'num', required: false, min: 0 },
+    allowances:       { type: 'num', required: false, min: 0 },
+    deductions:       { type: 'num', required: false, min: 0 },
+    net_pay:          { type: 'num', required: true, min: 0 }
+};
+
+// PUT /api/hr/payroll-slips/:id/status
+const hrPayrollSlipStatusUpdate = {
+    status:       { type: 'enumOf', allowed: ['Draft', 'Approved', 'Paid', 'Cancelled', ''], required: true },
+    payment_date: { type: 'dateStr', required: false },
+    payment_ref:  { type: 'str', required: false, max: 200 }
+};
+
+// POST /api/hr/competencies
+const hrCompetencyCreate = {
+    employee_id:    { type: 'id', required: true },
+    competency_name:{ type: 'str', required: true, max: 200 },
+    level:          { type: 'enumOf', allowed: ['Beginner', 'Intermediate', 'Advanced', 'Expert', ''], required: false },
+    assessment_date:{ type: 'dateStr', required: false },
+    expiry_date:    { type: 'dateStr', required: false },
+    notes:          { type: 'str', required: false, max: 4000 }
+};
+
+// POST /api/hr/credentialing
+const hrCredentialingCreate = {
+    employee_id:      { type: 'id', required: true },
+    document_type:    { type: 'str', required: true, max: 200 },
+    document_number:  { type: 'str', required: false, max: 200 },
+    issued_by:        { type: 'str', required: false, max: 200 },
+    issue_date:       { type: 'dateStr', required: false },
+    expiry_date:      { type: 'dateStr', required: false },
+    file_url:         { type: 'str', required: false, max: 2000 }
+};
+
+// PUT /api/hr/credentialing/:id/verify
+const hrCredentialingVerify = {
+    verification_status: { type: 'enumOf', allowed: ['Verified', 'Rejected', 'Pending', ''], required: true },
+    verifier_notes:      { type: 'str', required: false, max: 2000 }
+};
+
+// POST /api/hr/gosi/calculate
+const hrGosiCalculate = {
+    employee_id:      { type: 'id', required: true },
+    pay_period_start: { type: 'dateStr', required: true },
+    pay_period_end:   { type: 'dateStr', required: true },
+    basic_salary:     { type: 'num', required: true, min: 0 }
+};
+
+// POST /api/hr/wps/generate
+const hrWpsGenerate = {
+    pay_period_start: { type: 'dateStr', required: true },
+    pay_period_end:   { type: 'dateStr', required: true }
+};
+
+// PUT /api/hr/wps/:id/submit
+const hrWpsSubmit = {
+    submission_ref: { type: 'str', required: false, max: 200 },
+    submission_date:{ type: 'dateStr', required: false }
+};
+
+// POST /api/hr/nitaqat/calculate
+const hrNitaqatCalculate = {
+    calculation_date: { type: 'dateStr', required: false },
+    sector:           { type: 'enumOf', allowed: ['Health', 'Education', 'Other', ''], required: false }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -2312,4 +2488,25 @@ module.exports = {
     ,referralCreate
     ,settingsRoomCreate
     ,settingsRoomUpdate
+    ,mfaVerify
+    ,mfaDisable
+    ,mfaAdminReset
+    ,employeeCreate
+    ,admissionCreate
+    ,admissionDischargeUpdate
+    ,admissionRoundCreate
+    ,hrLicenseCreate
+    ,hrShiftCreate
+    ,hrAttendanceCreate
+    ,hrLeaveRequestCreate
+    ,hrLeaveRequestStatusUpdate
+    ,hrPayrollSlipCreate
+    ,hrPayrollSlipStatusUpdate
+    ,hrCompetencyCreate
+    ,hrCredentialingCreate
+    ,hrCredentialingVerify
+    ,hrGosiCalculate
+    ,hrWpsGenerate
+    ,hrWpsSubmit
+    ,hrNitaqatCalculate
 };
