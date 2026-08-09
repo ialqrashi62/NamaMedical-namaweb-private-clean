@@ -4817,7 +4817,7 @@ app.get('/api/clinical/knowledge/search', requireAuth, requireRole('doctor', 'nu
     }
 });
 
-app.post('/api/clinical/knowledge', requireAuth, requireRole('Admin'), requireTenantScope, async (req, res) => {
+app.post('/api/clinical/knowledge', requireAuth, requireRole('Admin'), requireTenantScope, validateBody(RS.clinicalKnowledgeCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { department_id, content_chunk, embedding, metadata } = req.body;
@@ -4841,7 +4841,7 @@ app.post('/api/clinical/knowledge', requireAuth, requireRole('Admin'), requireTe
     }
 });
 
-app.post('/api/clinical/ai/ask', requireAuth, requireRole('doctor', 'nursing'), requireTenantScope, async (req, res) => {
+app.post('/api/clinical/ai/ask', requireAuth, requireRole('doctor', 'nursing'), requireTenantScope, validateBody(RS.clinicalAiAsk), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { question, query_embedding, department_id } = req.body;

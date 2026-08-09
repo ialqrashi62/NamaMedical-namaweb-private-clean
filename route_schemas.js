@@ -591,6 +591,18 @@ const orderApprovePayment = {
     price:          { type: 'num', required: true, min: 0 }
 };
 
+// POST /api/clinical/knowledge
+const clinicalKnowledgeCreate = {
+    department_id: { type: 'id', required: false },
+    content_chunk: { type: 'str', required: true, max: 20000 }
+};
+
+// POST /api/clinical/ai/ask
+const clinicalAiAsk = {
+    question:      { type: 'str', required: true, max: 3000 },
+    department_id: { type: 'id', required: false }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -656,5 +668,7 @@ module.exports = {
     labOrderCreate,
     labOrderDirectCreate,
     labOrderUpdate,
-    orderApprovePayment
+    orderApprovePayment,
+    clinicalKnowledgeCreate,
+    clinicalAiAsk
 };
