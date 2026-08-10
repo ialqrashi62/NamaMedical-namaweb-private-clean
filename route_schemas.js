@@ -3220,8 +3220,118 @@ const bloodbankUnitRecall = {
     reason:            { type: 'str', required: false, max: 1000 }
 };
 
+
+const cardiologyGraceCreate = {
+    patient_id:                  { type: 'id', required: true },
+    encounter_id:                { type: 'id', required: false },
+    age:                         { type: 'int', required: true, min: 18, max: 120 },
+    heart_rate:                  { type: 'int', required: true, min: 20, max: 250 },
+    systolic_bp:                 { type: 'int', required: true, min: 30, max: 280 },
+    creatinine_mg_dl:            { type: 'num', required: true, min: 0.1, max: 20 },
+    killip_class:                { type: 'int', required: true, min: 1, max: 4 },
+    cardiac_arrest_at_admission: { type: 'bool', required: false },
+    st_deviation:                { type: 'bool', required: false },
+    elevated_enzymes:            { type: 'bool', required: false }
+};
+
+const cardiologyCha2ds2vascCreate = {
+    patient_id:        { type: 'id', required: true },
+    encounter_id:      { type: 'id', required: false },
+    age:               { type: 'int', required: true, min: 18, max: 120 },
+    sex:               { type: 'enumOf', allowed: ['male','female'], required: true },
+    chf:               { type: 'bool', required: false },
+    hypertension:      { type: 'bool', required: false },
+    diabetes:          { type: 'bool', required: false },
+    stroke_history:    { type: 'bool', required: false },
+    vascular_disease:  { type: 'bool', required: false }
+};
+
+const cardiologyHasbledCreate = {
+    patient_id:               { type: 'id', required: true },
+    encounter_id:             { type: 'id', required: false },
+    uncontrolled_hypertension:{ type: 'bool', required: false },
+    abnormal_renal:           { type: 'bool', required: false },
+    abnormal_liver:           { type: 'bool', required: false },
+    stroke_history:           { type: 'bool', required: false },
+    bleeding_history:         { type: 'bool', required: false },
+    labile_inr:               { type: 'bool', required: false },
+    age:                      { type: 'int', required: true, min: 18, max: 120 },
+    concomitant_drugs:        { type: 'bool', required: false },
+    alcohol_use:              { type: 'bool', required: false }
+};
+
+const cardiologyHfClassCreate = {
+    patient_id:               { type: 'id', required: true },
+    encounter_id:             { type: 'id', required: false },
+    nyha_class:               { type: 'int', required: true, min: 1, max: 4 },
+    lvef_pct:                 { type: 'num', required: false, min: 5, max: 80 },
+    structural_heart_disease: { type: 'bool', required: false }
+};
+
+const cardiologyTroponinInterpretCreate = {
+    patient_id:        { type: 'id', required: true },
+    encounter_id:      { type: 'id', required: false },
+    troponin_value:    { type: 'num', required: true, min: 0, max: 100000 },
+    cutoff:            { type: 'num', required: true, min: 0, max: 100000 },
+    delta_pct:         { type: 'num', required: true, min: -100, max: 1000 },
+    hours_since_onset: { type: 'num', required: false, min: 0, max: 168 }
+};
+
+
+
+const glycemicAssessCreate = {
+    patient_id:        { type: 'id', required: true },
+    encounter_id:      { type: 'id', required: false },
+    patient_type:      { type: 'enumOf', allowed: ['type1','type2','pregnancy','elderly','frail','pediatric'], required: true },
+    age:               { type: 'int', required: true, min: 0, max: 120 },
+    tir_pct:           { type: 'num', required: true, min: 0, max: 100 },
+    gmi_pct:           { type: 'num', required: false, min: 3, max: 20 },
+    hba1c:             { type: 'num', required: true, min: 3, max: 20 },
+    time_below_70:     { type: 'num', required: false, min: 0, max: 100 },
+    time_below_54:     { type: 'num', required: false, min: 0, max: 100 },
+    notes:             { type: 'str', required: false, max: 2000 }
+};
+
+const insulinDoseCreate = {
+    patient_id:           { type: 'id', required: true },
+    encounter_id:         { type: 'id', required: false },
+    current_glucose_mg_dl:{ type: 'num', required: true, min: 0, max: 1500 },
+    target_glucose_mg_dl: { type: 'num', required: false, min: 70, max: 200 },
+    total_daily_dose_units:{ type: 'num', required: false, min: 0, max: 300 },
+    sensitivity_factor:   { type: 'num', required: false, min: 1, max: 1000 },
+    notes:                { type: 'str', required: false, max: 1000 }
+};
+
+const thyroidInterpretCreate = {
+    patient_id:   { type: 'id', required: true },
+    encounter_id: { type: 'id', required: false },
+    tsh_uIuml:    { type: 'num', required: true, min: 0, max: 1000 },
+    ft4_ngdl:     { type: 'num', required: false, min: 0, max: 10 },
+    ft3_pgml:     { type: 'num', required: false, min: 0, max: 20 },
+    notes:        { type: 'str', required: false, max: 1000 }
+};
+
+const erTriageCreate = {
+    patient_id:     { type: 'id', required: false },
+    chief_complaint:{ type: 'str', required: true, max: 500 },
+    age:            { type: 'int', required: false, min: 0, max: 130 },
+    sex:            { type: 'enumOf', allowed: ['male','female','unknown'], required: false },
+    heart_rate:     { type: 'int', required: false, min: 0, max: 300 },
+    systolic_bp:    { type: 'int', required: false, min: 0, max: 300 },
+    spo2_pct:       { type: 'num', required: false, min: 0, max: 100 },
+    rr_per_min:     { type: 'int', required: false, min: 0, max: 80 },
+    temp_c:         { type: 'num', required: false, min: 20, max: 46 },
+    pain_score:     { type: 'int', required: false, min: 0, max: 10 },
+    gcs_total:      { type: 'int', required: false, min: 3, max: 15 },
+    arrival_mode:   { type: 'enumOf', allowed: ['walk-in','ambulance','wheelchair','transfer'], required: false },
+    notes:          { type: 'str', required: false, max: 2000 }
+};
+
+
 module.exports = {
     invoiceCreate,
+    glycemicAssessCreate, insulinDoseCreate, thyroidInterpretCreate, erTriageCreate,
+    cardiologyGraceCreate, cardiologyCha2ds2vascCreate, cardiologyHasbledCreate, cardiologyHfClassCreate, cardiologyTroponinInterpretCreate,
     journalCreate,
     invoiceRefund,
     medicalCertificateCreate,

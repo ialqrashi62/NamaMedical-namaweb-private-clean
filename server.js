@@ -18461,6 +18461,17 @@ app.use('/api/phase3/v2', makePhase3V2Router({ requireAuth, requireTenantScope }
 // No new global middleware — purely additive `app.use('/fhir', ...)`.
 app.use('/fhir', require('./routes/fhir_router'));
 
+// ===== Cardiology / Endocrinology / Emergency (e47-e48, 2026-08-10) =====
+// Tenant scoping, RBAC, validation, and idempotency are all enforced INSIDE each router.
+// Pure-function engines (cardiology_engine, glycemic_control_engine, thyroid_engine,
+// esi_engine) do the clinical scoring. DB tables: cardiology_assessments, cardiology_ecg_reports,
+// cardiology_medications, cardiology_procedures, insulin_doses, thyroid_assessments,
+// er_triage, er_queue, er_trauma_assessments (see migrations/e47_cardiology_up.sql
+// and migrations/e48_endocrine_emergency_up.sql).
+app.use('/api/cardiology', require('./cardiology_router'));
+app.use('/api/endocrine',  require('./endocrine_router'));
+app.use('/api/emergency',  require('./emergency_router'));
+
 // ===== SaaS Batch 4A: Entitlements Runtime Resolver — OBSERVE-ONLY read surface, flag-gated =====
 // Inert unless ENTITLEMENTS_ENABLED=true (zero behavior change otherwise). No creation point is gated.
 // Read-only: Super Admin views the RESOLVED entitlements for a tenant. Fail-open if e25 catalog is absent.
