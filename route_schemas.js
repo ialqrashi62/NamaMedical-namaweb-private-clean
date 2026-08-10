@@ -3328,8 +3328,115 @@ const erTriageCreate = {
 };
 
 
+
+
+const pediatricsVitalsCreate = {
+    patient_id:    { type: 'id', required: true },
+    encounter_id:  { type: 'id', required: false },
+    age_years:     { type: 'num', required: true, min: 0, max: 18 },
+    heart_rate:    { type: 'int', required: false, min: 0, max: 300 },
+    rr_per_min:    { type: 'int', required: false, min: 0, max: 100 },
+    systolic_bp:   { type: 'int', required: false, min: 0, max: 250 }
+};
+
+const pediatricsFluidCreate = {
+    patient_id:  { type: 'id', required: true },
+    encounter_id:{ type: 'id', required: false },
+    weight_kg:   { type: 'num', required: true, min: 0.5, max: 150 },
+    age_years:   { type: 'num', required: false, min: 0, max: 18 }
+};
+
+const pediatricsCroupCreate = {
+    patient_id:    { type: 'id', required: true },
+    encounter_id:  { type: 'id', required: false },
+    stridor:       { type: 'int', required: true, min: 0, max: 3 },
+    retractions:   { type: 'int', required: true, min: 0, max: 3 },
+    air_entry:     { type: 'int', required: true, min: 0, max: 2 },
+    cyanosis:      { type: 'int', required: true, min: 0, max: 4 },
+    consciousness: { type: 'int', required: true, min: 0, max: 5 }
+};
+
+const pediatricsPewsCreate = {
+    patient_id:     { type: 'id', required: true },
+    encounter_id:   { type: 'id', required: false },
+    behavior:       { type: 'int', required: true, min: 0, max: 3 },
+    cardiovascular: { type: 'int', required: true, min: 0, max: 3 },
+    respiratory:    { type: 'int', required: true, min: 0, max: 3 }
+};
+
+const surgeryAsaCreate = {
+    patient_id:   { type: 'id', required: true },
+    encounter_id: { type: 'id', required: false },
+    asa_class:    { type: 'int', required: true, min: 1, max: 6 },
+    emergency:    { type: 'bool', required: false }
+};
+
+const surgeryRiskCreate = {
+    patient_id:        { type: 'id', required: true },
+    encounter_id:      { type: 'id', required: false },
+    age:               { type: 'int', required: true, min: 0, max: 120 },
+    asa_class:         { type: 'int', required: true, min: 1, max: 6 },
+    procedure_risk:    { type: 'enumOf', allowed: ['low','moderate','high','very_high'], required: true },
+    emergency:         { type: 'bool', required: false }
+};
+
+const surgeryTimeoutCreate = {
+    patient_id:      { type: 'id', required: true },
+    encounter_id:    { type: 'id', required: false },
+    phase:           { type: 'enumOf', allowed: ['sign_in','time_out','sign_out'], required: true },
+    completed_items: { type: 'str', required: true, max: 5000 }
+};
+
+const surgeryCapriniCreate = {
+    patient_id:               { type: 'id', required: true },
+    encounter_id:             { type: 'id', required: false },
+    age_41_60:                { type: 'bool', required: false },
+    age_61_74:                { type: 'bool', required: false },
+    age_75_plus:              { type: 'bool', required: false },
+    prior_vte:                { type: 'bool', required: false },
+    family_vte:               { type: 'bool', required: false },
+    known_thrombophilia:      { type: 'bool', required: false },
+    surgery_within_30d:       { type: 'bool', required: false },
+    immobility_3d:            { type: 'bool', required: false },
+    central_line:             { type: 'bool', required: false },
+    malignancy:               { type: 'bool', required: false },
+    chemotherapy:             { type: 'bool', required: false },
+    bmi_above_40:             { type: 'bool', required: false },
+    smoking:                  { type: 'bool', required: false },
+    oral_contraceptives:      { type: 'bool', required: false },
+    hrt:                      { type: 'bool', required: false },
+    pregnancy_postpartum:     { type: 'bool', required: false }
+};
+
+const pharmacyInteractionsCreate = {
+    patient_id:   { type: 'id', required: true },
+    encounter_id: { type: 'id', required: false },
+    drugs:        { type: 'str', required: true, max: 4000 }
+};
+
+const pharmacyRenalDoseCreate = {
+    patient_id:                { type: 'id', required: true },
+    encounter_id:              { type: 'id', required: false },
+    drug_name:                 { type: 'str', required: true, max: 200 },
+    standard_dose_mg:          { type: 'num', required: true, min: 0.01, max: 5000 },
+    frequency_per_day:         { type: 'int', required: true, min: 1, max: 24 },
+    age:                       { type: 'int', required: true, min: 0, max: 120 },
+    weight_kg:                 { type: 'num', required: true, min: 0.5, max: 300 },
+    serum_creatinine_mg_dl:    { type: 'num', required: true, min: 0.1, max: 30 },
+    sex:                       { type: 'enumOf', allowed: ['male','female'], required: true }
+};
+
+const pharmacyPregnancyCreate = {
+    patient_id:   { type: 'id', required: true },
+    encounter_id: { type: 'id', required: false },
+    drugs:        { type: 'str', required: true, max: 4000 }
+};
+
+
 module.exports = {
     invoiceCreate,
+    pediatricsFluidCreate, pediatricsCroupCreate, pediatricsPewsCreate, surgeryRiskCreate, surgeryTimeoutCreate, surgeryCapriniCreate, pharmacyInteractionsCreate, pharmacyRenalDoseCreate, pharmacyPregnancyCreate,
+
     glycemicAssessCreate, insulinDoseCreate, thyroidInterpretCreate, erTriageCreate,
     cardiologyGraceCreate, cardiologyCha2ds2vascCreate, cardiologyHasbledCreate, cardiologyHfClassCreate, cardiologyTroponinInterpretCreate,
     journalCreate,

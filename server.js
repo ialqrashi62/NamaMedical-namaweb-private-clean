@@ -18472,6 +18472,15 @@ app.use('/api/cardiology', require('./cardiology_router'));
 app.use('/api/endocrine',  require('./endocrine_router'));
 app.use('/api/emergency',  require('./emergency_router'));
 
+// ===== Pediatrics / Surgery / Pharmacy (e49, 2026-08-10) =====
+// Pediatric engines: APGAR, vitals (age-adjusted), fluid (4-2-1), croup (Westley), PEWS, immunization
+// Surgery engines: ASA classification, NSQIP-simplified risk, WHO surgical timeout, Caprini VTE
+// Pharmacy engines: drug interactions (Lexicomp 2024), Cockcroft-Gault + renal dose, pregnancy safety
+// See migrations/e49_pediatrics_surgery_pharmacy_up.sql for DB schema.
+app.use('/api/pediatrics', require('./pediatrics_router'));
+app.use('/api/surgery',   require('./surgery_router'));
+app.use('/api/pharmacy',  require('./pharmacy_router'));
+
 // ===== SaaS Batch 4A: Entitlements Runtime Resolver — OBSERVE-ONLY read surface, flag-gated =====
 // Inert unless ENTITLEMENTS_ENABLED=true (zero behavior change otherwise). No creation point is gated.
 // Read-only: Super Admin views the RESOLVED entitlements for a tenant. Fail-open if e25 catalog is absent.
