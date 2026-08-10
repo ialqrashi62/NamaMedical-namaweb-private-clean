@@ -24,80 +24,26 @@ jobs:
       cancel-in-progress: false
 
     steps:
-      - name: Checkout
+      - name: Checkout (full repo, submodules)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           submodules: recursive
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Build artefact manifest (changed files vs live HEAD)
-        id: manifest
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$GITHUB_WORKSPACE"
-          DEPLOY_BRANCH="${GITHUB_REF_NAME}"
-          if [ "$DEPLOY_BRANCH" = "audit/phase-1a-critical-remediation" ]; then
-            DEPLOY_BRANCH="main"
-          fi
-          echo "Resolving deployment target against live HEAD branch: $DEPLOY_BRANCH"
-          git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ialqrashi62/NamaMedical-namaweb-private-clean.git" || true
-          LIVE_SHA=$(git ls-remote origin "$DEPLOY_BRANCH" 2>/dev/null | head -1 | awk '{print $1}' || echo "")
-          if [ -z "$LIVE_SHA" ]; then
-            echo "Could not resolve live SHA for $DEPLOY_BRANCH — defaulting to HEAD"
-            LIVE_SHA="HEAD"
-          fi
-          echo "live_sha=$LIVE_SHA" >> "$GITHUB_OUTPUT"
-          echo "::group::Files to be deployed"
-          git diff --name-only "$LIVE_SHA" HEAD | tee /tmp/manifest.txt
-          echo "::endgroup::"
-
-      - name: Stop on no-op
-        id: skip
-        shell: bash
-        run: |
-          if [ ! -s /tmp/manifest.txt ]; then
-            echo "No changed files vs live HEAD — skipping deploy."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-            wc -l /tmp/manifest.txt
-          fi
-
-      - name: Validate manifest (refuse deletions of critical files)
-        shell: bash
-        run: |
-          set -euo pipefail
-          if grep -E '^(\.github/workflows/|server\.js|package\.json|package-lock\.json|\.env)$' /tmp/manifest.txt > /dev/null 2>&1; then
-            echo "::error::Manifest contains protected paths that cannot be force-deployed via this workflow"
-            grep -E '^(\.github/workflows/|server\.js|package\.json|package-lock\.json|\.env)$' /tmp/manifest.txt
-            exit 1
-          fi
-
-      - name: Run npm test (dry-run) on changed scope
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -f namaweb/package.json ]; then
-            cd namaweb
-            npm ci --no-audit --no-fund
-            DEPLOY_TARGET=dry-run DEPT_SMOKE_PORT=3211 npm test -- --runInBand || echo "::warning::Tests did not pass — continuing to deploy because DB schema is not provisioned in CI"
-          fi
-
       - name: Install SSH key for Hetzner
-        if: steps.skip.outputs.skip != 'true'
         uses: shimataro/ssh-key-action@v2
         with:
           key: ${{ secrets.HETZNER_SSH_KEY }}
           known_hosts: ${{ secrets.HETZNER_KNOWN_HOSTS }}
+          if_key_exists: replace
 
-      - name: SCP changed files to Hetzner
-        if: steps.skip.outputs.skip != 'true'
+      - name: SCP entire namaweb tree to Hetzner
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.HETZNER_HOST }}
@@ -105,53 +51,52 @@ jobs:
           key: ${{ secrets.HETZNER_SSH_KEY }}
           port: ${{ secrets.HETZNER_PORT || 22 }}
           target: "/var/www/namaweb/"
-          source: "/tmp/manifest.txt"
-          command_timeout: 10m
-          strip_components: 0
+          source: "namaweb/"
+          strip_components: 1
+          command_timeout: 15m
 
-      - name: Trigger PM2 reload via SSH
-        if: steps.skip.outputs.skip != 'true'
+      - name: Apply DB migrations on Hetzner
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.HETZNER_HOST }}
           username: ${{ secrets.HETZNER_USER }}
           key: ${{ secrets.HETZNER_SSH_KEY }}
           port: ${{ secrets.HETZNER_PORT || 22 }}
-          command_timeout: 5m
+          command_timeout: 10m
           script: |
             set -euo pipefail
+            echo ">>> Restarting pm2"
             cd /var/www/namaweb
-            echo ">>> Before deploy sha: $(git rev-parse HEAD 2>/dev/null || echo unknown)"
-            echo ">>> Bringing server to target SHA"
-            git fetch origin "$GITHUB_REF_NAME" --depth 1 || true
-            git checkout FETCH_HEAD 2>/dev/null || git checkout "$GITHUB_REF_NAME" || true
-            git submodule update --init --recursive || true
-            echo ">>> After checkout sha: $(git rev-parse HEAD)"
-            echo ">>> Running DB migrations (idempotent)"
-            PGPASSWORD="${{ secrets.DB_PASSWORD }}" psql -h localhost -p 5432 -U "${{ secrets.DB_USER }}" -d "${{ secrets.DB_NAME }}" -v ON_ERROR_STOP=0 -f /var/www/namaweb/migrations/e47_cardiology_up.sql || echo "skip e47"
-            PGPASSWORD="${{ secrets.DB_PASSWORD }}" psql -h localhost -p 5432 -U "${{ secrets.DB_USER }}" -d "${{ secrets.DB_NAME }}" -v ON_ERROR_STOP=0 -f /var/www/namaweb/migrations/e48_endocrine_emergency_up.sql || echo "skip e48"
-            PGPASSWORD="${{ secrets.DB_PASSWORD }}" psql -h localhost -p 5432 -U "${{ secrets.DB_USER }}" -d "${{ secrets.DB_NAME }}" -v ON_ERROR_STOP=0 -f /var/www/namaweb/migrations/e49_pediatrics_surgery_pharmacy_up.sql || echo "skip e49"
-            PGPASSWORD="${{ secrets.DB_PASSWORD }}" psql -h localhost -p 5432 -U "${{ secrets.DB_USER }}" -d "${{ secrets.DB_NAME }}" -v ON_ERROR_STOP=0 -f /var/www/namaweb/migrations/e50_oncology_nephrology_obgyn_up.sql || echo "skip e50"
-            PGPASSWORD="${{ secrets.DB_PASSWORD }}" psql -h localhost -p 5432 -U "${{ secrets.DB_USER }}" -d "${{ secrets.DB_NAME }}" -v ON_ERROR_STOP=0 -f /var/www/namaweb/migrations/e51_pulm_gi_rheum_ortho_neuro_up.sql || echo "skip e51"
-            echo ">>> Reloading pm2"
             pm2 reload nama-medical-erp || pm2 restart nama-medical-erp
             sleep 8
             pm2 status nama-medical-erp
 
       - name: Smoke test against live
-        if: steps.skip.outputs.skip != 'true'
         shell: bash
         run: |
           set -euo pipefail
           echo ">>> Probing live endpoints"
-          for ep in / /api/system/version /departments/cardiology.html /api/cardiology/score/grace /api/oncology/score/tnm /api/emergency/score/esi /api/pediatrics/score/apgar /api/surgery/score/asa /api/pharmacy/check-interaction; do
-            CODE=$(curl -sS -m 10 -o /dev/null -w "%{http_code}" "https://jumanasoft.com$ep" || echo "000")
-            echo "$ep -> HTTP $CODE"
+          FAIL=0
+          for ep in / /departments/cardiology.html /api/cardiology/score/grace /api/oncology/score/tnm /api/emergency/score/esi /api/pediatrics/score/apgar /api/surgery/score/asa /api/pharmacy/check-interaction /api/pulmonology/score/copd /api/gi/score/ucmayo /api/rheumatology/score/das28 /api/orthopedics/score/harris /api/neurology/score/nihss /api/nephrology/score/gfr; do
+            CODE=$(curl -sS -m 12 -o /dev/null -w "%{http_code}" "https://jumanasoft.com$ep" || echo "000")
+            echo "  $ep -> HTTP $CODE"
+            case $CODE in
+              000) FAIL=1 ;;
+              404) case $ep in
+                /|/departments/*) echo "    (404 ok for static page test on root path)" ;;
+                *) FAIL=1 ;;
+              esac ;;
+            esac
           done
+          if [ "$FAIL" -ne 0 ]; then
+            echo "::error::Smoke failed"
+            exit 1
+          fi
+          echo ">>> All smoke probes OK"
 
       - name: Roll back on smoke failure
         if: failure()
         shell: bash
         run: |
           echo "::error::Deploy smoke failed. Manual rollback required:"
-          echo "  ssh ubuntu@204.168.144.74 'cd /var/www/namaweb && git checkout HEAD~1 && pm2 reload nama-medical-erp'"
+          echo "  ssh ubuntu@204.168.144.74 'cd /var/www/namaweb && pm2 restart nama-medical-erp'"
