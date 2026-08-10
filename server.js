@@ -1660,7 +1660,7 @@ app.get('/api/opd/doctor/queue', requireAuth, requireTenantScope, async (req, re
     }
 });
 
-app.post('/api/opd/encounter/start', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/opd/encounter/start', requireAuth, requireTenantScope, validateBody(RS.opdEncounterStart), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { appointment_id } = req.body;
@@ -2535,7 +2535,7 @@ app.get('/api/medical/services', requireAuth, async (req, res) => {
     } catch (e) { if (optionalReadFallback(res, e)) return; res.status(500).json({ error: 'Server error' }); }
 });
 
-app.put('/api/medical/services/:id', requireAuth, requireCatalogAccess, async (req, res) => {
+app.put('/api/medical/services/:id', requireAuth, requireCatalogAccess, validateBody(RS.medicalServiceUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         if (!tenantId) return res.status(400).json({ error: 'Tenant context required' });
@@ -2568,7 +2568,7 @@ app.put('/api/medical/services/:id', requireAuth, requireCatalogAccess, async (r
 });
 
 // ===== DOCTOR PROCEDURE BILLING =====
-app.post('/api/medical/bill-procedures', requireAuth, async (req, res) => {
+app.post('/api/medical/bill-procedures', requireAuth, validateBody(RS.medicalBillProcedureCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, services } = req.body;
         if (!patient_id || !services || !services.length) return res.status(400).json({ error: 'Missing patient or services' });
@@ -4493,7 +4493,7 @@ app.get('/api/settings', requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.put('/api/settings', requireAuth, requireRole('settings'), async (req, res) => {
+app.put('/api/settings', requireAuth, requireRole('settings'), validateBody(RS.systemSettingsUpdate), idempotencyGuard, async (req, res) => {
     try {
         const updates = req.body;
         for (const [key, value] of Object.entries(updates)) {
@@ -4891,27 +4891,27 @@ function _aiWrap(name, fn) {
 // every vector store at boot (and keeps the AI route table declarative).
 function _aiOrch(name) { return require('./' + name); }
 
-app.post('/api/ai/cardiology/analyze-ecg',  requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('analyzeECG',          (b) => _aiOrch('ai_cardiology_orchestrator').analyzeECG(b, b.ecgReport || b.report || '')));
-app.post('/api/ai/cardiology/predict-hf',   requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('predictHFRisk',       (b) => _aiOrch('ai_cardiology_orchestrator').predictHFRisk(b.patientId || b.patient_id)));
-app.post('/api/ai/critical/predict-det',    requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('predictDeterioration',(b) => _aiOrch('ai_critical_orchestrator').predictDeterioration(b, b.vitals || b)));
-app.post('/api/ai/critical/optimize-vent', requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('optimizeVentilation', (b) => _aiOrch('ai_critical_orchestrator').optimizeVentilation(b.patientId || b.patient_id, b.bloodGas || b.blood_gas || null)));
-app.post('/api/ai/derm/analyze-lesion',    requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('analyzeLesion',       (b) => _aiOrch('ai_derm_orchestrator').analyzeLesion(b, b.lesion || b)));
-app.post('/api/ai/diagnostics/scan',        requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('analyzeScan',         (b) => _aiOrch('ai_diagnostics_orchestrator').analyzeScan(b, b.scan || b)));
-app.post('/api/ai/diagnostics/lab-trends',  requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('analyzeLabTrends',    (b) => _aiOrch('ai_diagnostics_orchestrator').analyzeLabTrends(b.patientId || b.patient_id)));
-app.post('/api/ai/endocrine/glucose',      requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('predictGlucoseTrend', (b) => _aiOrch('ai_endocrine_orchestrator').predictGlucoseTrend(b, b.glucoseLogs || b.logs || [])));
-app.post('/api/ai/gastro/endoscopy',       requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('analyzeEndoscopy',    (b) => _aiOrch('ai_gastro_orchestrator').analyzeEndoscopy(b, b.findings || b)));
-app.post('/api/ai/gastro/liver-risk',      requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('predictLiverRisk',    (b) => _aiOrch('ai_gastro_orchestrator').predictLiverRisk(b.patientId || b.patient_id)));
-app.post('/api/ai/infectious/antibiotic',  requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('suggestAntibiotic',   (b) => _aiOrch('ai_infectious_orchestrator').suggestAntibiotic(b, b.culture || b.cultureResults || {})));
-app.post('/api/ai/nephrology/biopsy',      requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('analyzeBiopsy',       (b) => _aiOrch('ai_nephrology_orchestrator').analyzeBiopsy(b, b.biopsy || b)));
-app.post('/api/ai/nephrology/gfr-trend',   requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('predictGFRTrend',     (b) => _aiOrch('ai_nephrology_orchestrator').predictGFRTrend(b.patientId || b.patient_id)));
-app.post('/api/ai/obgyn-peds/fetal',       requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('analyzeFetalAnomaly', (b) => _aiOrch('ai_obgyn_peds_orchestrator').analyzeFetalAnomaly(b, b.scan || b)));
-app.post('/api/ai/obgyn-peds/neonatal',    requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('predictNeonatalOutcome',(b) => _aiOrch('ai_obgyn_peds_orchestrator').predictNeonatalOutcome(b.patientId || b.patient_id)));
-app.post('/api/ai/oncology/genomics',      requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('analyzeGenomics',     (b) => _aiOrch('ai_oncology_orchestrator').analyzeGenomics(b, b.genomics || b)));
-app.post('/api/ai/pulmonology/pft',        requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('analyzePFT',          (b) => _aiOrch('ai_pulmonology_orchestrator').analyzePFT(b, b.pft || b)));
-app.post('/api/ai/pulmonology/sleep-apnea',requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('predictSleepApnea',   (b) => _aiOrch('ai_pulmonology_orchestrator').predictSleepApnea(b.patientId || b.patient_id)));
-app.post('/api/ai/rheuma/autoimmune',      requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('analyzeAutoimmuneCluster',(b) => _aiOrch('ai_rheuma_orchestrator').analyzeAutoimmuneCluster(b, b.serology || b)));
-app.post('/api/ai/surgery/recovery',       requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('predictRecovery',     (b) => _aiOrch('ai_surgery_orchestrator').predictRecovery(b)));
-app.post('/api/ai/surgery/report',         requireAuth, AI_ORCH_ROLE, requireTenantScope, _aiWrap('generateSurgicalReport',(b) => _aiOrch('ai_surgery_orchestrator').generateSurgicalReport(b)));
+app.post('/api/ai/cardiology/analyze-ecg',  requireAuth, AI_ORCH_ROLE, requireTenantScope, validateBody(RS.aiOrchestratorInvoke), idempotencyGuard, _aiWrap('analyzeECG',          (b) => _aiOrch('ai_cardiology_orchestrator').analyzeECG(b, b.ecgReport || b.report || '')));
+app.post('/api/ai/cardiology/predict-hf',   requireAuth, AI_ORCH_ROLE, requireTenantScope, validateBody(RS.aiOrchestratorInvoke), idempotencyGuard, _aiWrap('predictHFRisk',       (b) => _aiOrch('ai_cardiology_orchestrator').predictHFRisk(b.patientId || b.patient_id)));
+app.post('/api/ai/critical/predict-det',    requireAuth, AI_ORCH_ROLE, requireTenantScope, validateBody(RS.aiOrchestratorInvoke), idempotencyGuard, _aiWrap('predictDeterioration',(b) => _aiOrch('ai_critical_orchestrator').predictDeterioration(b, b.vitals || b)));
+app.post('/api/ai/critical/optimize-vent', requireAuth, AI_ORCH_ROLE, requireTenantScope, validateBody(RS.aiOrchestratorInvoke), idempotencyGuard, _aiWrap('optimizeVentilation', (b) => _aiOrch('ai_critical_orchestrator').optimizeVentilation(b.patientId || b.patient_id, b.bloodGas || b.blood_gas || null)));
+app.post('/api/ai/derm/analyze-lesion',    requireAuth, AI_ORCH_ROLE, requireTenantScope, validateBody(RS.aiOrchestratorInvoke), idempotencyGuard, _aiWrap('analyzeLesion',       (b) => _aiOrch('ai_derm_orchestrator').analyzeLesion(b, b.lesion || b)));
+app.post('/api/ai/diagnostics/scan',        requireAuth, AI_ORCH_ROLE, requireTenantScope, validateBody(RS.aiOrchestratorInvoke), idempotencyGuard, _aiWrap('analyzeScan',         (b) => _aiOrch('ai_diagnostics_orchestrator').analyzeScan(b, b.scan || b)));
+app.post('/api/ai/diagnostics/lab-trends',  requireAuth, AI_ORCH_ROLE, requireTenantScope, validateBody(RS.aiOrchestratorInvoke), idempotencyGuard, _aiWrap('analyzeLabTrends',    (b) => _aiOrch('ai_diagnostics_orchestrator').analyzeLabTrends(b.patientId || b.patient_id)));
+app.post('/api/ai/endocrine/glucose',      requireAuth, AI_ORCH_ROLE, requireTenantScope, validateBody(RS.aiOrchestratorInvoke), idempotencyGuard, _aiWrap('predictGlucoseTrend', (b) => _aiOrch('ai_endocrine_orchestrator').predictGlucoseTrend(b, b.glucoseLogs || b.logs || [])));
+app.post('/api/ai/gastro/endoscopy',       requireAuth, AI_ORCH_ROLE, requireTenantScope, validateBody(RS.aiOrchestratorInvoke), idempotencyGuard, _aiWrap('analyzeEndoscopy',    (b) => _aiOrch('ai_gastro_orchestrator').analyzeEndoscopy(b, b.findings || b)));
+app.post('/api/ai/gastro/liver-risk',      requireAuth, AI_ORCH_ROLE, requireTenantScope, validateBody(RS.aiOrchestratorInvoke), idempotencyGuard, _aiWrap('predictLiverRisk',    (b) => _aiOrch('ai_gastro_orchestrator').predictLiverRisk(b.patientId || b.patient_id)));
+app.post('/api/ai/infectious/antibiotic',  requireAuth, AI_ORCH_ROLE, requireTenantScope, validateBody(RS.aiOrchestratorInvoke), idempotencyGuard, _aiWrap('suggestAntibiotic',   (b) => _aiOrch('ai_infectious_orchestrator').suggestAntibiotic(b, b.culture || b.cultureResults || {})));
+app.post('/api/ai/nephrology/biopsy',      requireAuth, AI_ORCH_ROLE, requireTenantScope, validateBody(RS.aiOrchestratorInvoke), idempotencyGuard, _aiWrap('analyzeBiopsy',       (b) => _aiOrch('ai_nephrology_orchestrator').analyzeBiopsy(b, b.biopsy || b)));
+app.post('/api/ai/nephrology/gfr-trend',   requireAuth, AI_ORCH_ROLE, requireTenantScope, validateBody(RS.aiOrchestratorInvoke), idempotencyGuard, _aiWrap('predictGFRTrend',     (b) => _aiOrch('ai_nephrology_orchestrator').predictGFRTrend(b.patientId || b.patient_id)));
+app.post('/api/ai/obgyn-peds/fetal',       requireAuth, AI_ORCH_ROLE, requireTenantScope, validateBody(RS.aiOrchestratorInvoke), idempotencyGuard, _aiWrap('analyzeFetalAnomaly', (b) => _aiOrch('ai_obgyn_peds_orchestrator').analyzeFetalAnomaly(b, b.scan || b)));
+app.post('/api/ai/obgyn-peds/neonatal',    requireAuth, AI_ORCH_ROLE, requireTenantScope, validateBody(RS.aiOrchestratorInvoke), idempotencyGuard, _aiWrap('predictNeonatalOutcome',(b) => _aiOrch('ai_obgyn_peds_orchestrator').predictNeonatalOutcome(b.patientId || b.patient_id)));
+app.post('/api/ai/oncology/genomics',      requireAuth, AI_ORCH_ROLE, requireTenantScope, validateBody(RS.aiOrchestratorInvoke), idempotencyGuard, _aiWrap('analyzeGenomics',     (b) => _aiOrch('ai_oncology_orchestrator').analyzeGenomics(b, b.genomics || b)));
+app.post('/api/ai/pulmonology/pft',        requireAuth, AI_ORCH_ROLE, requireTenantScope, validateBody(RS.aiOrchestratorInvoke), idempotencyGuard, _aiWrap('analyzePFT',          (b) => _aiOrch('ai_pulmonology_orchestrator').analyzePFT(b, b.pft || b)));
+app.post('/api/ai/pulmonology/sleep-apnea',requireAuth, AI_ORCH_ROLE, requireTenantScope, validateBody(RS.aiOrchestratorInvoke), idempotencyGuard, _aiWrap('predictSleepApnea',   (b) => _aiOrch('ai_pulmonology_orchestrator').predictSleepApnea(b.patientId || b.patient_id)));
+app.post('/api/ai/rheuma/autoimmune',      requireAuth, AI_ORCH_ROLE, requireTenantScope, validateBody(RS.aiOrchestratorInvoke), idempotencyGuard, _aiWrap('analyzeAutoimmuneCluster',(b) => _aiOrch('ai_rheuma_orchestrator').analyzeAutoimmuneCluster(b, b.serology || b)));
+app.post('/api/ai/surgery/recovery',       requireAuth, AI_ORCH_ROLE, requireTenantScope, validateBody(RS.aiOrchestratorInvoke), idempotencyGuard, _aiWrap('predictRecovery',     (b) => _aiOrch('ai_surgery_orchestrator').predictRecovery(b)));
+app.post('/api/ai/surgery/report',         requireAuth, AI_ORCH_ROLE, requireTenantScope, validateBody(RS.aiOrchestratorInvoke), idempotencyGuard, _aiWrap('generateSurgicalReport',(b) => _aiOrch('ai_surgery_orchestrator').generateSurgicalReport(b)));
 
 // AI gateway status (read-only) — exposes which LLM provider/model is configured without keys.
 app.get('/api/ai/status', requireAuth, AI_ORCH_ROLE, requireTenantScope, async (req, res) => {
@@ -8006,7 +8006,7 @@ app.get('/api/medical/certificates', requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/medical/certificates', requireAuth, async (req, res) => {
+app.post('/api/medical/certificates', requireAuth, validateBody(RS.medicalCertificateCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, patient_name, cert_type, diagnosis, notes, start_date, end_date, days } = req.body;
         const doctorName = req.session.user.name || '';
@@ -11994,7 +11994,7 @@ app.get('/api/infection/surveillance', requireAuth, requireRole('infection'), re
         res.json((await pool.query('SELECT * FROM infection_surveillance WHERE tenant_id=$1 ORDER BY id DESC', [tenantId])).rows);
     } catch (e) { res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' }); }
 });
-app.post('/api/infection/surveillance', requireAuth, requireRole('infection'), requireTenantScope, async (req, res) => {
+app.post('/api/infection/surveillance', requireAuth, requireRole('infection'), requireTenantScope, validateBody(RS.infectionSurveillanceCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e17RequireTenant(req);
         const { patient_id, patient_name, infection_type, infection_site, organism, sensitivity, hai_category, device_related, device_type, ward, bed, isolation_type, notes } = req.body;
@@ -12017,7 +12017,7 @@ app.get('/api/infection/outbreaks', requireAuth, requireRole('infection'), requi
         res.json((await pool.query('SELECT * FROM infection_outbreaks WHERE tenant_id=$1 ORDER BY id DESC', [tenantId])).rows);
     } catch (e) { res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' }); }
 });
-app.post('/api/infection/outbreaks', requireAuth, requireRole('infection'), requireTenantScope, async (req, res) => {
+app.post('/api/infection/outbreaks', requireAuth, requireRole('infection'), requireTenantScope, validateBody(RS.infectionOutbreakCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e17RequireTenant(req);
         // L1 FIX: reported_by stamped from session, not trusted from request body.
@@ -12028,7 +12028,7 @@ app.post('/api/infection/outbreaks', requireAuth, requireRole('infection'), requ
         res.json(r.rows[0]);
     } catch (e) { res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' }); }
 });
-app.put('/api/infection/outbreaks/:id', requireAuth, requireRole('infection'), requireTenantScope, async (req, res) => {
+app.put('/api/infection/outbreaks/:id', requireAuth, requireRole('infection'), requireTenantScope, validateBody(RS.infectionOutbreakUpdate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e17RequireTenant(req);
         const { status, total_cases, control_measures } = req.body;
@@ -12042,7 +12042,7 @@ app.put('/api/infection/outbreaks/:id', requireAuth, requireRole('infection'), r
         res.json({ success: true });
     } catch (e) { res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' }); }
 });
-app.post('/api/infection/exposures', requireAuth, requireRole('infection'), requireTenantScope, async (req, res) => {
+app.post('/api/infection/exposures', requireAuth, requireRole('infection'), requireTenantScope, validateBody(RS.infectionExposureCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e17RequireTenant(req);
         // L1 FIX: reported_by stamped from session, not trusted from request body.
@@ -12059,7 +12059,7 @@ app.get('/api/infection/exposures', requireAuth, requireRole('infection'), requi
         res.json((await pool.query('SELECT * FROM employee_exposures WHERE tenant_id=$1 ORDER BY id DESC', [tenantId])).rows);
     } catch (e) { res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' }); }
 });
-app.post('/api/infection/hand-hygiene', requireAuth, requireRole('infection'), requireTenantScope, async (req, res) => {
+app.post('/api/infection/hand-hygiene', requireAuth, requireRole('infection'), requireTenantScope, validateBody(RS.infectionHandHygieneCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e17RequireTenant(req);
         // auditor stamped from session (L1 fix for consistency).
@@ -12103,7 +12103,7 @@ app.get('/api/infection/isolation', requireAuth, requireRole('infection'), requi
         res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' });
     }
 });
-app.post('/api/infection/isolation', requireAuth, requireRole('infection'), requireTenantScope, async (req, res) => {
+app.post('/api/infection/isolation', requireAuth, requireRole('infection'), requireTenantScope, validateBody(RS.infectionIsolationCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e17RequireTenant(req);
         const { facilityId } = getRequestTenantContext(req);
@@ -12124,7 +12124,7 @@ app.post('/api/infection/isolation', requireAuth, requireRole('infection'), requ
         res.json(r.rows[0]);
     } catch (e) { res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' }); }
 });
-app.put('/api/infection/isolation/:id', requireAuth, requireRole('infection'), requireTenantScope, async (req, res) => {
+app.put('/api/infection/isolation/:id', requireAuth, requireRole('infection'), requireTenantScope, validateBody(RS.infectionIsolationUpdate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e17RequireTenant(req);
         const id = parseInt(req.params.id, 10);
@@ -12150,7 +12150,7 @@ app.get('/api/infection/ams', requireAuth, requireRole('infection'), requireTena
         res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' });
     }
 });
-app.post('/api/infection/ams', requireAuth, requireRole('infection'), requireTenantScope, async (req, res) => {
+app.post('/api/infection/ams', requireAuth, requireRole('infection'), requireTenantScope, validateBody(RS.infectionAmsCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e17RequireTenant(req);
         const { facilityId } = getRequestTenantContext(req);
@@ -12168,7 +12168,7 @@ app.post('/api/infection/ams', requireAuth, requireRole('infection'), requireTen
         res.json(r.rows[0]);
     } catch (e) { res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' }); }
 });
-app.put('/api/infection/ams/:id', requireAuth, requireRole('infection'), requireTenantScope, async (req, res) => {
+app.put('/api/infection/ams/:id', requireAuth, requireRole('infection'), requireTenantScope, validateBody(RS.infectionAmsUpdate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e17RequireTenant(req);
         const id = parseInt(req.params.id, 10);
@@ -14650,7 +14650,7 @@ app.get('/api/messages/sent', requireAuth, requireTenantScope, async (req, res) 
         res.status(500).json({ error: 'Server error' });
     }
 });
-app.post('/api/messages', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/messages', requireAuth, requireTenantScope, validateBody(RS.messageCreate), idempotencyGuard, async (req, res) => {
     try {
         const { receiver_id, subject, body, priority } = req.body;
         const senderId = req.session.user.id;
@@ -16009,7 +16009,7 @@ app.get('/api/diagnosis-templates', requireAuth, async (req, res) => {
 });
 
 // ===== SAFE PATIENT DELETE (soft delete if has records) =====
-app.delete('/api/patients/:id', requireAuth, async (req, res) => {
+app.delete('/api/patients/:id', requireAuth, requireRole('Admin'), validateBody(RS.patientDelete), idempotencyGuard, async (req, res) => {
     try {
         if (req.session.user.role !== 'Admin') {
             return res.status(403).json({ error: 'Access denied. Only Admin can delete patients.' });
@@ -16964,7 +16964,7 @@ app.get('/api/patients/:id/summary', requireAuth, requireRole('patients'), requi
 
 
 // ===== MEDICAL REPORTS & SICK LEAVE =====
-app.post('/api/medical-reports', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/medical-reports', requireAuth, requireTenantScope, validateBody(RS.medicalReportCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, patient_name, report_type, diagnosis, icd_code, start_date, end_date, duration_days, notes, fitness_status } = req.body;
         const doctor = req.session.user?.display_name || '';
@@ -17778,7 +17778,7 @@ app.get('/api/dashboard/charts', requireAuth, requireTenantScope, async (req, re
 
 
 // ===== DATABASE BACKUP (Admin only) =====
-app.post('/api/admin/backup', requireAuth, async (req, res) => {
+app.post('/api/admin/backup', requireAuth, requireRole('Admin'), idempotencyGuard, async (req, res) => {
     try {
         if (req.session.user?.role !== 'Admin') return res.status(403).json({ error: 'Admin only' });
 
@@ -20700,7 +20700,7 @@ app.post('/api/hl7/messages/send', requireAuth, requireRole('admin', 'lis', 'ris
 });
 
 // ─── E3: AI CLINICAL DECISION SUPPORT & VOICE ───────────────────────────────
-app.post('/api/ai/cds-hooks', requireAuth, requireRole('doctor', 'clinical-pharmacy'), requireTenantScope, async (req, res) => {
+app.post('/api/ai/cds-hooks', requireAuth, requireRole('doctor', 'clinical-pharmacy'), requireTenantScope, validateBody(RS.cdsHookInvoke), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { patient_id, context_type = 'Differential', input_data } = req.body;
@@ -20735,7 +20735,7 @@ app.post('/api/ai/cds-hooks', requireAuth, requireRole('doctor', 'clinical-pharm
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/ai/voice-dictation/start', requireAuth, requireRole('doctor', 'clinical'), requireTenantScope, async (req, res) => {
+app.post('/api/ai/voice-dictation/start', requireAuth, requireRole('doctor', 'clinical'), requireTenantScope, validateBody(RS.voiceDictationStart), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { patient_id, session_type = 'Clinical Note' } = req.body;
@@ -20755,7 +20755,7 @@ app.post('/api/ai/voice-dictation/start', requireAuth, requireRole('doctor', 'cl
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/ai/voice-dictation/:id/finalize', requireAuth, requireRole('doctor', 'clinical'), requireTenantScope, async (req, res) => {
+app.post('/api/ai/voice-dictation/:id/finalize', requireAuth, requireRole('doctor', 'clinical'), requireTenantScope, validateBody(RS.voiceDictationFinalize), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const id = parseInt(req.params.id);

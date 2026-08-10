@@ -1412,6 +1412,33 @@ const appointmentDuplicateCheck = {
     doctor:     { type: 'str', required: true, max: 300 }
 };
 
+// POST /api/medical/certificates
+const medicalCertificateCreate = {
+    patient_id:   { type: 'id', required: false },
+    patient_name: { type: 'str', required: false, max: 300 },
+    cert_type:    { type: 'str', required: false, max: 120 },
+    diagnosis:    { type: 'str', required: false, max: 4000 },
+    notes:        { type: 'str', required: false, max: 4000 },
+    start_date:   { type: 'dateStr', required: false },
+    end_date:     { type: 'dateStr', required: false },
+    days:         { type: 'int', required: false, min: 0 }
+};
+
+// PUT /api/medical/services/:id
+const medicalServiceUpdate = {
+    service_name_ar: { type: 'str', required: false, max: 300 },
+    service_name_en: { type: 'str', required: false, max: 300 },
+    price:           { type: 'num', required: false, min: 0 },
+    is_active:       { type: 'bool', required: false }
+};
+
+// AI orchestrators use a permissive generic schema (PHI signals body fields)
+const aiOrchestratorInvoke = {
+    patient_id:      { type: 'id', required: false },
+    patientId:       { type: 'id', required: false },
+    notes:           { type: 'str', required: false, max: 8000 }
+};
+
 // PUT /api/patients/:id
 const patientUpdate = {
     name_ar:                   { type: 'str', required: false, max: 200 },
@@ -2416,10 +2443,159 @@ const messageCreate = {
     priority:       { type: 'enumOf', allowed: ['Low', 'Normal', 'High', 'Urgent', ''], required: false }
 };
 
+// WAVE C hardening: medical/AI/infection/messages/patient_DELETE
+const medicalBillProcedureCreate = {
+    patient_id:      { type: 'id', required: true },
+    encounter_id:    { type: 'id', required: false },
+    procedure_code:  { type: 'str', required: true, max: 64 },
+    procedure_name:  { type: 'str', required: false, max: 255 },
+    quantity:        { type: 'int', required: false, min: 1, max: 1000 },
+    unit_price:      { type: 'num', required: false, min: 0 },
+    notes:           { type: 'str', required: false, max: 2000 }
+};
+
+const systemSettingsUpdate = {
+    key:             { type: 'str', required: true, max: 128 },
+    value:           { type: 'str', required: false, max: 8000 },
+    category:        { type: 'enumOf', allowed: ['general', 'security', 'clinical', 'billing', 'integration', 'notification', 'tenant', ''], required: false }
+};
+
+const medicalReportCreate = {
+    patient_id:      { type: 'id', required: true },
+    encounter_id:    { type: 'id', required: false },
+    report_type:     { type: 'enumOf', allowed: ['discharge', 'consultation', 'operative', 'radiology', 'lab', 'pathology', 'other', ''], required: true },
+    title:           { type: 'str', required: false, max: 255 },
+    body:            { type: 'str', required: false, max: 50000 },
+    status:          { type: 'enumOf', allowed: ['draft', 'final', 'amended', 'cancelled', ''], required: false }
+};
+
+const patientDelete = {
+    reason:          { type: 'str', required: false, max: 1000 },
+    confirm:         { type: 'bool', required: true }
+};
+
+const opdEncounterStart = {
+    patient_id:      { type: 'id', required: true },
+    chief_complaint: { type: 'str', required: false, max: 1000 },
+    specialty:       { type: 'enumOf', allowed: ['general', 'internal', 'peds', 'surgery', 'ent', 'derm', 'ortho', 'gyn', 'other', ''], required: false },
+    triage_level:    { type: 'enumOf', allowed: ['ESI-1', 'ESI-2', 'ESI-3', 'ESI-4', 'ESI-5', ''], required: false }
+};
+
+const cdsHookInvoke = {
+    hook:            { type: 'enumOf', allowed: ['patient-view', 'medication-prescribe', 'order-select', 'order-sign', ''], required: true },
+    hookInstance:    { type: 'str', required: false, max: 128 },
+    context:         { type: 'str', required: false, max: 8000 },
+    patientId:       { type: 'id', required: false }
+};
+
+const infectionExposureCreate = {
+    patient_id:      { type: 'id', required: false },
+    source_type:     { type: 'enumOf', allowed: ['staff', 'patient', 'visitor', 'environment', 'other', ''], required: false },
+    exposure_type:   { type: 'str', required: false, max: 255 },
+    exposure_date:   { type: 'dateStr', required: false },
+    severity:        { type: 'enumOf', allowed: ['low', 'moderate', 'high', 'critical', ''], required: false },
+    notes:           { type: 'str', required: false, max: 4000 }
+};
+
+const infectionHandHygieneCreate = {
+    unit:            { type: 'str', required: false, max: 128 },
+    audit_type:      { type: 'enumOf', allowed: ['observation', 'self-report', 'audit', ''], required: false },
+    observed_count:  { type: 'int', required: false, min: 0, max: 100000 },
+    compliant_count: { type: 'int', required: false, min: 0, max: 100000 },
+    notes:           { type: 'str', required: false, max: 4000 }
+};
+
+const infectionIsolationCreate = {
+    patient_id:      { type: 'id', required: true },
+    isolation_type:  { type: 'enumOf', allowed: ['contact', 'droplet', 'airborne', 'protective', 'standard', ''], required: true },
+    start_date:      { type: 'dateStr', required: false },
+    notes:           { type: 'str', required: false, max: 4000 }
+};
+
+const infectionIsolationUpdate = {
+    isolation_type:  { type: 'enumOf', allowed: ['contact', 'droplet', 'airborne', 'protective', 'standard', ''], required: false },
+    end_date:        { type: 'dateStr', required: false },
+    status:          { type: 'enumOf', allowed: ['active', 'ended', 'cancelled', ''], required: false },
+    notes:           { type: 'str', required: false, max: 4000 }
+};
+
+const infectionAmsCreate = {
+    patient_id:      { type: 'id', required: false },
+    antibiotic:      { type: 'str', required: false, max: 255 },
+    culture_id:      { type: 'id', required: false },
+    indication:      { type: 'str', required: false, max: 1000 },
+    recommendation:  { type: 'enumOf', allowed: ['continue', 'discontinue', 'de-escalate', 'escalate', 'switch', ''], required: false },
+    notes:           { type: 'str', required: false, max: 4000 }
+};
+
+const infectionAmsUpdate = {
+    recommendation:  { type: 'enumOf', allowed: ['continue', 'discontinue', 'de-escalate', 'escalate', 'switch', ''], required: false },
+    status:          { type: 'enumOf', allowed: ['pending', 'accepted', 'rejected', 'completed', ''], required: false },
+    notes:           { type: 'str', required: false, max: 4000 }
+};
+
+const voiceDictationStart = {
+    patientId:       { type: 'id', required: true },
+    encounterId:     { type: 'id', required: false },
+    language:        { type: 'enumOf', allowed: ['ar-SA', 'en-US', 'fr-FR', 'ur-PK', ''], required: false }
+};
+
+const voiceDictationFinalize = {
+    transcript:      { type: 'str', required: false, max: 50000 },
+    encounterId:     { type: 'id', required: false }
+};
+
+const infectionSurveillanceCreate = {
+    patient_id:      { type: 'id', required: false },
+    encounter_id:    { type: 'id', required: false },
+    organism:        { type: 'str', required: false, max: 255 },
+    infection_type:  { type: 'enumOf', allowed: ['hai', 'hai-uti', 'hai-ssi', 'hai-pneumonia', 'hai-bsi', 'c-diff', 'mrsa', 'vre', 'other', ''], required: false },
+    reported_at:     { type: 'dateStr', required: false },
+    notes:           { type: 'str', required: false, max: 4000 }
+};
+
+const infectionOutbreakCreate = {
+    outbreak_name:   { type: 'str', required: true, max: 255 },
+    onset_date:      { type: 'dateStr', required: false },
+    suspected_source:{ type: 'str', required: false, max: 255 },
+    case_count:      { type: 'int', required: false, min: 0, max: 100000 },
+    notes:           { type: 'str', required: false, max: 4000 }
+};
+
+const infectionOutbreakUpdate = {
+    outbreak_name:   { type: 'str', required: false, max: 255 },
+    status:          { type: 'enumOf', allowed: ['active', 'contained', 'closed', ''], required: false },
+    case_count:      { type: 'int', required: false, min: 0, max: 100000 },
+    notes:           { type: 'str', required: false, max: 4000 }
+};
+
+
+// WAVE C hardening-aliases (camelCase variants exposed for handlers that use either naming)
 module.exports = {
     invoiceCreate,
     journalCreate,
     invoiceRefund,
+    medicalCertificateCreate,
+    medicalServiceUpdate,
+    aiOrchestratorInvoke,
+    medicalBillProcedureCreate,
+    systemSettingsUpdate,
+    medicalReportCreate,
+    patientDelete,
+    messageCreate,
+    opdEncounterStart,
+    cdsHookInvoke,
+    voiceDictationStart,
+    voiceDictationFinalize,
+    infectionSurveillanceCreate,
+    infectionOutbreakCreate,
+    infectionOutbreakUpdate,
+    infectionExposureCreate,
+    infectionHandHygieneCreate,
+    infectionIsolationCreate,
+    infectionIsolationUpdate,
+    infectionAmsCreate,
+    infectionAmsUpdate,
     invoiceGenerate,
     invoicePay,
     paymentMoyasarInitiate,
