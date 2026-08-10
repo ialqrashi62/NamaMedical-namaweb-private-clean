@@ -2569,8 +2569,272 @@ const infectionOutbreakUpdate = {
     notes:           { type: 'str', required: false, max: 4000 }
 };
 
+// WAVE D hardening: surgery/OR/consent/ER/ADT/dietary/quality/maintenance/transport
+const surgeryCreate = {
+    patient_id:        { type: 'id', required: true },
+    encounter_id:      { type: 'id', required: false },
+    surgery_type:      { type: 'str', required: false, max: 200 },
+    scheduled_date:    { type: 'dateStr', required: false },
+    urgency:           { type: 'enumOf', allowed: ['elective', 'urgent', 'emergency', ''], required: false },
+    surgeon_id:        { type: 'id', required: false },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
 
-// WAVE C hardening-aliases (camelCase variants exposed for handlers that use either naming)
+const surgeryDelete = {
+    reason:            { type: 'str', required: false, max: 1000 },
+    confirm:           { type: 'bool', required: true }
+};
+
+const operatingRoomCreate = {
+    room_code:         { type: 'str', required: true, max: 64 },
+    room_name:         { type: 'str', required: false, max: 200 },
+    location:          { type: 'str', required: false, max: 200 },
+    capacity:          { type: 'int', required: false, min: 1, max: 100 }
+};
+
+const consentFormCreate = {
+    patient_id:        { type: 'id', required: true },
+    encounter_id:      { type: 'id', required: false },
+    procedure_type:    { type: 'str', required: false, max: 200 },
+    procedure_name:    { type: 'str', required: false, max: 200 },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
+
+const consentFormSign = {
+    signer_name:       { type: 'str', required: false, max: 200 },
+    signer_role:       { type: 'enumOf', allowed: ['patient', 'guardian', 'witness', 'doctor', 'nurse', ''], required: false },
+    signature_data:    { type: 'str', required: false, max: 200000 },
+    witness_name:      { type: 'str', required: false, max: 200 }
+};
+
+const erTriage = {
+    patient_id:        { type: 'id', required: true },
+    encounter_id:      { type: 'id', required: false },
+    triage_level:      { type: 'enumOf', allowed: ['ESI-1', 'ESI-2', 'ESI-3', 'ESI-4', 'ESI-5', ''], required: true },
+    chief_complaint:   { type: 'str', required: false, max: 1000 },
+    arrival_time:      { type: 'dateStr', required: false }
+};
+
+const erAssignProvider = {
+    encounter_id:      { type: 'id', required: true },
+    provider_id:       { type: 'id', required: true },
+    role:              { type: 'enumOf', allowed: ['primary', 'consulting', 'attending', 'resident', ''], required: false }
+};
+
+const erDisposition = {
+    encounter_id:      { type: 'id', required: true },
+    disposition:       { type: 'enumOf', allowed: ['discharge', 'admit', 'transfer', 'observation', 'ama', 'expired', ''], required: true },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
+
+const bedTransferCreate = {
+    patient_id:        { type: 'id', required: true },
+    from_bed_id:       { type: 'id', required: false },
+    to_bed_id:         { type: 'id', required: true },
+    reason:            { type: 'str', required: false, max: 1000 },
+    transfer_time:     { type: 'dateStr', required: false }
+};
+
+const adtAdmit = {
+    patient_id:        { type: 'id', required: true },
+    bed_id:            { type: 'id', required: false },
+    ward_id:           { type: 'id', required: false },
+    admission_type:    { type: 'enumOf', allowed: ['elective', 'emergency', 'urgent', 'observation', ''], required: false },
+    attending_doctor_id: { type: 'id', required: false },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
+
+const adtTransfer = {
+    encounter_id:      { type: 'id', required: true },
+    from_bed_id:       { type: 'id', required: false },
+    to_bed_id:         { type: 'id', required: false },
+    reason:            { type: 'str', required: false, max: 1000 }
+};
+
+const adtDischarge = {
+    encounter_id:      { type: 'id', required: true },
+    discharge_type:    { type: 'enumOf', allowed: ['home', 'transfer', 'ama', 'expired', 'against_advice', ''], required: false },
+    discharge_notes:   { type: 'str', required: false, max: 4000 }
+};
+
+const adtBedStatus = {
+    bed_id:            { type: 'id', required: true },
+    status:            { type: 'enumOf', allowed: ['available', 'occupied', 'cleaning', 'maintenance', 'reserved', 'dirty', ''], required: true },
+    notes:             { type: 'str', required: false, max: 1000 }
+};
+
+const dietaryOrderCreate = {
+    patient_id:        { type: 'id', required: true },
+    encounter_id:      { type: 'id', required: false },
+    diet_type:         { type: 'enumOf', allowed: ['regular', 'soft', 'liquid', 'clear-liquid', 'diabetic', 'low-sodium', 'low-fat', 'renal', 'cardiac', 'vegan', 'vegetarian', 'other', ''], required: true },
+    start_date:        { type: 'dateStr', required: false },
+    notes:             { type: 'str', required: false, max: 2000 }
+};
+
+const dietaryOrderUpdate = {
+    diet_type:         { type: 'enumOf', allowed: ['regular', 'soft', 'liquid', 'clear-liquid', 'diabetic', 'low-sodium', 'low-fat', 'renal', 'cardiac', 'vegan', 'vegetarian', 'other', ''], required: false },
+    end_date:          { type: 'dateStr', required: false },
+    status:            { type: 'enumOf', allowed: ['active', 'completed', 'cancelled', ''], required: false },
+    notes:             { type: 'str', required: false, max: 2000 }
+};
+
+const dietaryMealCreate = {
+    dietary_order_id:  { type: 'id', required: false },
+    patient_id:        { type: 'id', required: false },
+    meal_type:         { type: 'enumOf', allowed: ['breakfast', 'lunch', 'dinner', 'snack', ''], required: true },
+    scheduled_time:    { type: 'dateStr', required: false },
+    notes:             { type: 'str', required: false, max: 1000 }
+};
+
+const dietaryMealDeliver = {
+    delivered_at:      { type: 'dateStr', required: false },
+    delivered_by:      { type: 'str', required: false, max: 200 },
+    notes:             { type: 'str', required: false, max: 1000 }
+};
+
+const nutritionAssessmentCreate = {
+    patient_id:        { type: 'id', required: true },
+    encounter_id:      { type: 'id', required: false },
+    assessment_date:   { type: 'dateStr', required: false },
+    bmi:               { type: 'num', required: false, min: 0, max: 200 },
+    weight_kg:         { type: 'num', required: false, min: 0, max: 1000 },
+    height_cm:         { type: 'num', required: false, min: 0, max: 300 },
+    risk_level:        { type: 'enumOf', allowed: ['low', 'moderate', 'high', 'critical', ''], required: false },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
+
+const qualityIncidentCreate = {
+    incident_date:     { type: 'dateStr', required: true },
+    incident_type:     { type: 'enumOf', allowed: ['patient-safety', 'medication-error', 'fall', 'equipment', 'documentation', 'near-miss', 'other', ''], required: true },
+    severity:          { type: 'enumOf', allowed: ['low', 'moderate', 'high', 'critical', 'sentinel', ''], required: false },
+    description:       { type: 'str', required: false, max: 4000 },
+    patient_id:        { type: 'id', required: false },
+    reporter_id:       { type: 'id', required: false }
+};
+
+const qualityIncidentUpdate = {
+    status:            { type: 'enumOf', allowed: ['open', 'investigating', 'resolved', 'closed', ''], required: false },
+    severity:          { type: 'enumOf', allowed: ['low', 'moderate', 'high', 'critical', 'sentinel', ''], required: false },
+    root_cause:        { type: 'str', required: false, max: 4000 },
+    corrective_action: { type: 'str', required: false, max: 4000 }
+};
+
+const qualitySatisfactionCreate = {
+    patient_id:        { type: 'id', required: false },
+    encounter_id:      { type: 'id', required: false },
+    score:             { type: 'int', required: true, min: 1, max: 10 },
+    feedback:          { type: 'str', required: false, max: 4000 },
+    survey_date:       { type: 'dateStr', required: false }
+};
+
+const qualityKpiCreate = {
+    kpi_name:          { type: 'str', required: true, max: 200 },
+    kpi_value:         { type: 'num', required: true },
+    target_value:      { type: 'num', required: false },
+    period:            { type: 'enumOf', allowed: ['daily', 'weekly', 'monthly', 'quarterly', 'yearly', ''], required: true },
+    notes:             { type: 'str', required: false, max: 2000 }
+};
+
+const qualityCapaCreate = {
+    incident_id:       { type: 'id', required: false },
+    action_type:       { type: 'enumOf', allowed: ['corrective', 'preventive', ''], required: true },
+    description:       { type: 'str', required: true, max: 4000 },
+    due_date:          { type: 'dateStr', required: false },
+    responsible_id:    { type: 'id', required: false }
+};
+
+const qualityCapaUpdate = {
+    status:            { type: 'enumOf', allowed: ['open', 'in-progress', 'completed', 'verified', 'closed', ''], required: false },
+    completion_notes:  { type: 'str', required: false, max: 4000 }
+};
+
+const qualityRiskCreate = {
+    risk_name:         { type: 'str', required: true, max: 200 },
+    category:          { type: 'enumOf', allowed: ['clinical', 'operational', 'financial', 'compliance', 'safety', 'other', ''], required: false },
+    likelihood:        { type: 'enumOf', allowed: ['low', 'moderate', 'high', ''], required: false },
+    impact:            { type: 'enumOf', allowed: ['low', 'moderate', 'high', ''], required: false },
+    mitigation:        { type: 'str', required: false, max: 4000 }
+};
+
+const qualityRiskUpdate = {
+    likelihood:        { type: 'enumOf', allowed: ['low', 'moderate', 'high', ''], required: false },
+    impact:            { type: 'enumOf', allowed: ['low', 'moderate', 'high', ''], required: false },
+    status:            { type: 'enumOf', allowed: ['identified', 'assessed', 'mitigated', 'accepted', 'closed', ''], required: false },
+    mitigation:        { type: 'str', required: false, max: 4000 }
+};
+
+const maintenanceWorkOrderCreate = {
+    equipment_id:      { type: 'id', required: false },
+    work_type:         { type: 'enumOf', allowed: ['corrective', 'preventive', 'inspection', 'calibration', 'installation', 'other', ''], required: true },
+    priority:          { type: 'enumOf', allowed: ['low', 'normal', 'high', 'urgent', ''], required: false },
+    description:       { type: 'str', required: true, max: 4000 },
+    requested_by:      { type: 'id', required: false }
+};
+
+const maintenanceWorkOrderUpdate = {
+    status:            { type: 'enumOf', allowed: ['open', 'assigned', 'in-progress', 'completed', 'cancelled', ''], required: false },
+    assigned_to:       { type: 'id', required: false },
+    completion_notes:  { type: 'str', required: false, max: 4000 }
+};
+
+const maintenanceEquipmentCreate = {
+    equipment_code:    { type: 'str', required: true, max: 64 },
+    equipment_name:    { type: 'str', required: true, max: 200 },
+    category:          { type: 'str', required: false, max: 120 },
+    manufacturer:      { type: 'str', required: false, max: 200 },
+    model:             { type: 'str', required: false, max: 200 },
+    serial_number:     { type: 'str', required: false, max: 200 },
+    location:          { type: 'str', required: false, max: 200 }
+};
+
+const maintenancePmScheduleCreate = {
+    equipment_id:      { type: 'id', required: true },
+    frequency:         { type: 'enumOf', allowed: ['daily', 'weekly', 'monthly', 'quarterly', 'yearly', ''], required: true },
+    next_due:          { type: 'dateStr', required: false },
+    description:       { type: 'str', required: false, max: 2000 }
+};
+
+const transportRequestCreate = {
+    patient_id:        { type: 'id', required: false },
+    encounter_id:      { type: 'id', required: false },
+    origin:            { type: 'str', required: true, max: 200 },
+    destination:       { type: 'str', required: true, max: 200 },
+    transport_type:    { type: 'enumOf', allowed: ['wheelchair', 'stretcher', 'ambulatory', 'bed', 'other', ''], required: false },
+    priority:          { type: 'enumOf', allowed: ['low', 'normal', 'high', 'urgent', ''], required: false },
+    requested_time:    { type: 'dateStr', required: false },
+    notes:             { type: 'str', required: false, max: 2000 }
+};
+
+const maintenanceOrderCreate = {
+    equipment_id:      { type: 'id', required: false },
+    order_type:        { type: 'enumOf', allowed: ['corrective', 'preventive', 'inspection', 'calibration', 'other', ''], required: true },
+    description:       { type: 'str', required: true, max: 4000 },
+    priority:          { type: 'enumOf', allowed: ['low', 'normal', 'high', 'urgent', ''], required: false }
+};
+
+const maintenanceOrderUpdate = {
+    status:            { type: 'enumOf', allowed: ['open', 'assigned', 'in-progress', 'completed', 'cancelled', ''], required: false },
+    completion_notes:  { type: 'str', required: false, max: 4000 }
+};
+
+const maintenanceCalibrationCreate = {
+    equipment_id:      { type: 'id', required: true },
+    calibration_date:  { type: 'dateStr', required: true },
+    result:            { type: 'enumOf', allowed: ['pass', 'fail', 'conditional', ''], required: true },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
+
+const orSlotCancel = {
+    reason:            { type: 'str', required: false, max: 1000 },
+    cancel_by:         { type: 'id', required: false }
+};
+
+const orWhoChecklist = {
+    phase:             { type: 'enumOf', allowed: ['sign-in', 'time-out', 'sign-out', ''], required: true },
+    items:             { type: 'str', required: false, max: 8000 },
+    confirmed_by:      { type: 'str', required: false, max: 200 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -2596,6 +2860,42 @@ module.exports = {
     infectionIsolationUpdate,
     infectionAmsCreate,
     infectionAmsUpdate,
+    surgeryCreate,
+    surgeryDelete,
+    operatingRoomCreate,
+    consentFormCreate,
+    consentFormSign,
+    erTriage,
+    erAssignProvider,
+    erDisposition,
+    bedTransferCreate,
+    adtAdmit,
+    adtTransfer,
+    adtDischarge,
+    adtBedStatus,
+    dietaryOrderCreate,
+    dietaryOrderUpdate,
+    dietaryMealCreate,
+    dietaryMealDeliver,
+    nutritionAssessmentCreate,
+    qualityIncidentCreate,
+    qualityIncidentUpdate,
+    qualitySatisfactionCreate,
+    qualityKpiCreate,
+    qualityCapaCreate,
+    qualityCapaUpdate,
+    qualityRiskCreate,
+    qualityRiskUpdate,
+    maintenanceWorkOrderCreate,
+    maintenanceWorkOrderUpdate,
+    maintenanceEquipmentCreate,
+    maintenancePmScheduleCreate,
+    transportRequestCreate,
+    maintenanceOrderCreate,
+    maintenanceOrderUpdate,
+    maintenanceCalibrationCreate,
+    orSlotCancel,
+    orWhoChecklist,
     invoiceGenerate,
     invoicePay,
     paymentMoyasarInitiate,

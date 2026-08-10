@@ -8257,7 +8257,7 @@ app.get('/api/surgeries/:id', requireAuth, requireTenantScope, async (req, res) 
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/surgeries', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/surgeries', requireAuth, requireTenantScope, validateBody(RS.surgeryCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, patient_name, surgeon_id, surgeon_name, anesthetist_id, anesthetist_name,
             procedure_name, procedure_name_ar, surgery_type, operating_room, priority,
@@ -8358,7 +8358,7 @@ app.put('/api/surgeries/:id', requireAuth, requireTenantScope, validateBody(RS.s
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.delete('/api/surgeries/:id', requireAuth, requireTenantScope, async (req, res) => {
+app.delete('/api/surgeries/:id', requireAuth, requireTenantScope, validateBody(RS.surgeryDelete), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
 
@@ -8663,7 +8663,7 @@ app.get('/api/operating-rooms', requireAuth, requireTenantScope, async (req, res
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/operating-rooms', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/operating-rooms', requireAuth, requireTenantScope, validateBody(RS.operatingRoomCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
         const { room_name, room_name_ar, location, equipment } = req.body;
@@ -8867,7 +8867,7 @@ app.post('/api/or/slots/reserve', requireAuth, requireRole('surgery', 'doctor'),
 });
 
 // Cancel a slot (frees the room/surgeon window). Tenant scoped.
-app.put('/api/or/slots/:id/cancel', requireAuth, requireRole('surgery', 'doctor'), requireTenantScope, requirePermission('or:cancel'), idempotencyGuard, async (req, res) => {
+app.put('/api/or/slots/:id/cancel', requireAuth, requireRole('surgery', 'doctor'), requireTenantScope, requirePermission('or:cancel'), validateBody(RS.orSlotCancel), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = e12RequireTenant(req);
         const slotId = e12IntId(req.params.id);
@@ -8992,7 +8992,7 @@ app.get('/api/or/surgeries/:id/who-checklist', requireAuth, requireRole('surgery
 });
 
 // Advance one WHO phase. :phase in {sign-in, time-out, sign-out}. Strict ordering enforced server-side (409 on skip).
-app.post('/api/or/surgeries/:id/who-checklist/:phase', requireAuth, requireRole('surgery', 'doctor', 'nursing'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/or/surgeries/:id/who-checklist/:phase', requireAuth, requireRole('surgery', 'doctor', 'nursing'), requireTenantScope, validateBody(RS.orWhoChecklist), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const { tenantId, facilityId } = e12RequireTenant(req);
@@ -9790,7 +9790,7 @@ app.get('/api/consent-forms', requireAuth, requireTenantScope, async (req, res) 
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/consent-forms', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/consent-forms', requireAuth, requireTenantScope, validateBody(RS.consentFormCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
         const { patient_id, patient_name, form_type, form_title, form_title_ar, content, doctor_name, surgery_id, notes } = req.body;
@@ -9829,7 +9829,7 @@ app.get('/api/consent-forms/:id', requireAuth, requireTenantScope, async (req, r
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.put('/api/consent-forms/:id/sign', requireAuth, requireTenantScope, async (req, res) => {
+app.put('/api/consent-forms/:id/sign', requireAuth, requireTenantScope, validateBody(RS.consentFormSign), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const consentCheck = (await pool.query('SELECT id FROM consent_forms WHERE id=$1 AND tenant_id=$2', [req.params.id, tenantId])).rows[0];
@@ -10481,7 +10481,7 @@ app.get('/api/er/board', requireAuth, requireRole('emergency', 'nursing', 'docto
 // POST /api/er/triage — compute ESI SERVER-SIDE, persist, set phase Waiting, start the clock.
 // Body: { visit_id, vitals:{hr,rr,spo2,sbp,temp,loc}, chief_complaint, pain_score, resources|resource_count,
 //         high_risk, age, ... }  (any client-sent esi_level is ignored.)
-app.post('/api/er/triage', requireAuth, requireRole('emergency', 'nursing', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/er/triage', requireAuth, requireRole('emergency', 'nursing', 'doctor'), requireTenantScope, validateBody(RS.erTriage), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = e7RequireTenant(req);
         const { visit_id } = req.body;
@@ -10574,7 +10574,7 @@ app.post('/api/er/triage', requireAuth, requireRole('emergency', 'nursing', 'doc
 
 // POST /api/er/assign-provider — provider picks up the patient; record time-to-provider.
 // Body: { visit_id, provider }  (provider name; defaults to acting user.)
-app.post('/api/er/assign-provider', requireAuth, requireRole('emergency', 'nursing', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/er/assign-provider', requireAuth, requireRole('emergency', 'nursing', 'doctor'), requireTenantScope, validateBody(RS.erAssignProvider), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = e7RequireTenant(req);
         const { visit_id, provider } = req.body;
@@ -10622,7 +10622,7 @@ app.post('/api/er/assign-provider', requireAuth, requireRole('emergency', 'nursi
 // POST /api/er/disposition — close the ED encounter (admit[->ADT]/discharge/transfer/LWBS).
 // Body: { visit_id, disposition_type, diagnosis, instructions, medications, followup_date,
 //         admission_department, admitting_doctor }  State machine: disposition before triage => 409.
-app.post('/api/er/disposition', requireAuth, requireRole('emergency', 'nursing', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/er/disposition', requireAuth, requireRole('emergency', 'nursing', 'doctor'), requireTenantScope, validateBody(RS.erDisposition), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = e7RequireTenant(req);
         const { visit_id, disposition_type } = req.body;
@@ -11021,7 +11021,7 @@ app.get('/api/admissions/:id/rounds', requireAuth, requireTenantScope, async (re
     }
 });
 
-app.post('/api/bed-transfers', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/bed-transfers', requireAuth, requireTenantScope, validateBody(RS.bedTransferCreate), idempotencyGuard, async (req, res) => {
     // E8 SHADOW-PATH CLOSURE: legacy transfer occupied/freed beds WITHOUT FOR UPDATE locks and did
     // not reject an occupied destination (double-occupy race). Transfers must now go through
     // POST /api/adt/transfer (atomic, locked, rejects occupied dest). Fails closed.
@@ -11217,7 +11217,7 @@ app.get('/api/adt/census', requireAuth, requireRole('inpatient', 'nursing', 'doc
 //       body { patient_id, patient_name, admission_type, attending_doctor, admitting_doctor,
 //              department, ward_id, bed_id, diagnosis, icd10_code, diet_order, expected_los }
 // The destination bed is locked FOR UPDATE; if it is not free (Available/Reserved) => 409.
-app.post('/api/adt/admit', requireAuth, requireRole('inpatient', 'nursing', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/adt/admit', requireAuth, requireRole('inpatient', 'nursing', 'doctor'), requireTenantScope, validateBody(RS.adtAdmit), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     let began = false;
     try {
@@ -11297,7 +11297,7 @@ app.post('/api/adt/admit', requireAuth, requireRole('inpatient', 'nursing', 'doc
 // body { admission_id, to_bed, transfer_reason }
 // Locks BOTH beds FOR UPDATE; frees the source (-> Cleaning) and occupies the dest;
 // rejects a dest that is not free (409); records the transfer in bed_transfers.
-app.post('/api/adt/transfer', requireAuth, requireRole('inpatient', 'nursing', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/adt/transfer', requireAuth, requireRole('inpatient', 'nursing', 'doctor'), requireTenantScope, validateBody(RS.adtTransfer), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     let began = false;
     try {
@@ -11379,7 +11379,7 @@ app.post('/api/adt/transfer', requireAuth, requireRole('inpatient', 'nursing', '
 // POST /api/adt/discharge — end an Active admission, free its bed (-> Cleaning), record disposition.
 // body { admission_id, discharge_type, discharge_summary, discharge_instructions,
 //        discharge_medications, followup_date, followup_doctor }
-app.post('/api/adt/discharge', requireAuth, requireRole('inpatient', 'nursing', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/adt/discharge', requireAuth, requireRole('inpatient', 'nursing', 'doctor'), requireTenantScope, validateBody(RS.adtDischarge), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     let began = false;
     try {
@@ -11437,7 +11437,7 @@ app.post('/api/adt/discharge', requireAuth, requireRole('inpatient', 'nursing', 
 // POST /api/adt/bed-status — explicit bed-status transition (housekeeping / blocking / reserve).
 // body { bed_id, status }. Validated server-side against E8_BED_TRANSITIONS; an Occupied bed
 // cannot be flipped to Available via this route (must go through discharge/transfer).
-app.post('/api/adt/bed-status', requireAuth, requireRole('inpatient', 'nursing', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/adt/bed-status', requireAuth, requireRole('inpatient', 'nursing', 'doctor'), requireTenantScope, validateBody(RS.adtBedStatus), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     let began = false;
     try {
@@ -11925,7 +11925,7 @@ app.get('/api/dietary/orders', requireAuth, requireTenantScope, async (req, res)
         res.json((await pool.query("SELECT * FROM diet_orders WHERE status='Active' AND tenant_id=$1 ORDER BY id DESC", [tenantId])).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/dietary/orders', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/dietary/orders', requireAuth, requireTenantScope, validateBody(RS.dietaryOrderCreate), idempotencyGuard, async (req, res) => {
     try {
         const { admission_id, patient_id, patient_name, diet_type, diet_type_ar, texture, fluid, allergies, restrictions, supplements, ordered_by, meal_preferences, notes } = req.body;
         const { tenantId } = getRequestTenantContext(req);
@@ -11934,7 +11934,7 @@ app.post('/api/dietary/orders', requireAuth, requireTenantScope, async (req, res
         res.json(r.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/dietary/orders/:id', requireAuth, requireTenantScope, async (req, res) => {
+app.put('/api/dietary/orders/:id', requireAuth, requireTenantScope, validateBody(RS.dietaryOrderUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { diet_type, diet_type_ar, texture, fluid, restrictions, status } = req.body;
         const { tenantId } = getRequestTenantContext(req);
@@ -11952,7 +11952,7 @@ app.put('/api/dietary/orders/:id', requireAuth, requireTenantScope, async (req, 
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/dietary/meals', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/dietary/meals', requireAuth, requireTenantScope, validateBody(RS.dietaryMealCreate), idempotencyGuard, async (req, res) => {
     try {
         const { order_id, patient_id, meal_type, meal_date, items, calories } = req.body;
         const { tenantId } = getRequestTenantContext(req);
@@ -11961,7 +11961,7 @@ app.post('/api/dietary/meals', requireAuth, requireTenantScope, async (req, res)
         res.json(r.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/dietary/meals/:id/deliver', requireAuth, requireTenantScope, async (req, res) => {
+app.put('/api/dietary/meals/:id/deliver', requireAuth, requireTenantScope, validateBody(RS.dietaryMealDeliver), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const r = await pool.query('UPDATE diet_meals SET delivered=1, delivered_by=$1 WHERE id=$2 AND tenant_id=$3', [req.body.delivered_by || '', req.params.id, tenantId]);
@@ -11975,7 +11975,7 @@ app.get('/api/nutrition/assessments', requireAuth, requireTenantScope, async (re
         res.json((await pool.query('SELECT * FROM nutrition_assessments WHERE tenant_id=$1 ORDER BY id DESC', [tenantId])).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/nutrition/assessments', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/nutrition/assessments', requireAuth, requireTenantScope, validateBody(RS.nutritionAssessmentCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, patient_name, height_cm, weight_kg, caloric_needs, protein_needs, screening_score, malnutrition_risk, plan, assessed_by } = req.body;
         const { tenantId } = getRequestTenantContext(req);
@@ -12211,7 +12211,7 @@ app.get('/api/quality/incidents', requireAuth, requireRole('quality'), requireTe
         res.json((await pool.query(q, [tenantId])).rows);
     } catch (e) { res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' }); }
 });
-app.post('/api/quality/incidents', requireAuth, requireRole('quality'), requireTenantScope, async (req, res) => {
+app.post('/api/quality/incidents', requireAuth, requireRole('quality'), requireTenantScope, validateBody(RS.qualityIncidentCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e17RequireTenant(req);
         const { facilityId } = getRequestTenantContext(req);
@@ -12242,7 +12242,7 @@ app.post('/api/quality/incidents', requireAuth, requireRole('quality'), requireT
         res.json(r.rows[0]);
     } catch (e) { console.error('[POST QUALITY INCIDENT ERROR]', e); res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' }); }
 });
-app.put('/api/quality/incidents/:id', requireAuth, requireRole('quality'), requireTenantScope, async (req, res) => {
+app.put('/api/quality/incidents/:id', requireAuth, requireRole('quality'), requireTenantScope, validateBody(RS.qualityIncidentUpdate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e17RequireTenant(req);
         const id = parseInt(req.params.id, 10);
@@ -12282,7 +12282,7 @@ app.get('/api/quality/satisfaction', requireAuth, requireRole('quality'), requir
         res.json((await pool.query('SELECT * FROM quality_patient_satisfaction WHERE tenant_id=$1 ORDER BY id DESC', [tenantId])).rows);
     } catch (e) { res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' }); }
 });
-app.post('/api/quality/satisfaction', requireAuth, requireRole('quality'), requireTenantScope, async (req, res) => {
+app.post('/api/quality/satisfaction', requireAuth, requireRole('quality'), requireTenantScope, validateBody(RS.qualitySatisfactionCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e17RequireTenant(req);
         const { patient_id, patient_name, department, overall_rating, cleanliness, staff_courtesy, wait_time, communication, pain_management, food_quality, comments, would_recommend } = req.body;
@@ -12304,7 +12304,7 @@ app.get('/api/quality/kpis', requireAuth, requireRole('quality'), requireTenantS
         res.json((await pool.query('SELECT * FROM quality_kpis WHERE tenant_id=$1 ORDER BY id DESC', [tenantId])).rows);
     } catch (e) { res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' }); }
 });
-app.post('/api/quality/kpis', requireAuth, requireRole('quality'), requireTenantScope, async (req, res) => {
+app.post('/api/quality/kpis', requireAuth, requireRole('quality'), requireTenantScope, validateBody(RS.qualityKpiCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e17RequireTenant(req);
         const { kpi_name, kpi_name_ar, category, target_value, actual_value, unit, period, department } = req.body;
@@ -12348,7 +12348,7 @@ app.get('/api/quality/incidents/:id/capa', requireAuth, requireRole('quality'), 
         res.json((await pool.query('SELECT * FROM quality_capa WHERE incident_id=$1 AND tenant_id=$2 ORDER BY id DESC', [incidentId, tenantId])).rows);
     } catch (e) { res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' }); }
 });
-app.post('/api/quality/incidents/:id/capa', requireAuth, requireRole('quality'), requireTenantScope, async (req, res) => {
+app.post('/api/quality/incidents/:id/capa', requireAuth, requireRole('quality'), requireTenantScope, validateBody(RS.qualityCapaCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e17RequireTenant(req);
         const { facilityId } = getRequestTenantContext(req);
@@ -12370,7 +12370,7 @@ app.post('/api/quality/incidents/:id/capa', requireAuth, requireRole('quality'),
         res.json(r.rows[0]);
     } catch (e) { res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' }); }
 });
-app.put('/api/quality/capa/:id', requireAuth, requireRole('quality'), requireTenantScope, async (req, res) => {
+app.put('/api/quality/capa/:id', requireAuth, requireRole('quality'), requireTenantScope, validateBody(RS.qualityCapaUpdate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e17RequireTenant(req);
         const id = parseInt(req.params.id, 10);
@@ -12415,7 +12415,7 @@ app.get('/api/quality/risks', requireAuth, requireRole('quality'), requireTenant
         res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' });
     }
 });
-app.post('/api/quality/risks', requireAuth, requireRole('quality'), requireTenantScope, async (req, res) => {
+app.post('/api/quality/risks', requireAuth, requireRole('quality'), requireTenantScope, validateBody(RS.qualityRiskCreate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e17RequireTenant(req);
         const { facilityId } = getRequestTenantContext(req);
@@ -12436,7 +12436,7 @@ app.post('/api/quality/risks', requireAuth, requireRole('quality'), requireTenan
         res.json(r.rows[0]);
     } catch (e) { res.status(e.statusCode || 500).json({ error: e.statusCode ? e.message : 'Server error' }); }
 });
-app.put('/api/quality/risks/:id', requireAuth, requireRole('quality'), requireTenantScope, async (req, res) => {
+app.put('/api/quality/risks/:id', requireAuth, requireRole('quality'), requireTenantScope, validateBody(RS.qualityRiskUpdate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e17RequireTenant(req);
         const id = parseInt(req.params.id, 10);
@@ -12469,7 +12469,7 @@ app.get('/api/maintenance/work-orders', requireAuth, async (req, res) => {
     try { res.json((await pool.query('SELECT * FROM maintenance_work_orders ORDER BY id DESC')).rows); }
     catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/maintenance/work-orders', requireAuth, async (req, res) => {
+app.post('/api/maintenance/work-orders', requireAuth, requireTenantScope, validateBody(RS.maintenanceWorkOrderCreate), idempotencyGuard, async (req, res) => {
     try {
         const { wo_number, request_type, priority, department, location, equipment_id, description, description_ar, requested_by, assigned_to, scheduled_date } = req.body;
         const num = wo_number || `WO-${Date.now().toString().slice(-6)}`;
@@ -12478,7 +12478,7 @@ app.post('/api/maintenance/work-orders', requireAuth, async (req, res) => {
         res.json(r.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/maintenance/work-orders/:id', requireAuth, async (req, res) => {
+app.put('/api/maintenance/work-orders/:id', requireAuth, requireTenantScope, validateBody(RS.maintenanceWorkOrderUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { status, assigned_to, resolution, cost } = req.body;
         const sets = []; const vals = []; let i = 1;
@@ -12495,7 +12495,7 @@ app.get('/api/maintenance/equipment', requireAuth, async (req, res) => {
     try { res.json((await pool.query('SELECT * FROM maintenance_equipment ORDER BY id')).rows); }
     catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/maintenance/equipment', requireAuth, async (req, res) => {
+app.post('/api/maintenance/equipment', requireAuth, requireTenantScope, validateBody(RS.maintenanceEquipmentCreate), idempotencyGuard, async (req, res) => {
     try {
         const { equipment_name, equipment_name_ar, equipment_code, category, manufacturer, model, serial_number, department, location, purchase_date, warranty_end } = req.body;
         const r = await pool.query('INSERT INTO maintenance_equipment (equipment_name,equipment_name_ar,equipment_code,category,manufacturer,model,serial_number,department,location,purchase_date,warranty_end) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *',
@@ -12507,7 +12507,7 @@ app.get('/api/maintenance/pm-schedules', requireAuth, async (req, res) => {
     try { res.json((await pool.query('SELECT p.*, e.equipment_name, e.equipment_name_ar FROM maintenance_pm_schedules p LEFT JOIN maintenance_equipment e ON p.equipment_id=e.id ORDER BY p.next_due')).rows); }
     catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/maintenance/pm-schedules', requireAuth, async (req, res) => {
+app.post('/api/maintenance/pm-schedules', requireAuth, requireTenantScope, validateBody(RS.maintenancePmScheduleCreate), idempotencyGuard, async (req, res) => {
     try {
         const { equipment_id, pm_type, frequency, next_due, checklist } = req.body;
         const r = await pool.query('INSERT INTO maintenance_pm_schedules (equipment_id,pm_type,frequency,next_due,checklist) VALUES ($1,$2,$3,$4,$5) RETURNING *',
@@ -12536,7 +12536,7 @@ app.get('/api/transport/requests', requireAuth, requireRole('transport'), requir
     }
     catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/transport/requests', requireAuth, requireRole('transport'), requireTenantScope, async (req, res) => {
+app.post('/api/transport/requests', requireAuth, requireRole('transport'), requireTenantScope, validateBody(RS.transportRequestCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
         const { patient_id, patient_name, from_location, to_location, transport_type, priority, requested_by, special_needs } = req.body;
@@ -18260,14 +18260,14 @@ app.get('/api/maintenance/orders', requireAuth, async (req, res) => {
         res.json((await pool.query('SELECT * FROM maintenance_orders ORDER BY created_at DESC')).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/maintenance/orders', requireAuth, async (req, res) => {
+app.post('/api/maintenance/orders', requireAuth, requireTenantScope, validateBody(RS.maintenanceOrderCreate), idempotencyGuard, async (req, res) => {
     try {
         const { equipment, location, maintenance_type, priority, description, requested_by, status } = req.body;
         const r = await pool.query('INSERT INTO maintenance_orders (equipment,location,maintenance_type,priority,description,requested_by,status) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *', [equipment, location, maintenance_type, priority, description, requested_by, status || 'pending']);
         res.json(r.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/maintenance/orders/:id', requireAuth, async (req, res) => {
+app.put('/api/maintenance/orders/:id', requireAuth, requireTenantScope, validateBody(RS.maintenanceOrderUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { status } = req.body;
         const r = await pool.query('UPDATE maintenance_orders SET status=$1 WHERE id=$2 RETURNING *', [status, req.params.id]);
@@ -21204,7 +21204,7 @@ app.get('/api/maintenance/calibrations', requireAuth, requireTenantScope, async 
     }
 });
 
-app.post('/api/maintenance/calibrations', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/maintenance/calibrations', requireAuth, requireTenantScope, validateBody(RS.maintenanceCalibrationCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { device_name, serial_number, calibration_date, next_calibration_date, calibrated_by, status, notes } = req.body;
