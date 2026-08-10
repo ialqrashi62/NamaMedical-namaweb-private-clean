@@ -4929,7 +4929,7 @@ app.get('/api/ai/status', requireAuth, AI_ORCH_ROLE, requireTenantScope, async (
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/clinical/records', requireAuth, requireRole('patients'), requireTenantScope, idempotencyGuard, async (req, res, next) => {
+app.post('/api/clinical/records', requireAuth, requireRole('patients'), requireTenantScope, validateBody(RS.clinicalRecordCreate), idempotencyGuard, async (req, res, next) => {
     try {
         const { patient_id, encounter_id, template_id, recorded_values } = req.body;
         if (!recorded_values) {
@@ -9422,7 +9422,7 @@ app.post('/api/bloodbank/units', requireAuth, requireRole('bloodbank', 'lab'), r
 });
 
 // --- Inventory: discard a unit (state machine; cannot discard a transfused unit) ---
-app.put('/api/bloodbank/units/:id/discard', requireAuth, requireRole('bloodbank', 'lab'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.put('/api/bloodbank/units/:id/discard', requireAuth, requireRole('bloodbank', 'lab'), requireTenantScope, validateBody(RS.bloodbankUnitDiscard), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const tenantId = e13RequireTenant(req);
@@ -9686,7 +9686,7 @@ app.get('/api/bloodbank/units/:id/lookback', requireAuth, requireRole('bloodbank
 });
 
 // --- Recall a unit: mark Discarded if not yet transfused (transactional) ---
-app.put('/api/bloodbank/units/:id/recall', requireAuth, requireRole('bloodbank', 'lab'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.put('/api/bloodbank/units/:id/recall', requireAuth, requireRole('bloodbank', 'lab'), requireTenantScope, validateBody(RS.bloodbankUnitRecall), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const tenantId = e13RequireTenant(req);

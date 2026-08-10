@@ -3211,6 +3211,15 @@ const zatcaCreditNoteSubmit = {
     submission_notes:  { type: 'str', required: false, max: 2000 }
 };
 
+const bloodbankUnitDiscard = {
+    reason:            { type: 'str', required: false, max: 1000 },
+    discard_method:    { type: 'enumOf', allowed: ['expired', 'damaged', 'contaminated', 'recalled', 'other', ''], required: false }
+};
+
+const bloodbankUnitRecall = {
+    reason:            { type: 'str', required: false, max: 1000 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -3339,6 +3348,8 @@ module.exports = {
     nphiesRemittancePostToAr,
     zatcaCreditNote,
     zatcaCreditNoteSubmit,
+    bloodbankUnitDiscard,
+    bloodbankUnitRecall,
     invoiceGenerate,
     invoicePay,
     paymentMoyasarInitiate,
