@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ar-SA" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Orthopedics - NamaMedical</title>
+<link rel="stylesheet" href="/css/nama-tokens.css" />
+</head>
+<body>
+<div class="container">
+    <h1>Orthopedics</h1>
+    <div class="dept-meta">orthopedics module</div>
+
+    <div class="card">
+        <form id="form-frax">
+            <div class="form-row">
+                <label>common.patient_id</label>
+                <input class="input" name="patient_id" type="number" required />
+            </div>
+            <div class="form-row">
+                <label>age</label>
+                <input class="input" name="age" type="number" min="0" max="120" required />
+            </div>
+            <div class="form-row">
+                <label>sex</label>
+                <select class="select" name="sex" required>
+                    <option value="male">male</option>
+                    <option value="female">female</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label>weight_kg</label>
+                <input class="input" name="weight_kg" type="number" min="0.5" max="300" step="0.1" required />
+            </div>
+            <div class="form-row">
+                <label>prior_fracture</label>
+                <input class="input" name="prior_fracture" type="checkbox" />
+            </div>
+            <div class="form-row">
+                <label>femoral_neck_bmd_tscore</label>
+                <input class="input" name="femoral_neck_bmd_tscore" type="number" min="-10" max="10" step="0.1" required />
+            </div>
+            <div class="form-row">
+                <button type="submit" class="btn btn-primary">Submit</button>
+            </div>
+        </form>
+        <div id="result-frax" class="result-block">
+            <h3>Result</h3>
+            <pre id="result-frax-text"></pre>
+        </div>
+    </div>
+</div>
+
+<script src="/js/nama-api.js"></script>
+<script>
+    async function bind(formId, endpoint, resultId) {
+        document.getElementById(formId).addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target);
+            const body = Object.fromEntries(fd.entries());
+            const out = document.getElementById(resultId);
+            out.classList.add('visible');
+            document.getElementById(resultId + '-text').textContent = 'Loading...';
+            try {
+                const r = await NamaApi.apiPost(endpoint, body);
+                document.getElementById(resultId + '-text').textContent = JSON.stringify(r, null, 2);
+            } catch (err) {
+                document.getElementById(resultId + '-text').textContent = 'Error: ' + err.message;
+            }
+        });
+    }
+    bind('form-frax', '/api/orthopedics/bone-density', 'result-frax');
+</script>
+</body>
+</html>

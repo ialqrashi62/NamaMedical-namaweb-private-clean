@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ar-SA" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Departments - NamaMedical</title>
+<link rel="stylesheet" href="/css/nama-tokens.css" />
+<style>
+    .dept-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 16px;
+    }
+    .dept-card {
+        background: var(--nama-card);
+        border: 1px solid var(--nama-border);
+        border-radius: var(--nama-radius);
+        padding: 20px;
+        text-decoration: none;
+        color: var(--nama-text);
+        text-align: center;
+        transition: all 0.2s;
+    }
+    .dept-card:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--nama-shadow-lg);
+        border-color: var(--nama-primary);
+    }
+    .dept-icon { font-size: 40px; margin-bottom: 8px; }
+    .dept-name { font-weight: 600; color: var(--nama-primary); }
+    .dept-tag { font-size: 11px; color: var(--nama-muted); margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>الأقسام الطبية — Departments</h1>
+    <div class="dept-meta">
+        14 dept modules · Stitch token-saver pages · AR/EN i18n
+    </div>
+
+    <div class="dept-grid">
+        <a class="dept-card" href="cardiology.html"><div class="dept-icon">❤️</div><div class="dept-name">أمراض القلب</div><div class="dept-tag">Cardiology</div></a>
+        <a class="dept-card" href="emergency.html"><div class="dept-icon">🚨</div><div class="dept-name">الطوارئ</div><div class="dept-tag">Emergency</div></a>
+        <a class="dept-card" href="endocrinology.html"><div class="dept-icon">🩺</div><div class="dept-name">الغدد الصماء</div><div class="dept-tag">Endocrinology</div></a>
+        <a class="dept-card" href="pediatrics.html"><div class="dept-icon">👶</div><div class="dept-name">طب الأطفال</div><div class="dept-tag">Pediatrics</div></a>
+        <a class="dept-card" href="surgery.html"><div class="dept-icon">🔪</div><div class="dept-name">الجراحة</div><div class="dept-tag">Surgery</div></a>
+        <a class="dept-card" href="pharmacy.html"><div class="dept-icon">💊</div><div class="dept-name">الصيدلية</div><div class="dept-tag">Pharmacy</div></a>
+        <a class="dept-card" href="oncology.html"><div class="dept-icon">🎗️</div><div class="dept-name">الأورام</div><div class="dept-tag">Oncology</div></a>
+        <a class="dept-card" href="nephrology.html"><div class="dept-icon">🩻</div><div class="dept-name">أمراض الكلى</div><div class="dept-tag">Nephrology</div></a>
+        <a class="dept-card" href="obgyn.html"><div class="dept-icon">🤰</div><div class="dept-name">النساء والولادة</div><div class="dept-tag">OBGYN</div></a>
+        <a class="dept-card" href="pulmonology.html"><div class="dept-icon">🫁</div><div class="dept-name">أمراض الجهاز التنفسي</div><div class="dept-tag">Pulmonology</div></a>
+        <a class="dept-card" href="gi.html"><div class="dept-icon">🥼</div><div class="dept-name">الجهاز الهضمي</div><div class="dept-tag">Gastroenterology</div></a>
+        <a class="dept-card" href="rheumatology.html"><div class="dept-icon">🦴</div><div class="dept-name">الروماتيزم</div><div class="dept-tag">Rheumatology</div></a>
+        <a class="dept-card" href="orthopedics.html"><div class="dept-icon">🦵</div><div class="dept-name">العظام</div><div class="dept-tag">Orthopedics</div></a>
+        <a class="dept-card" href="neurology.html"><div class="dept-icon">🧠</div><div class="dept-name">الأعصاب</div><div class="dept-tag">Neurology</div></a>
+    </div>
+</div>
+</body>
+</html>

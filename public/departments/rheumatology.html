@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ar-SA" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Rheumatology - NamaMedical</title>
+<link rel="stylesheet" href="/css/nama-tokens.css" />
+</head>
+<body>
+<div class="container">
+    <h1>Rheumatology</h1>
+    <div class="dept-meta">rheumatology module</div>
+
+    <div class="card">
+        <form id="form-das28">
+            <div class="form-row">
+                <label>common.patient_id</label>
+                <input class="input" name="patient_id" type="number" required />
+            </div>
+            <div class="form-row">
+                <label>tender_joints</label>
+                <input class="input" name="tender_joints_28" type="number" min="0" max="28" required />
+            </div>
+            <div class="form-row">
+                <label>swollen_joints</label>
+                <input class="input" name="swollen_joints_28" type="number" min="0" max="28" required />
+            </div>
+            <div class="form-row">
+                <label>crp_mg_L</label>
+                <input class="input" name="crp_mg_L" type="number" min="0" max="500" step="0.1" required />
+            </div>
+            <div class="form-row">
+                <label>patient_global_vas_0_100</label>
+                <input class="input" name="patient_global_vas_0_100" type="number" min="0" max="100" required />
+            </div>
+            <div class="form-row">
+                <button type="submit" class="btn btn-primary">Submit</button>
+            </div>
+        </form>
+        <div id="result-das28" class="result-block">
+            <h3>Result</h3>
+            <pre id="result-das28-text"></pre>
+        </div>
+    </div>
+</div>
+
+<script src="/js/nama-api.js"></script>
+<script>
+    async function bind(formId, endpoint, resultId) {
+        document.getElementById(formId).addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target);
+            const body = Object.fromEntries(fd.entries());
+            const out = document.getElementById(resultId);
+            out.classList.add('visible');
+            document.getElementById(resultId + '-text').textContent = 'Loading...';
+            try {
+                const r = await NamaApi.apiPost(endpoint, body);
+                document.getElementById(resultId + '-text').textContent = JSON.stringify(r, null, 2);
+            } catch (err) {
+                document.getElementById(resultId + '-text').textContent = 'Error: ' + err.message;
+            }
+        });
+    }
+    bind('form-das28', '/api/rheumatology/das28', 'result-das28');
+</script>
+</body>
+</html>

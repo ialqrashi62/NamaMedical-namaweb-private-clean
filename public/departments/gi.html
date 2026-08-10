@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ar-SA" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Gi - NamaMedical</title>
+<link rel="stylesheet" href="/css/nama-tokens.css" />
+</head>
+<body>
+<div class="container">
+    <h1>Gi</h1>
+    <div class="dept-meta">gi module</div>
+
+    <div class="card">
+        <form id="form-bleed">
+            <div class="form-row">
+                <label>common.patient_id</label>
+                <input class="input" name="patient_id" type="number" required />
+            </div>
+            <div class="form-row">
+                <label>hemoglobin</label>
+                <input class="input" name="hemoglobin_g_dL" type="number" min="1" max="25" step="0.1" required />
+            </div>
+            <div class="form-row">
+                <label>sex</label>
+                <select class="select" name="sex" required>
+                    <option value="male">male</option>
+                    <option value="female">female</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label>systolic_bp</label>
+                <input class="input" name="systolic_bp_mmHg" type="number" min="30" max="280" required />
+            </div>
+            <div class="form-row">
+                <label>pulse_bpm</label>
+                <input class="input" name="pulse_bpm" type="number" min="0" max="250" required />
+            </div>
+            <div class="form-row">
+                <label>BUN</label>
+                <input class="input" name="BUN_mmol_L" type="number" min="0" max="100" step="0.1" required />
+            </div>
+            <div class="form-row">
+                <label>melena</label>
+                <input class="input" name="melena" type="checkbox" />
+            </div>
+            <div class="form-row">
+                <label>syncope</label>
+                <input class="input" name="syncope" type="checkbox" />
+            </div>
+            <div class="form-row">
+                <label>age</label>
+                <input class="input" name="age" type="number" min="0" max="120" required />
+            </div>
+            <div class="form-row">
+                <label>hepatic_disease</label>
+                <input class="input" name="hepatic_disease" type="checkbox" />
+            </div>
+            <div class="form-row">
+                <label>cardiac_failure</label>
+                <input class="input" name="cardiac_failure" type="checkbox" />
+            </div>
+            <div class="form-row">
+                <label>source</label>
+                <select class="select" name="source" required>
+                    <option value="upper">upper</option>
+                    <option value="lower">lower</option>
+                    <option value="unknown">unknown</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <button type="submit" class="btn btn-primary">Submit</button>
+            </div>
+        </form>
+        <div id="result-bleed" class="result-block">
+            <h3>Result</h3>
+            <pre id="result-bleed-text"></pre>
+        </div>
+    </div>
+</div>
+
+<script src="/js/nama-api.js"></script>
+<script>
+    async function bind(formId, endpoint, resultId) {
+        document.getElementById(formId).addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target);
+            const body = Object.fromEntries(fd.entries());
+            const out = document.getElementById(resultId);
+            out.classList.add('visible');
+            document.getElementById(resultId + '-text').textContent = 'Loading...';
+            try {
+                const r = await NamaApi.apiPost(endpoint, body);
+                document.getElementById(resultId + '-text').textContent = JSON.stringify(r, null, 2);
+            } catch (err) {
+                document.getElementById(resultId + '-text').textContent = 'Error: ' + err.message;
+            }
+        });
+    }
+    bind('form-bleed', '/api/gi/bleed-risk', 'result-bleed');
+</script>
+</body>
+</html>

@@ -18490,6 +18490,17 @@ app.use('/api/oncology',  require('./oncology_router'));
 app.use('/api/nephrology', require('./nephrology_router'));
 app.use('/api/obgyn',     require('./obgyn_router'));
 
+// ===== Pulmonology / GI / Rheumatology / Orthopedics / Neurology (e51, 2026-08-10) =====
+// Engines: asthma_control_engine, copd_severity_engine, gi_bleed_risk_engine,
+//          ibd_activity_engine, rheum_activity_engine, bone_density_engine,
+//          nihss_apache_engine
+// See migrations/e51_pulm_gi_rheum_ortho_neuro_up.sql for DB schema.
+app.use('/api/pulmonology',   require('./pulmonology_router'));
+app.use('/api/gi',            require('./gi_router'));
+app.use('/api/rheumatology',  require('./rheumatology_router'));
+app.use('/api/orthopedics',   require('./orthopedics_router'));
+app.use('/api/neurology',     require('./neurology_router'));
+
 // ===== SaaS Batch 4A: Entitlements Runtime Resolver — OBSERVE-ONLY read surface, flag-gated =====
 // Inert unless ENTITLEMENTS_ENABLED=true (zero behavior change otherwise). No creation point is gated.
 // Read-only: Super Admin views the RESOLVED entitlements for a tenant. Fail-open if e25 catalog is absent.

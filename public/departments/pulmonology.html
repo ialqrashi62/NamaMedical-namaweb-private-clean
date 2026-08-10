@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ar-SA" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Pulmonology - NamaMedical</title>
+<link rel="stylesheet" href="/css/nama-tokens.css" />
+</head>
+<body>
+<div class="container">
+    <h1>Pulmonology</h1>
+    <div class="dept-meta">pulmonology module</div>
+
+    <div class="card">
+        <form id="form-asthma">
+            <div class="form-row">
+                <label>common.patient_id</label>
+                <input class="input" name="patient_id" type="number" required />
+            </div>
+            <div class="form-row">
+                <label>current_step</label>
+                <input class="input" name="current_step" type="number" min="1" max="6" required />
+            </div>
+            <div class="form-row">
+                <label>fev1_pct</label>
+                <input class="input" name="fev1_pct" type="number" min="5" max="150" required />
+            </div>
+            <div class="form-row">
+                <label>act_score</label>
+                <input class="input" name="act_score" type="number" min="0" max="25" required />
+            </div>
+            <div class="form-row">
+                <button type="submit" class="btn btn-primary">Submit</button>
+            </div>
+        </form>
+        <div id="result-asthma" class="result-block">
+            <h3>Result</h3>
+            <pre id="result-asthma-text"></pre>
+        </div>
+    </div>
+    <div class="card">
+        <form id="form-copd">
+            <div class="form-row">
+                <label>common.patient_id</label>
+                <input class="input" name="patient_id" type="number" required />
+            </div>
+            <div class="form-row">
+                <label>fev1_pct</label>
+                <input class="input" name="fev1_pct" type="number" min="5" max="150" required />
+            </div>
+            <div class="form-row">
+                <label>cat_score</label>
+                <input class="input" name="cat_score" type="number" min="0" max="40" required />
+            </div>
+            <div class="form-row">
+                <label>exacerbations_last_12m</label>
+                <input class="input" name="exacerbations_last_12m" type="number" min="0" max="20" required />
+            </div>
+            <div class="form-row">
+                <button type="submit" class="btn btn-primary">Submit</button>
+            </div>
+        </form>
+        <div id="result-copd" class="result-block">
+            <h3>Result</h3>
+            <pre id="result-copd-text"></pre>
+        </div>
+    </div>
+</div>
+
+<script src="/js/nama-api.js"></script>
+<script>
+    async function bind(formId, endpoint, resultId) {
+        document.getElementById(formId).addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target);
+            const body = Object.fromEntries(fd.entries());
+            const out = document.getElementById(resultId);
+            out.classList.add('visible');
+            document.getElementById(resultId + '-text').textContent = 'Loading...';
+            try {
+                const r = await NamaApi.apiPost(endpoint, body);
+                document.getElementById(resultId + '-text').textContent = JSON.stringify(r, null, 2);
+            } catch (err) {
+                document.getElementById(resultId + '-text').textContent = 'Error: ' + err.message;
+            }
+        });
+    }
+    bind('form-asthma', '/api/pulmonology/asthma-control', 'result-asthma');
+    bind('form-copd', '/api/pulmonology/copd-severity', 'result-copd');
+</script>
+</body>
+</html>

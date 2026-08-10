@@ -1,0 +1,12 @@
+BEGIN;
+DROP POLICY IF EXISTS neuro_tenant_isolation ON neurology_assessments;
+DROP TABLE IF EXISTS neurology_assessments;
+DROP POLICY IF EXISTS ortho_tenant_isolation ON orthopedics_assessments;
+DROP TABLE IF EXISTS orthopedics_assessments;
+DROP POLICY IF EXISTS rheum_tenant_isolation ON rheumatology_assessments;
+DROP TABLE IF EXISTS rheumatology_assessments;
+DROP POLICY IF EXISTS gi_tenant_isolation ON gi_assessments;
+DROP TABLE IF EXISTS gi_assessments;
+DROP POLICY IF EXISTS pulm_tenant_isolation ON pulmonology_assessments;
+DROP TABLE IF EXISTS pulmonology_assessments;
+COMMIT;

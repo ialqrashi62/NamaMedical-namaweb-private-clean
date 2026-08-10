@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ar-SA" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Neurology - NamaMedical</title>
+<link rel="stylesheet" href="/css/nama-tokens.css" />
+</head>
+<body>
+<div class="container">
+    <h1>Neurology</h1>
+    <div class="dept-meta">neurology module</div>
+
+    <div class="card">
+        <form id="form-nihss">
+            <div class="form-row">
+                <label>common.patient_id</label>
+                <input class="input" name="patient_id" type="number" required />
+            </div>
+            <div class="form-row">
+                <label>consciousness_lvlc</label>
+                <input class="input" name="consciousness_lvlc" type="number" min="0" max="3" required />
+            </div>
+            <div class="form-row">
+                <label>consciousness_lvl1a</label>
+                <input class="input" name="consciousness_lvl1a" type="number" min="0" max="2" required />
+            </div>
+            <div class="form-row">
+                <label>consciousness_lvl1b</label>
+                <input class="input" name="consciousness_lvl1b" type="number" min="0" max="2" required />
+            </div>
+            <div class="form-row">
+                <label>best_gaze</label>
+                <input class="input" name="best_gaze" type="number" min="0" max="2" required />
+            </div>
+            <div class="form-row">
+                <label>visual_field</label>
+                <input class="input" name="visual_field" type="number" min="0" max="3" required />
+            </div>
+            <div class="form-row">
+                <label>facial_palsy</label>
+                <input class="input" name="facial_palsy" type="number" min="0" max="3" required />
+            </div>
+            <div class="form-row">
+                <label>motor_arm_left</label>
+                <input class="input" name="motor_arm_left" type="number" min="0" max="4" required />
+            </div>
+            <div class="form-row">
+                <label>motor_arm_right</label>
+                <input class="input" name="motor_arm_right" type="number" min="0" max="4" required />
+            </div>
+            <div class="form-row">
+                <label>motor_leg_left</label>
+                <input class="input" name="motor_leg_left" type="number" min="0" max="4" required />
+            </div>
+            <div class="form-row">
+                <label>motor_leg_right</label>
+                <input class="input" name="motor_leg_right" type="number" min="0" max="4" required />
+            </div>
+            <div class="form-row">
+                <label>limb_ataxia</label>
+                <input class="input" name="limb_ataxia" type="number" min="0" max="2" required />
+            </div>
+            <div class="form-row">
+                <label>sensory</label>
+                <input class="input" name="sensory" type="number" min="0" max="2" required />
+            </div>
+            <div class="form-row">
+                <label>language</label>
+                <input class="input" name="language" type="number" min="0" max="3" required />
+            </div>
+            <div class="form-row">
+                <label>dysarthria</label>
+                <input class="input" name="dysarthria" type="number" min="0" max="2" required />
+            </div>
+            <div class="form-row">
+                <label>extinction_inattention</label>
+                <input class="input" name="extinction_inattention" type="number" min="0" max="2" required />
+            </div>
+            <div class="form-row">
+                <button type="submit" class="btn btn-primary">Submit</button>
+            </div>
+        </form>
+        <div id="result-nihss" class="result-block">
+            <h3>Result</h3>
+            <pre id="result-nihss-text"></pre>
+        </div>
+    </div>
+</div>
+
+<script src="/js/nama-api.js"></script>
+<script>
+    async function bind(formId, endpoint, resultId) {
+        document.getElementById(formId).addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target);
+            const body = Object.fromEntries(fd.entries());
+            const out = document.getElementById(resultId);
+            out.classList.add('visible');
+            document.getElementById(resultId + '-text').textContent = 'Loading...';
+            try {
+                const r = await NamaApi.apiPost(endpoint, body);
+                document.getElementById(resultId + '-text').textContent = JSON.stringify(r, null, 2);
+            } catch (err) {
+                document.getElementById(resultId + '-text').textContent = 'Error: ' + err.message;
+            }
+        });
+    }
+    bind('form-nihss', '/api/neurology/nihss', 'result-nihss');
+</script>
+</body>
+</html>

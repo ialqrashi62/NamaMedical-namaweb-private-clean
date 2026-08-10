@@ -3505,8 +3505,104 @@ const obgynBishopCreate = {
 };
 
 
+
+const pulmonologyAsthmaCreate = {
+    patient_id:               { type: 'id', required: true },
+    encounter_id:             { type: 'id', required: false },
+    current_step:             { type: 'int', required: true, min: 1, max: 6 },
+    fev1_pct:                 { type: 'num', required: true, min: 5, max: 150 },
+    symptoms_per_week:        { type: 'int', required: false, min: 0, max: 50 },
+    night_awakenings_per_month:{ type: 'int', required: false, min: 0, max: 60 },
+    SABA_use_per_week:        { type: 'int', required: false, min: 0, max: 50 },
+    activity_limitation:      { type: 'bool', required: false },
+    exacerbations_last_12m:   { type: 'int', required: false, min: 0, max: 20 },
+    act_score:                { type: 'int', required: false, min: 0, max: 25 }
+};
+
+const pulmonologyCopdCreate = {
+    patient_id:           { type: 'id', required: true },
+    encounter_id:         { type: 'id', required: false },
+    fev1_pct:             { type: 'num', required: true, min: 5, max: 150 },
+    cat_score:            { type: 'num', required: true, min: 0, max: 40 },
+    exacerbations_last_12m:{ type: 'int', required: true, min: 0, max: 20 }
+};
+
+const giBleedCreate = {
+    patient_id:           { type: 'id', required: true },
+    encounter_id:         { type: 'id', required: false },
+    hemoglobin_g_dL:      { type: 'num', required: true, min: 1, max: 25 },
+    sex:                  { type: 'enumOf', allowed: ['male','female'], required: true },
+    systolic_bp_mmHg:     { type: 'num', required: true, min: 30, max: 280 },
+    pulse_bpm:            { type: 'num', required: true, min: 0, max: 250 },
+    BUN_mmol_L:           { type: 'num', required: true, min: 0, max: 100 },
+    melena:               { type: 'bool', required: true },
+    syncope:              { type: 'bool', required: true },
+    age:                  { type: 'int', required: true, min: 0, max: 120 },
+    hepatic_disease:      { type: 'bool', required: true },
+    cardiac_failure:      { type: 'bool', required: true },
+    source:               { type: 'enumOf', allowed: ['upper','lower','unknown'], required: true }
+};
+
+const giIbdCreate = {
+    patient_id:           { type: 'id', required: true },
+    encounter_id:         { type: 'id', required: false },
+    ibd_type:             { type: 'enumOf', allowed: ['uc','crohn'], required: true },
+    stool_frequency:      { type: 'int', required: true, min: 0, max: 30 },
+    abdominal_pain:       { type: 'int', required: true, min: 0, max: 3 },
+    general_wellbeing:    { type: 'int', required: true, min: 0, max: 4 },
+    temperature:          { type: 'num', required: false, min: 30, max: 45 },
+    hct:                  { type: 'num', required: false, min: 5, max: 60 },
+    esr:                  { type: 'num', required: false, min: 0, max: 200 },
+    albumin:              { type: 'num', required: false, min: 0.5, max: 10 },
+    endoscopic_findings:  { type: 'int', required: false, min: 0, max: 3 }
+};
+
+const rheumatologyDas28Create = {
+    patient_id:           { type: 'id', required: true },
+    encounter_id:         { type: 'id', required: false },
+    tender_joints_28:     { type: 'int', required: true, min: 0, max: 28 },
+    swollen_joints_28:    { type: 'int', required: true, min: 0, max: 28 },
+    crp_mg_L:             { type: 'num', required: true, min: 0, max: 500 },
+    patient_global_vas_0_100:{ type: 'num', required: true, min: 0, max: 100 }
+};
+
+const orthopedicsBoneDensityCreate = {
+    patient_id:                    { type: 'id', required: true },
+    encounter_id:                  { type: 'id', required: false },
+    age:                           { type: 'int', required: true, min: 0, max: 120 },
+    sex:                           { type: 'enumOf', allowed: ['male','female'], required: true },
+    weight_kg:                     { type: 'num', required: false, min: 0.5, max: 300 },
+    height_cm:                     { type: 'num', required: false, min: 30, max: 250 },
+    prior_fracture:                { type: 'bool', required: false },
+    parent_fracture_hip:           { type: 'bool', required: false },
+    current_smoking:               { type: 'bool', required: false },
+    glucocorticoids:              { type: 'bool', required: false },
+    ra:                            { type: 'bool', required: false },
+    secondary_osteoporosis:        { type: 'bool', required: false },
+    alcohol_3_units_day:           { type: 'bool', required: false },
+    femoral_neck_bmd_tscore:       { type: 'num', required: false, min: -10, max: 10 }
+};
+
+const neurologyNihssCreate = {
+    patient_id:           { type: 'id', required: true },
+    encounter_id:         { type: 'id', required: false },
+    consciousness:        { type: 'int', required: true, min: 0, max: 3 },
+    gaze:                 { type: 'int', required: true, min: 0, max: 2 },
+    visual_fields:        { type: 'int', required: true, min: 0, max: 3 },
+    facial_palsy:         { type: 'int', required: true, min: 0, max: 3 },
+    motor_arm:            { type: 'int', required: true, min: 0, max: 4 },
+    motor_leg:            { type: 'int', required: true, min: 0, max: 4 },
+    ataxia:               { type: 'int', required: true, min: 0, max: 2 },
+    sensory:              { type: 'int', required: true, min: 0, max: 2 },
+    language:             { type: 'int', required: true, min: 0, max: 3 },
+    dysarthria:           { type: 'int', required: true, min: 0, max: 2 },
+    extinction:           { type: 'int', required: true, min: 0, max: 2 }
+};
+
+
 module.exports = {
     invoiceCreate,
+    pulmonologyAsthmaCreate, pulmonologyCopdCreate, giBleedCreate, giIbdCreate, rheumatologyDas28Create, orthopedicsBoneDensityCreate, neurologyNihssCreate,
     oncologyTnmCreate, oncologyBsaCreate, oncologyChemoDoseCreate, nephrologyCkdStageCreate, nephrologyHdAdequacyCreate, obgynPartographCreate, obgynBishopCreate,
     pediatricsFluidCreate, pediatricsCroupCreate, pediatricsPewsCreate, surgeryRiskCreate, surgeryTimeoutCreate, surgeryCapriniCreate, pharmacyInteractionsCreate, pharmacyRenalDoseCreate, pharmacyPregnancyCreate,
 
