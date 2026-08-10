@@ -3433,8 +3433,81 @@ const pharmacyPregnancyCreate = {
 };
 
 
+
+const oncologyTnmCreate = {
+    patient_id:    { type: 'id', required: true },
+    encounter_id:  { type: 'id', required: false },
+    T:             { type: 'int', required: true, min: 0, max: 4 },
+    N:             { type: 'int', required: true, min: 0, max: 3 },
+    M:             { type: 'int', required: true, min: 0, max: 1 },
+    cancer_type:   { type: 'str', required: false, max: 100 }
+};
+
+const oncologyBsaCreate = {
+    patient_id:    { type: 'id', required: true },
+    encounter_id:  { type: 'id', required: false },
+    height_cm:     { type: 'num', required: true, min: 30, max: 250 },
+    weight_kg:     { type: 'num', required: true, min: 0.5, max: 300 }
+};
+
+const oncologyChemoDoseCreate = {
+    patient_id:    { type: 'id', required: true },
+    encounter_id:  { type: 'id', required: false },
+    drug_name:     { type: 'str', required: true, max: 200 },
+    dose_per_m2:   { type: 'num', required: true, min: 0.01, max: 5000 },
+    auc:           { type: 'num', required: false, min: 1, max: 10 },
+    height_cm:     { type: 'num', required: true, min: 30, max: 250 },
+    weight_kg:     { type: 'num', required: true, min: 0.5, max: 300 },
+    dose_unit:     { type: 'enumOf', allowed: ['mg_per_m2','auc'], required: true }
+};
+
+const nephrologyCkdStageCreate = {
+    patient_id:              { type: 'id', required: true },
+    encounter_id:            { type: 'id', required: false },
+    age:                     { type: 'int', required: true, min: 0, max: 120 },
+    sex:                     { type: 'enumOf', allowed: ['male','female'], required: true },
+    creatinine_mg_dL:        { type: 'num', required: true, min: 0.1, max: 30 },
+    race_black:              { type: 'bool', required: false },
+    albuminuria_category:    { type: 'enumOf', allowed: ['A1','A2','A3'], required: true }
+};
+
+const nephrologyHdAdequacyCreate = {
+    patient_id:           { type: 'id', required: true },
+    encounter_id:         { type: 'id', required: false },
+    pre_bun_mg_dL:        { type: 'num', required: true, min: 1, max: 200 },
+    post_bun_mg_dL:       { type: 'num', required: true, min: 1, max: 200 },
+    session_hours:        { type: 'num', required: true, min: 0.5, max: 8 },
+    sessions_per_week:    { type: 'int', required: true, min: 1, max: 7 },
+    weight_kg:            { type: 'num', required: true, min: 1, max: 200 },
+    uf_volume_L:          { type: 'num', required: true, min: 0, max: 10 },
+    dialyzer_koA:         { type: 'num', required: true, min: 100, max: 3000 },
+    qb_blood_flow_mL_min: { type: 'int', required: true, min: 100, max: 500 }
+};
+
+const obgynPartographCreate = {
+    patient_id:            { type: 'id', required: true },
+    encounter_id:          { type: 'id', required: false },
+    current_dilation_cm:   { type: 'num', required: true, min: 0, max: 10 },
+    hours_since_4cm:       { type: 'num', required: true, min: 0, max: 72 },
+    parity:                { type: 'enumOf', allowed: ['nulliparous','multiparous'], required: true },
+    contractions_per_10min:{ type: 'int', required: true, min: 0, max: 10 },
+    descent_station:       { type: 'num', required: true, min: -5, max: 5 }
+};
+
+const obgynBishopCreate = {
+    patient_id:      { type: 'id', required: true },
+    encounter_id:    { type: 'id', required: false },
+    dilation_cm:     { type: 'num', required: true, min: 0, max: 10 },
+    effacement_pct:  { type: 'num', required: true, min: 0, max: 100 },
+    station:         { type: 'num', required: true, min: -5, max: 5 },
+    consistency:     { type: 'enumOf', allowed: ['firm','medium','soft'], required: true },
+    position:        { type: 'enumOf', allowed: ['posterior','mid','anterior'], required: true }
+};
+
+
 module.exports = {
     invoiceCreate,
+    oncologyTnmCreate, oncologyBsaCreate, oncologyChemoDoseCreate, nephrologyCkdStageCreate, nephrologyHdAdequacyCreate, obgynPartographCreate, obgynBishopCreate,
     pediatricsFluidCreate, pediatricsCroupCreate, pediatricsPewsCreate, surgeryRiskCreate, surgeryTimeoutCreate, surgeryCapriniCreate, pharmacyInteractionsCreate, pharmacyRenalDoseCreate, pharmacyPregnancyCreate,
 
     glycemicAssessCreate, insulinDoseCreate, thyroidInterpretCreate, erTriageCreate,

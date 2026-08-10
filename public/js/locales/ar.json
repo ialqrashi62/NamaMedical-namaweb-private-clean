@@ -1,0 +1,111 @@
+{
+    "common": {
+        "save": "حفظ",
+        "cancel": "إلغاء",
+        "loading": "جاري التحميل...",
+        "error": "حدث خطأ",
+        "patient_id": "رقم المريض",
+        "encounter_id": "رقم الزيارة",
+        "submit": "إرسال",
+        "result": "النتيجة",
+        "toggle_lang": "EN"
+    },
+    "cardiology": {
+        "title": "أمراض القلب",
+        "subtitle": "تقييمات القلب والقسطرة وتخطيط القلب",
+        "grace": "تقييم GRACE (متلازمة الشريان التاجي الحادة)",
+        "cha2ds2vasc": "تقييم CHA2DS2-VASc (الرجفان الأذيني)",
+        "hasbled": "تقييم HAS-BLED (خطر النزيف)",
+        "troponin": "تفسير التروبونين",
+        "age": "العمر",
+        "heart_rate": "نبضات القلب",
+        "systolic_bp": "ضغط الدم الانقباضي",
+        "creatinine": "الكرياتينين (mg/dL)",
+        "killip": "فئة Killip",
+        "sex": "الجنس",
+        "troponin_value": "قيمة التروبونين",
+        "troponin_cutoff": "حد القطع",
+        "delta_pct": "نسبة التغيير %"
+    },
+    "emergency": {
+        "title": "الطوارئ",
+        "subtitle": "فرز ESI v4 وتقييم الإصابات",
+        "triage": "فرز المريض",
+        "chief_complaint": "الشكوى الرئيسية",
+        "heart_rate": "نبضات القلب",
+        "systolic_bp": "ضغط الدم الانقباضي",
+        "spo2": "تشبع الأكسجين %",
+        "rr": "معدل التنفس",
+        "gcs": "مقياس غلاسكو"
+    },
+    "endocrinology": {
+        "title": "الغدد الصماء",
+        "subtitle": "تقييم السكري والغدة الدرقية",
+        "glycemic": "تقييم السكري",
+        "tsh": "TSH (mIU/L)",
+        "ft4": "FT4 (ng/dL)"
+    },
+    "pediatrics": {
+        "title": "طب الأطفال",
+        "subtitle": "تقييم APGAR والعناية بالأطفال",
+        "apgar": "تقييم APGAR",
+        "appearance": "المظهر",
+        "pulse": "النبض",
+        "grimace": "رد الفعل",
+        "activity": "النشاط",
+        "respiration": "التنفس"
+    },
+    "surgery": {
+        "title": "الجراحة",
+        "subtitle": "تقييم ما قبل الجراحة وفحص السلامة",
+        "asa": "تصنيف ASA",
+        "asa_class": "فئة ASA",
+        "emergency": "حالة طارئة",
+        "timeout": "قائمة السلامة WHO",
+        "phase": "المرحلة",
+        "sign_in": "Sign In",
+        "time_out": "Time Out",
+        "sign_out": "Sign Out",
+        "completed_items": "العناصر المكتملة (مفصولة بفاصلة)"
+    },
+    "pharmacy": {
+        "title": "الصيدلية",
+        "subtitle": "تفاعلات الأدوية والجرعة الكلوية",
+        "interactions": "تفاعلات الأدوية",
+        "renal_dose": "الجرعة الكلوية",
+        "drugs": "قائمة الأدوية (مفصولة بفاصلة)",
+        "drug_name": "اسم الدواء",
+        "standard_dose_mg": "الجرعة القياسية (mg)",
+        "frequency_per_day": "عدد المرات يومياً"
+    },
+    "oncology": {
+        "title": "الأورام",
+        "subtitle": "تصنيف TNM وحساب الجرعات الكيميائية",
+        "tnm": "تصنيف TNM",
+        "bsa": "مساحة سطح الجسم",
+        "chemo": "جرعة العلاج الكيميائي",
+        "T": "T (0-4)",
+        "N": "N (0-3)",
+        "M": "M (0-1)",
+        "height_cm": "الطول (cm)",
+        "weight_kg": "الوزن (kg)",
+        "dose_per_m2": "الجرعة (mg/m²)"
+    },
+    "nephrology": {
+        "title": "أمراض الكلى",
+        "subtitle": "تصنيف CKD وفعالية غسيل الكلى",
+        "ckd": "تصنيف CKD",
+        "hd": "فعالية غسيل الكلى",
+        "albuminuria": "فئة البيلة الألبومينية",
+        "pre_bun": "BUN قبل (mg/dL)",
+        "post_bun": "BUN بعد (mg/dL)"
+    },
+    "obgyn": {
+        "title": "النساء والولادة",
+        "subtitle": "تقييم الولادة Partograph و Bishop",
+        "partograph": "Partograph",
+        "bishop": "Bishop Score",
+        "dilation_cm": "اتساع عنق الرحم (cm)",
+        "parity": "الحمل السابق"
+    }
+}

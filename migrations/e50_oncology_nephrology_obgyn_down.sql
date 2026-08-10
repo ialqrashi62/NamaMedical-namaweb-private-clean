@@ -1,0 +1,12 @@
+BEGIN;
+DROP POLICY IF EXISTS obgyn_parto_tenant_isolation ON obgyn_partograph;
+DROP TABLE IF EXISTS obgyn_partograph;
+DROP POLICY IF EXISTS neph_hd_tenant_isolation ON nephrology_hd_adequacy;
+DROP TABLE IF EXISTS nephrology_hd_adequacy;
+DROP POLICY IF EXISTS neph_ckd_tenant_isolation ON nephrology_ckd_assessments;
+DROP TABLE IF EXISTS nephrology_ckd_assessments;
+DROP POLICY IF EXISTS oncology_chemo_tenant_isolation ON oncology_chemo_doses;
+DROP TABLE IF EXISTS oncology_chemo_doses;
+DROP POLICY IF EXISTS oncology_staging_tenant_isolation ON oncology_staging;
+DROP TABLE IF EXISTS oncology_staging;
+COMMIT;

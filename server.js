@@ -18481,6 +18481,15 @@ app.use('/api/pediatrics', require('./pediatrics_router'));
 app.use('/api/surgery',   require('./surgery_router'));
 app.use('/api/pharmacy',  require('./pharmacy_router'));
 
+// ===== Oncology / Nephrology / OBGYN (e50, 2026-08-10) =====
+// Oncology engines: AJCC TNM staging, Mosteller BSA, ASCO chemo dose
+// Nephrology engines: KDIGO CKD staging, Daugirdas spKt/V + weekly Kt/V
+// OBGYN engines: WHO partograph alert lines, Bishop score for induction
+// See migrations/e50_oncology_nephrology_obgyn_up.sql for DB schema.
+app.use('/api/oncology',  require('./oncology_router'));
+app.use('/api/nephrology', require('./nephrology_router'));
+app.use('/api/obgyn',     require('./obgyn_router'));
+
 // ===== SaaS Batch 4A: Entitlements Runtime Resolver — OBSERVE-ONLY read surface, flag-gated =====
 // Inert unless ENTITLEMENTS_ENABLED=true (zero behavior change otherwise). No creation point is gated.
 // Read-only: Super Admin views the RESOLVED entitlements for a tenant. Fail-open if e25 catalog is absent.

@@ -1,0 +1,111 @@
+{
+    "common": {
+        "save": "Save",
+        "cancel": "Cancel",
+        "loading": "Loading...",
+        "error": "An error occurred",
+        "patient_id": "Patient ID",
+        "encounter_id": "Encounter ID",
+        "submit": "Submit",
+        "result": "Result",
+        "toggle_lang": "AR"
+    },
+    "cardiology": {
+        "title": "Cardiology",
+        "subtitle": "Cardiac assessments, ECG, and ACS risk",
+        "grace": "GRACE Score (ACS risk)",
+        "cha2ds2vasc": "CHA2DS2-VASc (AF stroke risk)",
+        "hasbled": "HAS-BLED (bleeding risk)",
+        "troponin": "Troponin interpretation",
+        "age": "Age",
+        "heart_rate": "Heart Rate (bpm)",
+        "systolic_bp": "Systolic BP (mmHg)",
+        "creatinine": "Creatinine (mg/dL)",
+        "killip": "Killip class",
+        "sex": "Sex",
+        "troponin_value": "Troponin value",
+        "troponin_cutoff": "Cutoff",
+        "delta_pct": "Delta %"
+    },
+    "emergency": {
+        "title": "Emergency",
+        "subtitle": "ESI v4 triage and trauma assessment",
+        "triage": "Patient Triage",
+        "chief_complaint": "Chief Complaint",
+        "heart_rate": "Heart Rate (bpm)",
+        "systolic_bp": "Systolic BP",
+        "spo2": "SpO2 %",
+        "rr": "Respiratory Rate",
+        "gcs": "Glasgow Coma Scale"
+    },
+    "endocrinology": {
+        "title": "Endocrinology",
+        "subtitle": "Diabetes and thyroid assessment",
+        "glycemic": "Glycemic Assessment",
+        "tsh": "TSH (mIU/L)",
+        "ft4": "FT4 (ng/dL)"
+    },
+    "pediatrics": {
+        "title": "Pediatrics",
+        "subtitle": "APGAR and pediatric care",
+        "apgar": "APGAR Score",
+        "appearance": "Appearance",
+        "pulse": "Pulse",
+        "grimace": "Grimace",
+        "activity": "Activity",
+        "respiration": "Respiration"
+    },
+    "surgery": {
+        "title": "Surgery",
+        "subtitle": "Pre-op assessment and safety checklist",
+        "asa": "ASA Classification",
+        "asa_class": "ASA Class",
+        "emergency": "Emergency",
+        "timeout": "WHO Surgical Safety Checklist",
+        "phase": "Phase",
+        "sign_in": "Sign In",
+        "time_out": "Time Out",
+        "sign_out": "Sign Out",
+        "completed_items": "Completed items (comma-separated)"
+    },
+    "pharmacy": {
+        "title": "Pharmacy",
+        "subtitle": "Drug interactions and renal dosing",
+        "interactions": "Drug Interactions",
+        "renal_dose": "Renal Dose Adjustment",
+        "drugs": "Drugs (comma-separated)",
+        "drug_name": "Drug name",
+        "standard_dose_mg": "Standard dose (mg)",
+        "frequency_per_day": "Frequency per day"
+    },
+    "oncology": {
+        "title": "Oncology",
+        "subtitle": "TNM staging and chemo dose",
+        "tnm": "TNM Staging",
+        "bsa": "Body Surface Area",
+        "chemo": "Chemotherapy Dose",
+        "T": "T (0-4)",
+        "N": "N (0-3)",
+        "M": "M (0-1)",
+        "height_cm": "Height (cm)",
+        "weight_kg": "Weight (kg)",
+        "dose_per_m2": "Dose (mg/m²)"
+    },
+    "nephrology": {
+        "title": "Nephrology",
+        "subtitle": "CKD staging and dialysis adequacy",
+        "ckd": "CKD Stage",
+        "hd": "Hemodialysis Adequacy",
+        "albuminuria": "Albuminuria category",
+        "pre_bun": "Pre-BUN (mg/dL)",
+        "post_bun": "Post-BUN (mg/dL)"
+    },
+    "obgyn": {
+        "title": "OBGYN",
+        "subtitle": "Partograph and Bishop score",
+        "partograph": "Partograph",
+        "bishop": "Bishop Score",
+        "dilation_cm": "Cervical dilation (cm)",
+        "parity": "Parity"
+    }
+}

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ar-SA" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title data-i18n="pediatrics.title">Pediatrics - NamaMedical</title>
+<link rel="stylesheet" href="/css/nama-tokens.css" />
+</head>
+<body>
+<div class="container">
+    <h1 data-i18n="pediatrics.title">Pediatrics</h1>
+    <div class="dept-meta" data-i18n="pediatrics.subtitle">pediatrics module</div>
+
+    <div style="text-align:left;margin-bottom:16px">
+        <button class="btn btn-warning" id="lang-toggle" data-i18n="common.toggle_lang">EN</button>
+    </div>
+
+    <div class="card">
+        <form id="form-apgar">
+            <div class="form-row">
+                <label data-i18n="common.patient_id">patient_id</label>
+                <input class="input" name="patient_id" type="number" required />
+            </div>
+            <div class="form-row">
+                <label data-i18n="pediatrics.appearance">appearance</label>
+                <input class="input" name="appearance" type="number" min="0" max="2" required />
+            </div>
+            <div class="form-row">
+                <label data-i18n="pediatrics.pulse">pulse</label>
+                <input class="input" name="pulse" type="number" min="0" max="2" required />
+            </div>
+            <div class="form-row">
+                <label data-i18n="pediatrics.grimace">grimace</label>
+                <input class="input" name="grimace" type="number" min="0" max="2" required />
+            </div>
+            <div class="form-row">
+                <label data-i18n="pediatrics.activity">activity</label>
+                <input class="input" name="activity" type="number" min="0" max="2" required />
+            </div>
+            <div class="form-row">
+                <label data-i18n="pediatrics.respiration">respiration</label>
+                <input class="input" name="respiration" type="number" min="0" max="2" required />
+            </div>
+            <div class="form-row">
+                <button type="submit" class="btn btn-primary" data-i18n="common.submit">Submit</button>
+            </div>
+        </form>
+        <div id="result-apgar" class="result-block">
+            <h3 data-i18n="common.result">Result</h3>
+            <pre id="result-apgar-text"></pre>
+        </div>
+    </div>
+    <div class="card">
+        <form id="form-vitals">
+            <div class="form-row">
+                <label data-i18n="common.patient_id">patient_id</label>
+                <input class="input" name="patient_id" type="number" required />
+            </div>
+            <div class="form-row">
+                <label data-i18n="age_years">age_years</label>
+                <input class="input" name="age_years" type="number" min="0" max="18" step="0.5" required />
+            </div>
+            <div class="form-row">
+                <label data-i18n="heart_rate">heart_rate</label>
+                <input class="input" name="heart_rate" type="number" min="0" max="300" required />
+            </div>
+            <div class="form-row">
+                <label data-i18n="rr_per_min">rr_per_min</label>
+                <input class="input" name="rr_per_min" type="number" min="0" max="100" required />
+            </div>
+            <div class="form-row">
+                <label data-i18n="systolic_bp">systolic_bp</label>
+                <input class="input" name="systolic_bp" type="number" min="0" max="250" required />
+            </div>
+            <div class="form-row">
+                <button type="submit" class="btn btn-primary" data-i18n="common.submit">Submit</button>
+            </div>
+        </form>
+        <div id="result-vitals" class="result-block">
+            <h3 data-i18n="common.result">Result</h3>
+            <pre id="result-vitals-text"></pre>
+        </div>
+    </div>
+</div>
+
+<script src="/js/nama-i18n.js"></script>
+<script src="/js/nama-api.js"></script>
+<script>
+    NamaI18n.onLoad((dict, locale) => {
+        document.documentElement.lang = locale;
+        document.documentElement.dir  = locale === 'ar' ? 'rtl' : 'ltr';
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            el.textContent = NamaI18n.t(key, el.textContent);
+        });
+        const btn = document.getElementById('lang-toggle');
+        btn.textContent = locale === 'ar' ? 'EN' : 'AR';
+    });
+    document.getElementById('lang-toggle').addEventListener('click', () => {
+        const next = NamaI18n.current() === 'ar' ? 'en' : 'ar';
+        NamaI18n.loadLocale(next);
+    });
+
+    async function bind(formId, endpoint, resultId) {
+        document.getElementById(formId).addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target);
+            const body = Object.fromEntries(fd.entries());
+            const out = document.getElementById(resultId);
+            out.classList.add('visible');
+            document.getElementById(resultId + '-text').textContent = NamaI18n.t('common.loading');
+            try {
+                const r = await NamaApi.apiPost(endpoint, body);
+                document.getElementById(resultId + '-text').textContent = JSON.stringify(r, null, 2);
+            } catch (err) {
+                document.getElementById(resultId + '-text').textContent = 'Error: ' + err.message;
+            }
+        });
+    }
+    bind('form-apgar', '/api/pediatrics/apgar', 'result-apgar');
+    bind('form-vitals', '/api/pediatrics/vitals', 'result-vitals');
+</script>
+</body>
+</html>

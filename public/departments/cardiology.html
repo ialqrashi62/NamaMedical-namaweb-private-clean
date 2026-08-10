@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ar-SA" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title data-i18n="cardiology.title">أمراض القلب - NamaMedical</title>
+<link rel="stylesheet" href="/css/nama-tokens.css" />
+</head>
+<body>
+<div class="container">
+    <h1 data-i18n="cardiology.title">أمراض القلب</h1>
+    <div class="dept-meta" data-i18n="cardiology.subtitle">
+        تقييمات القلب والقسطرة وتخطيط القلب
+    </div>
+
+    <div style="text-align:left;margin-bottom:16px">
+        <button class="btn btn-warning" id="lang-toggle" data-i18n="common.toggle_lang">EN</button>
+    </div>
+
+    <!-- KPI dashboard -->
+    <div class="card">
+        <h2 class="card-title" data-i18n="common.dashboard">لوحة المؤشرات</h2>
+        <div class="kpi-grid">
+            <div class="kpi-cell"><div class="kpi-value">--</div><div class="kpi-label" data-i18n="cardiology.assessments_today">تقييمات اليوم</div></div>
+            <div class="kpi-cell"><div class="kpi-value">--</div><div class="kpi-label" data-i18n="cardiology.avg_grace">متوسط GRACE</div></div>
+            <div class="kpi-cell"><div class="kpi-value">--</div><div class="kpi-label" data-i18n="cardiology.stemi_count">حالات STEMI</div></div>
+        </div>
+    </div>
+
+    <!-- GRACE score -->
+    <div class="card">
+        <h2 class="card-title" data-i18n="cardiology.grace">تقييم GRACE</h2>
+        <form id="form-grace">
+            <div class="form-row">
+                <label data-i18n="common.patient_id">رقم المريض</label>
+                <input class="input" name="patient_id" type="number" required />
+            </div>
+            <div class="form-row">
+                <label data-i18n="cardiology.age">العمر</label>
+                <input class="input" name="age" type="number" min="18" max="120" required />
+            </div>
+            <div class="form-row">
+                <label data-i18n="cardiology.heart_rate">نبضات القلب</label>
+                <input class="input" name="heart_rate" type="number" min="20" max="250" required />
+            </div>
+            <div class="form-row">
+                <label data-i18n="cardiology.systolic_bp">ضغط الدم</label>
+                <input class="input" name="systolic_bp" type="number" min="30" max="280" required />
+            </div>
+            <div class="form-row">
+                <label data-i18n="cardiology.creatinine">الكرياتينين</label>
+                <input class="input" name="creatinine_mg_dl" type="number" step="0.1" min="0.1" max="20" required />
+            </div>
+            <div class="form-row">
+                <label data-i18n="cardiology.killip">فئة Killip</label>
+                <select class="select" name="killip_class" required>
+                    <option value="1">1 - No CHF</option>
+                    <option value="2">2 - Rales, JVD</option>
+                    <option value="3">3 - Pulmonary edema</option>
+                    <option value="4">4 - Cardiogenic shock</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <button type="submit" class="btn btn-primary" data-i18n="common.submit">إرسال</button>
+            </div>
+        </form>
+        <div id="result-grace" class="result-block">
+            <h3 data-i18n="common.result">النتيجة</h3>
+            <pre id="result-grace-text"></pre>
+        </div>
+    </div>
+
+    <!-- Troponin -->
+    <div class="card">
+        <h2 class="card-title" data-i18n="cardiology.troponin">تفسير التروبونين</h2>
+        <form id="form-troponin">
+            <div class="form-row">
+                <label data-i18n="common.patient_id">رقم المريض</label>
+                <input class="input" name="patient_id" type="number" required />
+            </div>
+            <div class="form-row">
+                <label data-i18n="cardiology.troponin_value">قيمة التروبونين</label>
+                <input class="input" name="troponin_value" type="number" step="0.01" required />
+            </div>
+            <div class="form-row">
+                <label data-i18n="cardiology.troponin_cutoff">حد القطع</label>
+                <input class="input" name="cutoff" type="number" step="0.01" required />
+            </div>
+            <div class="form-row">
+                <label data-i18n="cardiology.delta_pct">نسبة التغيير %</label>
+                <input class="input" name="delta_pct" type="number" required />
+            </div>
+            <div class="form-row">
+                <button type="submit" class="btn btn-primary" data-i18n="common.submit">إرسال</button>
+            </div>
+        </form>
+        <div id="result-troponin" class="result-block">
+            <h3 data-i18n="common.result">النتيجة</h3>
+            <pre id="result-troponin-text"></pre>
+        </div>
+    </div>
+</div>
+
+<script src="/js/nama-i18n.js"></script>
+<script src="/js/nama-api.js"></script>
+<script src="/js/nama-dept.js"></script>
+<script>
+    NamaI18n.onLoad((dict, locale) => {
+        document.documentElement.lang = locale;
+        document.documentElement.dir  = locale === 'ar' ? 'rtl' : 'ltr';
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            el.textContent = NamaI18n.t(key, el.textContent);
+        });
+        const btn = document.getElementById('lang-toggle');
+        btn.textContent = locale === 'ar' ? 'EN' : 'AR';
+    });
+    document.getElementById('lang-toggle').addEventListener('click', () => {
+        const next = NamaI18n.current() === 'ar' ? 'en' : 'ar';
+        NamaI18n.loadLocale(next);
+    });
+
+    async function bind(formId, endpoint, resultId) {
+        document.getElementById(formId).addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target);
+            const body = Object.fromEntries(fd.entries());
+            const out = document.getElementById(resultId);
+            out.classList.add('visible');
+            document.getElementById(resultId + '-text').textContent = NamaI18n.t('common.loading');
+            try {
+                const r = await NamaApi.apiPost(endpoint, body);
+                document.getElementById(resultId + '-text').textContent = JSON.stringify(r, null, 2);
+            } catch (err) {
+                document.getElementById(resultId + '-text').textContent = 'Error: ' + err.message;
+            }
+        });
+    }
+    bind('form-grace',    '/api/cardiology/assessments/grace',    'result-grace');
+    bind('form-troponin', '/api/cardiology/troponin/interpret',  'result-troponin');
+</script>
+</body>
+</html>

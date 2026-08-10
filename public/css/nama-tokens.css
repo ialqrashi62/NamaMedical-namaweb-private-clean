@@ -1,0 +1,239 @@
+/* nama-tokens.css — Stitch design system tokens
+   Used by all dept pages in public/departments/.
+   Token-saver approach: shared snippets reduce per-page CSS by ~70%.
+*/
+
+:root {
+    /* Colors */
+    --nama-primary: #0d6efd;
+    --nama-success: #198754;
+    --nama-warning: #ffc107;
+    --nama-danger:  #dc3545;
+    --nama-info:    #0dcaf0;
+    --nama-bg:      #f7f9fc;
+    --nama-card:    #ffffff;
+    --nama-border:  #e9ecef;
+    --nama-text:    #1a1a1a;
+    --nama-muted:   #6c757d;
+
+    /* Spacing */
+    --nama-radius:  8px;
+    --nama-pad-sm:  8px;
+    --nama-pad:     16px;
+    --nama-pad-lg:  24px;
+
+    /* Shadows */
+    --nama-shadow:  0 2px 6px rgba(0,0,0,.08);
+    --nama-shadow-lg: 0 4px 12px rgba(0,0,0,.12);
+
+    /* Typography */
+    --nama-font-ar: 'Tajawal', 'Cairo', system-ui, sans-serif;
+    --nama-font-en: 'Inter', system-ui, sans-serif;
+    --nama-fs-base: 14px;
+    --nama-fs-lg:   16px;
+    --nama-fs-xl:   22px;
+
+    /* Layout */
+    --nama-max-w:   1200px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    font-family: var(--nama-font-ar);
+    background: var(--nama-bg);
+    margin: 0;
+    padding: var(--nama-pad-lg);
+    color: var(--nama-text);
+    font-size: var(--nama-fs-base);
+    line-height: 1.5;
+}
+
+body[dir="ltr"] { font-family: var(--nama-font-en); }
+
+.container {
+    max-width: var(--nama-max-w);
+    margin: 0 auto;
+}
+
+h1 { font-size: 28px; color: var(--nama-primary); margin: 0 0 8px; }
+h2 { font-size: var(--nama-fs-xl); color: var(--nama-primary); margin: 24px 0 12px;
+     padding-bottom: 8px; border-bottom: 2px solid var(--nama-border); }
+
+.dept-meta { color: var(--nama-muted); margin-bottom: var(--nama-pad-lg);
+             font-size: 13px; }
+
+/* Cards */
+.card {
+    background: var(--nama-card);
+    border-radius: var(--nama-radius);
+    box-shadow: var(--nama-shadow);
+    padding: var(--nama-pad-lg);
+    margin-bottom: var(--nama-pad-lg);
+}
+
+.card-title {
+    font-weight: 600;
+    color: var(--nama-primary);
+    margin: 0 0 var(--nama-pad);
+    font-size: var(--nama-fs-lg);
+}
+
+/* Forms */
+.form-row {
+    display: flex;
+    gap: var(--nama-pad);
+    align-items: center;
+    margin-bottom: var(--nama-pad);
+    flex-wrap: wrap;
+}
+
+.form-row label {
+    min-width: 140px;
+    color: #495057;
+    font-weight: 500;
+}
+
+.input, .select {
+    flex: 1;
+    min-width: 200px;
+    padding: 8px 12px;
+    border: 1px solid var(--nama-border);
+    border-radius: var(--nama-radius);
+    font-family: inherit;
+    font-size: var(--nama-fs-base);
+}
+
+.input:focus, .select:focus {
+    outline: none;
+    border-color: var(--nama-primary);
+    box-shadow: 0 0 0 3px rgba(13,110,253,0.15);
+}
+
+/* Buttons */
+.btn {
+    padding: 8px 20px;
+    border: 0;
+    border-radius: var(--nama-radius);
+    color: #fff;
+    cursor: pointer;
+    font-size: var(--nama-fs-base);
+    font-weight: 500;
+    transition: transform 0.1s;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn-primary { background: var(--nama-primary); }
+.btn-success { background: var(--nama-success); }
+.btn-warning { background: var(--nama-warning); color: #000; }
+.btn-danger  { background: var(--nama-danger); }
+
+/* Tables */
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.table th, .table td {
+    padding: 10px;
+    border-bottom: 1px solid var(--nama-border);
+    text-align: right;
+}
+
+body[dir="ltr"] .table th, body[dir="ltr"] .table td { text-align: left; }
+
+.table th {
+    background: #f8f9fa;
+    color: var(--nama-muted);
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+/* Pills */
+.pill {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+}
+.pill-active { background: #d1e7dd; color: #0f5132; }
+.pill-warn   { background: #fff3cd; color: #664d03; }
+.pill-danger { background: #f8d7da; color: #842029; }
+.pill-info   { background: #cff4fc; color: #055160; }
+
+/* Alerts */
+.alert {
+    padding: var(--nama-pad);
+    border-radius: var(--nama-radius);
+    margin-bottom: var(--nama-pad);
+    border-right: 4px solid;
+}
+
+body[dir="ltr"] .alert { border-right: 0; border-left: 4px solid; }
+
+.alert-warn   { background: #fff3cd; color: #664d03; border-color: var(--nama-warning); }
+.alert-danger { background: #f8d7da; color: #842029; border-color: var(--nama-danger); }
+.alert-info   { background: #cff4fc; color: #055160; border-color: var(--nama-info); }
+.alert-success { background: #d1e7dd; color: #0f5132; border-color: var(--nama-success); }
+
+/* KPI grid */
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--nama-pad);
+}
+
+.kpi-cell {
+    background: var(--nama-card);
+    border: 1px solid var(--nama-border);
+    border-radius: var(--nama-radius);
+    padding: var(--nama-pad);
+    text-align: center;
+}
+
+.kpi-value {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--nama-primary);
+    line-height: 1;
+}
+
+.kpi-label {
+    font-size: 12px;
+    color: var(--nama-muted);
+    margin-top: 4px;
+}
+
+/* Loading + error */
+.loading { color: var(--nama-muted); font-style: italic; }
+.error   { color: var(--nama-danger); font-weight: 500; }
+
+/* Result blocks (after API call) */
+.result-block {
+    background: #e7f3ff;
+    border: 1px solid var(--nama-primary);
+    border-radius: var(--nama-radius);
+    padding: var(--nama-pad);
+    margin-top: var(--nama-pad);
+    display: none;
+}
+
+.result-block.visible { display: block; }
+
+.result-block h3 {
+    color: var(--nama-primary);
+    margin: 0 0 8px;
+    font-size: 16px;
+}
+
+.result-block pre {
+    background: #fff;
+    border: 1px solid var(--nama-border);
+    border-radius: 4px;
+    padding: 12px;
+    overflow-x: auto;
+    font-size: 12px;
+    margin: 0;
+}
