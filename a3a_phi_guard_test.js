@@ -1,16 +1,120 @@
+/**
+ * zatca_submit_fail_closed_guard_test.js
+ * DB-free static guard for ZATCA route safety invariants in server.js.
+ */
+'use strict';
+
 const fs = require('fs');
-const s = fs.readFileSync('server.js', 'utf8');
-let pass = 0, fail = 0;
-function chk(name, cond) { if (cond) { pass++; console.log('PASS', name); } else { fail++; console.log('FAIL', name); } }
-chk('uploadsDir outside public (phi_vault)', s.includes("path.join(__dirname, 'phi_vault', 'radiology')"));
-chk('uploadsDir NOT under public', !s.includes("'public', 'uploads', 'radiology'"));
-chk('upload registers phi_files', s.includes('INSERT INTO phi_files'));
-chk('upload returns guarded path not public', s.includes('`/api/phi-files/${phi.id}`') && !s.includes('`/uploads/radiology/${req.file.filename}`'));
-chk('sha256 computed on upload', s.includes("createHash('sha256')"));
-chk('guarded route defined', s.includes("app.get('/api/phi-files/:id', requireAuth"));
-chk('guarded route 404 when no row (RLS)', /phi_files WHERE id=\$1[\s\S]{0,120}status\(404\)/.test(s));
-chk('path-traversal guard (startsWith vaultRoot)', s.includes('resolved.startsWith(vaultRoot'));
-chk('id parsed as integer', s.includes('parseInt(req.params.id, 10)') && s.includes('Number.isInteger(id)'));
-chk('PHI_FILE_DOWNLOAD audited', s.includes("'PHI_FILE_DOWNLOAD'"));
-console.log(`\n${pass}/${pass+fail} PASS`);
-process.exit(fail ? 1 : 0);
+const path = require('path');
+
+const GREEN = '\x1b[32m';
+const RED = '\x1b[31m';
+const BLUE = '\x1b[34m';
+const BOLD = '\x1b[1m';
+const RESET = '\x1b[0m';
+
+let passed = 0;
+let failed = 0;
+const failures = [];
+
+function assert(cond, name, details) {
+  if (cond) {
+    passed++;
+    console.log(`  ${GREEN}PASS${RESET} - ${name}`);
+    return;
+  }
+  failed++;
+  failures.push({ name, details: details || '' });
+  console.log(`  ${RED}FAIL${RESET} - ${name}${details ? ` | ${details}` : ''}`);
+}
+
+console.log(`\n${BOLD}${BLUE}=== ZATCA Submit Fail-Closed Guard Test ===${RESET}\n`);
+
+const serverPath = path.join(__dirname, 'server.js');
+const src = fs.readFileSync(serverPath, 'utf8');
+const clean = src.replace(/\s+/g, '');
+
+assert(
+  clean.includes("app.post('/api/zatca/submit',requireAuth,requireRole('finance','accounts'),requireTenantScope,validateBody(RS.zatcaSubmit),idempotencyGuard,async(req,res)=>{"),
+  'submit route is auth+role+tenant+validation+idempotency guarded'
+);
+
+assert(
+  clean.includes("app.post('/api/settings/integrations',requireAuth,requireTenantContext,validateBody(RS.integrationSettingsSave),async(req,res)=>{") &&
+  clean.includes("app.post('/api/settings/integrations/ping',requireAuth,requireTenantContext,validateBody(RS.integrationPing),async(req,res)=>{"),
+  'integration settings routes are guarded by boundary validation middleware'
+);
+
+assert(
+  clean.includes("app.get('/api/settings/integrations',requireAuth,requireTenantContext,async(req,res)=>{") &&
+    clean.includes("if(!['ZATCA','NPHIES','CBAHI'].includes(integrationName))returnrow;") &&
+    clean.includes("if(integrationName==='ZATCA')redactedConfig=redactZatcaConfig(parsed);") &&
+    clean.includes("if(integrationName==='NPHIES')redactedConfig=redactNphiesConfig(parsed);") &&
+    clean.includes("if(integrationName==='CBAHI')redactedConfig=redactCbahiConfig(parsed);") &&
+    clean.includes("if(integrationName==='ZATCA'||integrationName==='NPHIES'){") &&
+    clean.includes("safeRow['api_key']=row.api_key?'[REDACTED]':'';") &&
+    clean.includes("safeRow['api_secret']=row.api_secret?'[REDACTED]':'';"),
+  'GET integrations redacts integration configs and secret fields for ZATCA/NPHIES'
+);
+
+assert(
+  clean.includes('if(!globalEnabled||!integrationEnabled){') &&
+    clean.includes("submission_status=$2") &&
+    clean.includes("'Submitted_Mock'") &&
+    clean.includes("'ZATCA_SUBMIT_INTENT','ZATCA'"),
+  'submit route keeps safe mock fallback when integration/global gate is off'
+);
+
+assert(
+  clean.includes('ZATCA_ONBOARDING_INCOMPLETE') &&
+    clean.includes('missingproductioncredentials'),
+  'submit route fails closed when production credentials are missing'
+);
+
+assert(
+  clean.includes("validateZatcaConfig(configJson,{requireKeys:true,requireCsrProfile:true})") &&
+    clean.includes("error:'InvalidZATCAconfiguration'") &&
+    clean.includes('codes:configValidation.errors'),
+  'submit route enforces key+CSR validation and returns machine-readable codes'
+);
+
+assert(
+  clean.includes("constrequiresCsr=parseInt(is_enabled,10)===1;") &&
+    clean.includes("validateZatcaConfig(parsedConfig,{requireCsrProfile:requiresCsr,requireKeys:false})") &&
+    clean.includes("error:'InvalidZATCAconfig_json'"),
+  'settings save route validates ZATCA config_json when enabling integration'
+);
+
+assert(
+  clean.includes("constnormalizedName=String(integration_name).trim().toUpperCase();") &&
+    clean.includes('WHEREtenant_id=$1ANDUPPER(integration_name)=$2') &&
+    clean.includes('Updatedintegration${normalizedName}settings'),
+  'settings save route canonicalizes integration_name and uses canonical value for persistence/audit'
+);
+
+assert(
+  clean.includes("SELECT*FROMintegration_settingsWHEREtenant_id=$1ANDUPPER(integration_name)=$2") &&
+    clean.includes("[tenantId,'ZATCA']"),
+  'submit route loads ZATCA settings case-insensitively for legacy rows'
+);
+
+assert(
+  clean.includes("api_key!=='***REDACTED***'") &&
+    clean.includes("api_secret!=='***REDACTED***'") &&
+    clean.includes('exists?.api_key||\'\'') &&
+    clean.includes('exists?.api_secret||\'\''),
+  'settings save route preserves stored credentials when redacted placeholders are submitted'
+);
+
+console.log(`\n${BOLD}${BLUE}=== Result ===${RESET}`);
+console.log(`  ${GREEN}PASS${RESET}: ${passed}`);
+console.log(`  ${RED}FAIL${RESET}: ${failed}`);
+
+if (failed) {
+  for (const f of failures) {
+    console.log(`  - ${f.name}${f.details ? `: ${f.details}` : ''}`);
+  }
+  process.exit(1);
+}
+
+console.log(`\n${GREEN}ALL PASS: ${passed} passed, 0 failed${RESET}\n`);

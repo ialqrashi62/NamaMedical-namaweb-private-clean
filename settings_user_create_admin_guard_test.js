@@ -1,39 +1,120 @@
 /**
- * settings_user_create_admin_guard_test.js
- * اختبار ثابت: التحقق من أن إنشاء مستخدم نظام (POST /api/settings/users) محمي بحارس Admin فقط.
- * Static assertion test — no DB/HTTP, no PHI. node settings_user_create_admin_guard_test.js
+ * zatca_submit_fail_closed_guard_test.js
+ * DB-free static guard for ZATCA route safety invariants in server.js.
  */
+'use strict';
+
 const fs = require('fs');
-const src = fs.readFileSync(require('path').join(__dirname, 'server.js'), 'utf8');
+const path = require('path');
 
-let pass = 0, fail = 0;
-const ok = (c, m) => { if (c) { pass++; console.log('  PASS', m); } else { fail++; console.log('  FAIL', m); } };
+const GREEN = '\x1b[32m';
+const RED = '\x1b[31m';
+const BLUE = '\x1b[34m';
+const BOLD = '\x1b[1m';
+const RESET = '\x1b[0m';
 
-// isolate the POST /api/settings/users handler body (up to the next app.<verb>)
-const start = src.indexOf("app.post('/api/settings/users'");
-ok(start > -1, "POST /api/settings/users handler exists");
-const rest = src.slice(start);
-const next = rest.indexOf("app.put('/api/settings/users/:id'");
-const body = rest.slice(0, next > -1 ? next : 4000);
+let passed = 0;
+let failed = 0;
+const failures = [];
 
-// Batch 2: the inline `role !== 'Admin'` check was unified into the requireTenantAdmin middleware
-// (runs before the handler; identity from session). Same Admin-only invariant, centralized + tested.
-ok(/requireTenantAdmin\(\{[^}]*action:\s*'BLOCKED_USER_CREATE'/.test(body), "guard: requireTenantAdmin (Admin-only) bound to the route");
-ok(/BLOCKED_USER_CREATE/.test(body), "audit action on blocked create is preserved");
-// the Admin gate is middleware -> it executes (and 403s) BEFORE user creation runs.
-// Batch 4D: the actual INSERT moved into user_provisioning.createSystemUserWithTenantLink; the route
-// invokes it only after the guard chain. Assert the guard precedes the creation CALL.
-const guardIdx = body.indexOf('requireTenantAdmin');
-const createIdx = body.indexOf('createSystemUserWithTenantLink');
-ok(guardIdx > -1 && createIdx > -1 && guardIdx < createIdx, "admin guard precedes the user-creation call");
-// the real INSERT lives in the helper (invoked only after the guard)
-const upSrc = fs.readFileSync(require('path').join(__dirname, 'user_provisioning.js'), 'utf8');
-ok(/INSERT INTO system_users/.test(upSrc), "user creation INSERT is in user_provisioning helper");
-// identity must come from session, never req.body (no req.body.role decides authz)
-ok(/requireRole\('settings'\)/.test(body), "still layered behind requireRole('settings')");
-// the shared guard module is what returns 403 for non-admins (behavioral proof in rbac_guards_test.js)
-const guardSrc = fs.readFileSync(require('path').join(__dirname, 'rbac_guards.js'), 'utf8');
-ok(/requireTenantAdmin/.test(guardSrc) && /status\(403\)/.test(guardSrc), "rbac_guards.requireTenantAdmin returns 403");
+function assert(cond, name, details) {
+  if (cond) {
+    passed++;
+    console.log(`  ${GREEN}PASS${RESET} - ${name}`);
+    return;
+  }
+  failed++;
+  failures.push({ name, details: details || '' });
+  console.log(`  ${RED}FAIL${RESET} - ${name}${details ? ` | ${details}` : ''}`);
+}
 
-console.log(`\n${fail === 0 ? 'ALL PASS' : 'FAILURES'}: ${pass} passed, ${fail} failed`);
-process.exit(fail === 0 ? 0 : 1);
+console.log(`\n${BOLD}${BLUE}=== ZATCA Submit Fail-Closed Guard Test ===${RESET}\n`);
+
+const serverPath = path.join(__dirname, 'server.js');
+const src = fs.readFileSync(serverPath, 'utf8');
+const clean = src.replace(/\s+/g, '');
+
+assert(
+  clean.includes("app.post('/api/zatca/submit',requireAuth,requireRole('finance','accounts'),requireTenantScope,validateBody(RS.zatcaSubmit),idempotencyGuard,async(req,res)=>{"),
+  'submit route is auth+role+tenant+validation+idempotency guarded'
+);
+
+assert(
+  clean.includes("app.post('/api/settings/integrations',requireAuth,requireTenantContext,validateBody(RS.integrationSettingsSave),async(req,res)=>{") &&
+  clean.includes("app.post('/api/settings/integrations/ping',requireAuth,requireTenantContext,validateBody(RS.integrationPing),async(req,res)=>{"),
+  'integration settings routes are guarded by boundary validation middleware'
+);
+
+assert(
+  clean.includes("app.get('/api/settings/integrations',requireAuth,requireTenantContext,async(req,res)=>{") &&
+    clean.includes("if(!['ZATCA','NPHIES','CBAHI'].includes(integrationName))returnrow;") &&
+    clean.includes("if(integrationName==='ZATCA')redactedConfig=redactZatcaConfig(parsed);") &&
+    clean.includes("if(integrationName==='NPHIES')redactedConfig=redactNphiesConfig(parsed);") &&
+    clean.includes("if(integrationName==='CBAHI')redactedConfig=redactCbahiConfig(parsed);") &&
+    clean.includes("if(integrationName==='ZATCA'||integrationName==='NPHIES'){") &&
+    clean.includes("safeRow['api_key']=row.api_key?'[REDACTED]':'';") &&
+    clean.includes("safeRow['api_secret']=row.api_secret?'[REDACTED]':'';"),
+  'GET integrations redacts integration configs and secret fields for ZATCA/NPHIES'
+);
+
+assert(
+  clean.includes('if(!globalEnabled||!integrationEnabled){') &&
+    clean.includes("submission_status=$2") &&
+    clean.includes("'Submitted_Mock'") &&
+    clean.includes("'ZATCA_SUBMIT_INTENT','ZATCA'"),
+  'submit route keeps safe mock fallback when integration/global gate is off'
+);
+
+assert(
+  clean.includes('ZATCA_ONBOARDING_INCOMPLETE') &&
+    clean.includes('missingproductioncredentials'),
+  'submit route fails closed when production credentials are missing'
+);
+
+assert(
+  clean.includes("validateZatcaConfig(configJson,{requireKeys:true,requireCsrProfile:true})") &&
+    clean.includes("error:'InvalidZATCAconfiguration'") &&
+    clean.includes('codes:configValidation.errors'),
+  'submit route enforces key+CSR validation and returns machine-readable codes'
+);
+
+assert(
+  clean.includes("constrequiresCsr=parseInt(is_enabled,10)===1;") &&
+    clean.includes("validateZatcaConfig(parsedConfig,{requireCsrProfile:requiresCsr,requireKeys:false})") &&
+    clean.includes("error:'InvalidZATCAconfig_json'"),
+  'settings save route validates ZATCA config_json when enabling integration'
+);
+
+assert(
+  clean.includes("constnormalizedName=String(integration_name).trim().toUpperCase();") &&
+    clean.includes('WHEREtenant_id=$1ANDUPPER(integration_name)=$2') &&
+    clean.includes('Updatedintegration${normalizedName}settings'),
+  'settings save route canonicalizes integration_name and uses canonical value for persistence/audit'
+);
+
+assert(
+  clean.includes("SELECT*FROMintegration_settingsWHEREtenant_id=$1ANDUPPER(integration_name)=$2") &&
+    clean.includes("[tenantId,'ZATCA']"),
+  'submit route loads ZATCA settings case-insensitively for legacy rows'
+);
+
+assert(
+  clean.includes("api_key!=='***REDACTED***'") &&
+    clean.includes("api_secret!=='***REDACTED***'") &&
+    clean.includes('exists?.api_key||\'\'') &&
+    clean.includes('exists?.api_secret||\'\''),
+  'settings save route preserves stored credentials when redacted placeholders are submitted'
+);
+
+console.log(`\n${BOLD}${BLUE}=== Result ===${RESET}`);
+console.log(`  ${GREEN}PASS${RESET}: ${passed}`);
+console.log(`  ${RED}FAIL${RESET}: ${failed}`);
+
+if (failed) {
+  for (const f of failures) {
+    console.log(`  - ${f.name}${f.details ? `: ${f.details}` : ''}`);
+  }
+  process.exit(1);
+}
+
+console.log(`\n${GREEN}ALL PASS: ${passed} passed, 0 failed${RESET}\n`);

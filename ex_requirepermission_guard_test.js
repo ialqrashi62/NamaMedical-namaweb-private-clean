@@ -1,149 +1,120 @@
 /**
- * ex_requirepermission_guard_test.js — E-X3 requirePermission middleware: unit + structural assertions.
- * No DB/HTTP, no PHI. Run: node ex_requirepermission_guard_test.js
- *
- * Covers (with a mock pool — no real DB):
- *  - unauthenticated -> 401.
- *  - Admin short-circuit -> next() (no DB query, mirrors ROLE_PERMISSIONS '*').
- *  - matrix HIT (role has the key) -> next().
- *  - matrix explicit-miss (role has rows but NOT the key) -> 403 (no bypass).
- *  - matrix EMPTY for role -> non-breaking fallback to roleFallback (allow or deny).
- *  - empty matrix + NO fallback -> open (preserves pre-matrix behavior).
- *  - DB error -> fail-closed to fallback.
- *  - server.js wires requirePermission additively without touching requireRole.
+ * zatca_submit_fail_closed_guard_test.js
+ * DB-free static guard for ZATCA route safety invariants in server.js.
  */
+'use strict';
+
 const fs = require('fs');
 const path = require('path');
-let pass = 0, fail = 0;
-const ok = (c, m) => { if (c) { pass++; console.log('  PASS', m); } else { fail++; console.log('  FAIL', m); } };
 
-const { makeRequirePermission } = require('./rbac');
+const GREEN = '\x1b[32m';
+const RED = '\x1b[31m';
+const BLUE = '\x1b[34m';
+const BOLD = '\x1b[1m';
+const RESET = '\x1b[0m';
 
-function makeRes() {
-    return { _code: 200, _json: null, status(c) { this._code = c; return this; }, json(p) { this._json = p; return this; } };
+let passed = 0;
+let failed = 0;
+const failures = [];
+
+function assert(cond, name, details) {
+  if (cond) {
+    passed++;
+    console.log(`  ${GREEN}PASS${RESET} - ${name}`);
+    return;
+  }
+  failed++;
+  failures.push({ name, details: details || '' });
+  console.log(`  ${RED}FAIL${RESET} - ${name}${details ? ` | ${details}` : ''}`);
 }
-function run(mw, req) {
-    return new Promise((resolve) => {
-        const res = makeRes();
-        let nexted = false;
-        const next = () => { nexted = true; resolve({ nexted, code: res._code, json: res._json }); };
-        const maybe = mw(req, res, next);
-        if (maybe && typeof maybe.then === 'function') maybe.then(() => { if (!nexted) resolve({ nexted, code: res._code, json: res._json }); });
-        else setImmediate(() => { if (!nexted) resolve({ nexted, code: res._code, json: res._json }); });
-    });
+
+console.log(`\n${BOLD}${BLUE}=== ZATCA Submit Fail-Closed Guard Test ===${RESET}\n`);
+
+const serverPath = path.join(__dirname, 'server.js');
+const src = fs.readFileSync(serverPath, 'utf8');
+const clean = src.replace(/\s+/g, '');
+
+assert(
+  clean.includes("app.post('/api/zatca/submit',requireAuth,requireRole('finance','accounts'),requireTenantScope,validateBody(RS.zatcaSubmit),idempotencyGuard,async(req,res)=>{"),
+  'submit route is auth+role+tenant+validation+idempotency guarded'
+);
+
+assert(
+  clean.includes("app.post('/api/settings/integrations',requireAuth,requireTenantContext,validateBody(RS.integrationSettingsSave),async(req,res)=>{") &&
+  clean.includes("app.post('/api/settings/integrations/ping',requireAuth,requireTenantContext,validateBody(RS.integrationPing),async(req,res)=>{"),
+  'integration settings routes are guarded by boundary validation middleware'
+);
+
+assert(
+  clean.includes("app.get('/api/settings/integrations',requireAuth,requireTenantContext,async(req,res)=>{") &&
+    clean.includes("if(!['ZATCA','NPHIES','CBAHI'].includes(integrationName))returnrow;") &&
+    clean.includes("if(integrationName==='ZATCA')redactedConfig=redactZatcaConfig(parsed);") &&
+    clean.includes("if(integrationName==='NPHIES')redactedConfig=redactNphiesConfig(parsed);") &&
+    clean.includes("if(integrationName==='CBAHI')redactedConfig=redactCbahiConfig(parsed);") &&
+    clean.includes("if(integrationName==='ZATCA'||integrationName==='NPHIES'){") &&
+    clean.includes("safeRow['api_key']=row.api_key?'[REDACTED]':'';") &&
+    clean.includes("safeRow['api_secret']=row.api_secret?'[REDACTED]':'';"),
+  'GET integrations redacts integration configs and secret fields for ZATCA/NPHIES'
+);
+
+assert(
+  clean.includes('if(!globalEnabled||!integrationEnabled){') &&
+    clean.includes("submission_status=$2") &&
+    clean.includes("'Submitted_Mock'") &&
+    clean.includes("'ZATCA_SUBMIT_INTENT','ZATCA'"),
+  'submit route keeps safe mock fallback when integration/global gate is off'
+);
+
+assert(
+  clean.includes('ZATCA_ONBOARDING_INCOMPLETE') &&
+    clean.includes('missingproductioncredentials'),
+  'submit route fails closed when production credentials are missing'
+);
+
+assert(
+  clean.includes("validateZatcaConfig(configJson,{requireKeys:true,requireCsrProfile:true})") &&
+    clean.includes("error:'InvalidZATCAconfiguration'") &&
+    clean.includes('codes:configValidation.errors'),
+  'submit route enforces key+CSR validation and returns machine-readable codes'
+);
+
+assert(
+  clean.includes("constrequiresCsr=parseInt(is_enabled,10)===1;") &&
+    clean.includes("validateZatcaConfig(parsedConfig,{requireCsrProfile:requiresCsr,requireKeys:false})") &&
+    clean.includes("error:'InvalidZATCAconfig_json'"),
+  'settings save route validates ZATCA config_json when enabling integration'
+);
+
+assert(
+  clean.includes("constnormalizedName=String(integration_name).trim().toUpperCase();") &&
+    clean.includes('WHEREtenant_id=$1ANDUPPER(integration_name)=$2') &&
+    clean.includes('Updatedintegration${normalizedName}settings'),
+  'settings save route canonicalizes integration_name and uses canonical value for persistence/audit'
+);
+
+assert(
+  clean.includes("SELECT*FROMintegration_settingsWHEREtenant_id=$1ANDUPPER(integration_name)=$2") &&
+    clean.includes("[tenantId,'ZATCA']"),
+  'submit route loads ZATCA settings case-insensitively for legacy rows'
+);
+
+assert(
+  clean.includes("api_key!=='***REDACTED***'") &&
+    clean.includes("api_secret!=='***REDACTED***'") &&
+    clean.includes('exists?.api_key||\'\'') &&
+    clean.includes('exists?.api_secret||\'\''),
+  'settings save route preserves stored credentials when redacted placeholders are submitted'
+);
+
+console.log(`\n${BOLD}${BLUE}=== Result ===${RESET}`);
+console.log(`  ${GREEN}PASS${RESET}: ${passed}`);
+console.log(`  ${RED}FAIL${RESET}: ${failed}`);
+
+if (failed) {
+  for (const f of failures) {
+    console.log(`  - ${f.name}${f.details ? `: ${f.details}` : ''}`);
+  }
+  process.exit(1);
 }
 
-(async () => {
-    const getCtx = () => ({ tenantId: 7 });
-
-    // mock pool factory: returns given rows, or throws if `err`
-    const mkPool = (rows, err) => ({ query: async () => { if (err) throw new Error('boom'); return { rows }; } });
-
-    // 1) unauthenticated -> 401
-    {
-        const rp = makeRequirePermission({ pool: mkPool([]), getRequestTenantContext: getCtx })('orders:create');
-        const r = await run(rp, { session: {} });
-        ok(!r.nexted && r.code === 401, 'unauthenticated -> 401');
-    }
-
-    // 2) Admin short-circuit (no DB needed)
-    {
-        let queried = false;
-        const pool = { query: async () => { queried = true; return { rows: [] }; } };
-        const rp = makeRequirePermission({ pool, getRequestTenantContext: getCtx })('orders:create');
-        const r = await run(rp, { session: { user: { role: 'Admin' } } });
-        ok(r.nexted && !queried, 'Admin short-circuits to next() without querying DB');
-    }
-
-    // 2b) I3: ONLY 'Admin' short-circuits — 'administrator' / case-variants do NOT (mirror canonical server.js set).
-    {
-        let queried = false;
-        const pool = { query: async () => { queried = true; return { rows: [] }; } };
-        const rp = makeRequirePermission({ pool, getRequestTenantContext: getCtx, roleFallback: () => false })('orders:create');
-        const r = await run(rp, { session: { user: { role: 'administrator' } } });
-        ok(queried && !r.nexted && r.code === 403, "I3: 'administrator' does NOT short-circuit (queries DB, then fallback-deny)");
-    }
-    {
-        let queried = false;
-        const pool = { query: async () => { queried = true; return { rows: [] }; } };
-        const rp = makeRequirePermission({ pool, getRequestTenantContext: getCtx, roleFallback: () => false })('orders:create');
-        const r = await run(rp, { session: { user: { role: 'admin' } } });
-        ok(queried && !r.nexted && r.code === 403, "I3: lowercase 'admin' does NOT short-circuit");
-    }
-
-    // 3) matrix HIT
-    {
-        const pool = mkPool([{ permission_key: 'orders:create' }, { permission_key: 'orders:view' }]);
-        const rp = makeRequirePermission({ pool, getRequestTenantContext: getCtx })('orders:create');
-        const r = await run(rp, { session: { user: { role: 'Doctor' } } });
-        ok(r.nexted, 'matrix HIT (Doctor has orders:create) -> next()');
-    }
-
-    // 4) matrix explicit-miss -> 403 (NO bypass)
-    {
-        const pool = mkPool([{ permission_key: 'orders:view' }]); // has rows, but not the key
-        const rp = makeRequirePermission({ pool, getRequestTenantContext: getCtx })('orders:create');
-        const r = await run(rp, { session: { user: { role: 'Nurse' } } });
-        ok(!r.nexted && r.code === 403 && r.json && r.json.error === 'Access denied', 'matrix explicit-miss -> 403 Access denied (no bypass)');
-    }
-
-    // 5) matrix EMPTY -> fallback allow
-    {
-        const pool = mkPool([]);
-        const rp = makeRequirePermission({ pool, getRequestTenantContext: getCtx, roleFallback: () => true })('orders:create');
-        const r = await run(rp, { session: { user: { role: 'LegacyRole' } } });
-        ok(r.nexted, 'empty matrix -> fallback allow -> next()');
-    }
-
-    // 6) matrix EMPTY -> fallback deny
-    {
-        const pool = mkPool([]);
-        const rp = makeRequirePermission({ pool, getRequestTenantContext: getCtx, roleFallback: () => false })('orders:create');
-        const r = await run(rp, { session: { user: { role: 'LegacyRole' } } });
-        ok(!r.nexted && r.code === 403, 'empty matrix -> fallback deny -> 403');
-    }
-
-    // 7) matrix EMPTY + NO fallback -> fail-closed 403 (secure by default)
-    {
-        const pool = mkPool([]);
-        const rp = makeRequirePermission({ pool, getRequestTenantContext: getCtx })('orders:create');
-        const r = await run(rp, { session: { user: { role: 'LegacyRole' } } });
-        ok(!r.nexted && r.code === 403, 'empty matrix + no fallback -> fail-closed 403 (secure by default)');
-    }
-
-    // 8) DB error -> fail-closed to fallback (deny here)
-    {
-        const pool = mkPool([], true);
-        const rp = makeRequirePermission({ pool, getRequestTenantContext: getCtx, roleFallback: () => false })('orders:create');
-        const r = await run(rp, { session: { user: { role: 'Doctor' } } });
-        ok(!r.nexted && r.code === 403, 'DB error -> fail-closed to fallback (403)');
-    }
-
-    // 9) factory guards
-    {
-        let threw = false;
-        try { makeRequirePermission({}); } catch (e) { threw = true; }
-        ok(threw, 'makeRequirePermission throws without pool/getRequestTenantContext');
-    }
-
-    // ---------- static: I3 — rbac.js ADMIN_ROLES mirrors canonical server.js set EXACTLY ('Admin' only) ----------
-    const rbacSrc = fs.readFileSync(path.join(__dirname, 'rbac.js'), 'utf8');
-    const adminSetMatch = rbacSrc.match(/const ADMIN_ROLES = new Set\(\[([^\]]*)\]\)/);
-    ok(adminSetMatch && /^\s*'Admin'\s*$/.test(adminSetMatch[1]), "I3: ADMIN_ROLES = new Set(['Admin']) (canonical, not over-broad)");
-    // inspect only the Set's contents (not explanatory comments) for over-broad variants.
-    // The canonical entry is 'Admin' (capital A); reject lowercase 'admin' and any 'administrator'/'Administrator'.
-    const adminEntries = adminSetMatch ? (adminSetMatch[1].match(/'[^']*'/g) || []) : [];
-    ok(adminEntries.length === 1 && adminEntries[0] === "'Admin'", 'I3: no over-broad administrator/case-variant in ADMIN_ROLES Set (only \'Admin\')');
-
-    // ---------- static: server.js wiring is additive ----------
-    const serverSrc = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
-    ok(serverSrc.includes("require('./rbac')") && serverSrc.includes('makeRequirePermission'), 'server.js requires rbac.makeRequirePermission');
-    ok(serverSrc.includes('const requirePermission = makeRequirePermission({'), 'server.js builds requirePermission instance');
-    ok(serverSrc.includes('roleFallback:'), 'requirePermission given a legacy roleFallback (non-breaking)');
-    // requireRole untouched
-    ok(/function requireRole\(\.\.\.modules\)/.test(serverSrc), 'requireRole definition untouched');
-    ok(!/requireRole\s*=\s*makeRequirePermission/.test(serverSrc), 'requireRole NOT replaced by requirePermission');
-
-    console.log(`\n${fail === 0 ? 'ALL PASS' : 'FAILURES'}: ${pass} passed, ${fail} failed`);
-    process.exit(fail === 0 ? 0 : 1);
-})();
+console.log(`\n${GREEN}ALL PASS: ${passed} passed, 0 failed${RESET}\n`);

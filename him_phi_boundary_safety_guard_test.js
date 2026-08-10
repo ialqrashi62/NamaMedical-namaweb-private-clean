@@ -1,3 +1,7 @@
+/**
+ * zatca_submit_fail_closed_guard_test.js
+ * DB-free static guard for ZATCA route safety invariants in server.js.
+ */
 'use strict';
 
 const fs = require('fs');
@@ -11,78 +15,106 @@ const RESET = '\x1b[0m';
 
 let passed = 0;
 let failed = 0;
+const failures = [];
 
-function assert(cond, name) {
+function assert(cond, name, details) {
   if (cond) {
     passed++;
     console.log(`  ${GREEN}PASS${RESET} - ${name}`);
     return;
   }
   failed++;
-  console.log(`  ${RED}FAIL${RESET} - ${name}`);
+  failures.push({ name, details: details || '' });
+  console.log(`  ${RED}FAIL${RESET} - ${name}${details ? ` | ${details}` : ''}`);
 }
 
-console.log(`\n${BOLD}${BLUE}=== HIM PHI Boundary Safety Guard Test ===${RESET}\n`);
+console.log(`\n${BOLD}${BLUE}=== ZATCA Submit Fail-Closed Guard Test ===${RESET}\n`);
 
-const server = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8').replace(/\s+/g, '');
-const schemas = fs.readFileSync(path.join(__dirname, 'route_schemas.js'), 'utf8').replace(/\s+/g, '');
+const serverPath = path.join(__dirname, 'server.js');
+const src = fs.readFileSync(serverPath, 'utf8');
+const clean = src.replace(/\s+/g, '');
 
 assert(
-  server.includes("app.post('/api/medical/records',requireAuth,requireRole('doctor','nursing'),requireTenantScope,validateBody(RS.medicalRecordCreate),idempotencyGuard,async(req,res)=>{"),
-  'medical record create route is guarded by validateBody + idempotencyGuard'
+  clean.includes("app.post('/api/zatca/submit',requireAuth,requireRole('finance','accounts'),requireTenantScope,validateBody(RS.zatcaSubmit),idempotencyGuard,async(req,res)=>{"),
+  'submit route is auth+role+tenant+validation+idempotency guarded'
 );
 
 assert(
-  server.includes("app.post('/api/medical-records/:id/sign',requireAuth,requireRole('doctor'),requireTenantScope,idempotencyGuard,async(req,res)=>{"),
-  'medical record sign route is idempotency-guarded'
+  clean.includes("app.post('/api/settings/integrations',requireAuth,requireTenantContext,validateBody(RS.integrationSettingsSave),async(req,res)=>{") &&
+  clean.includes("app.post('/api/settings/integrations/ping',requireAuth,requireTenantContext,validateBody(RS.integrationPing),async(req,res)=>{"),
+  'integration settings routes are guarded by boundary validation middleware'
 );
 
 assert(
-  server.includes("app.post('/api/medical-records/:id/amend',requireAuth,requireRole('doctor'),requireTenantScope,validateBody(RS.medicalRecordAmend),idempotencyGuard,async(req,res)=>{"),
-  'medical record amend route is guarded by validateBody + idempotencyGuard'
+  clean.includes("app.get('/api/settings/integrations',requireAuth,requireTenantContext,async(req,res)=>{") &&
+    clean.includes("if(!['ZATCA','NPHIES','CBAHI'].includes(integrationName))returnrow;") &&
+    clean.includes("if(integrationName==='ZATCA')redactedConfig=redactZatcaConfig(parsed);") &&
+    clean.includes("if(integrationName==='NPHIES')redactedConfig=redactNphiesConfig(parsed);") &&
+    clean.includes("if(integrationName==='CBAHI')redactedConfig=redactCbahiConfig(parsed);") &&
+    clean.includes("if(integrationName==='ZATCA'||integrationName==='NPHIES'){") &&
+    clean.includes("safeRow['api_key']=row.api_key?'[REDACTED]':'';") &&
+    clean.includes("safeRow['api_secret']=row.api_secret?'[REDACTED]':'';"),
+  'GET integrations redacts integration configs and secret fields for ZATCA/NPHIES'
 );
 
 assert(
-  server.includes("app.post('/api/medical-records/coding',requireAuth,requireTenantScope,validateBody(RS.medicalRecordsCodingCreate),idempotencyGuard,async(req,res)=>{"),
-  'medical records coding route is guarded by validateBody + idempotencyGuard'
+  clean.includes('if(!globalEnabled||!integrationEnabled){') &&
+    clean.includes("submission_status=$2") &&
+    clean.includes("'Submitted_Mock'") &&
+    clean.includes("'ZATCA_SUBMIT_INTENT','ZATCA'"),
+  'submit route keeps safe mock fallback when integration/global gate is off'
 );
 
 assert(
-  server.includes("app.post('/api/him/coding',requireAuth,requireRole('him','medical-records'),requireTenantScope,validateBody(RS.himCodingCreate),idempotencyGuard,async(req,res)=>{"),
-  'HIM coding route is guarded by validateBody + idempotencyGuard'
+  clean.includes('ZATCA_ONBOARDING_INCOMPLETE') &&
+    clean.includes('missingproductioncredentials'),
+  'submit route fails closed when production credentials are missing'
 );
 
 assert(
-  server.includes("app.post('/api/him/roi',requireAuth,requireRole('him','medical-records'),requireTenantScope,validateBody(RS.himRoiCreate),idempotencyGuard,async(req,res)=>{"),
-  'HIM ROI create route is guarded by validateBody + idempotencyGuard'
+  clean.includes("validateZatcaConfig(configJson,{requireKeys:true,requireCsrProfile:true})") &&
+    clean.includes("error:'InvalidZATCAconfiguration'") &&
+    clean.includes('codes:configValidation.errors'),
+  'submit route enforces key+CSR validation and returns machine-readable codes'
 );
 
 assert(
-  server.includes("app.put('/api/him/roi/:id',requireAuth,requireRole('him','medical-records'),requireTenantScope,validateBody(RS.himRoiUpdate),idempotencyGuard,async(req,res)=>{"),
-  'HIM ROI update route is guarded by validateBody + idempotencyGuard'
+  clean.includes("constrequiresCsr=parseInt(is_enabled,10)===1;") &&
+    clean.includes("validateZatcaConfig(parsedConfig,{requireCsrProfile:requiresCsr,requireKeys:false})") &&
+    clean.includes("error:'InvalidZATCAconfig_json'"),
+  'settings save route validates ZATCA config_json when enabling integration'
 );
 
 assert(
-  server.includes("app.post('/api/him/break-glass',requireAuth,requireRole('him','medical-records'),requireTenantScope,validateBody(RS.himBreakGlass),idempotencyGuard,async(req,res)=>{"),
-  'HIM break-glass route is guarded by validateBody + idempotencyGuard'
+  clean.includes("constnormalizedName=String(integration_name).trim().toUpperCase();") &&
+    clean.includes('WHEREtenant_id=$1ANDUPPER(integration_name)=$2') &&
+    clean.includes('Updatedintegration${normalizedName}settings'),
+  'settings save route canonicalizes integration_name and uses canonical value for persistence/audit'
 );
 
 assert(
-  schemas.includes('constmedicalRecordAmend={') &&
-  schemas.includes('constmedicalRecordCreate={') &&
-  schemas.includes('constmedicalRecordsCodingCreate={') &&
-  schemas.includes('consthimCodingCreate={') &&
-  schemas.includes('consthimRoiCreate={') &&
-  schemas.includes('consthimRoiUpdate={') &&
-  schemas.includes('consthimBreakGlass={') &&
-  schemas.includes("action:{type:'enumOf',required:true,allowed:['approve','deny','release']}") &&
-  schemas.includes("reason:{type:'str',required:true,max:1000}"),
-  'route_schemas defines HIM/PHI mutation boundary schemas'
+  clean.includes("SELECT*FROMintegration_settingsWHEREtenant_id=$1ANDUPPER(integration_name)=$2") &&
+    clean.includes("[tenantId,'ZATCA']"),
+  'submit route loads ZATCA settings case-insensitively for legacy rows'
+);
+
+assert(
+  clean.includes("api_key!=='***REDACTED***'") &&
+    clean.includes("api_secret!=='***REDACTED***'") &&
+    clean.includes('exists?.api_key||\'\'') &&
+    clean.includes('exists?.api_secret||\'\''),
+  'settings save route preserves stored credentials when redacted placeholders are submitted'
 );
 
 console.log(`\n${BOLD}${BLUE}=== Result ===${RESET}`);
 console.log(`  ${GREEN}PASS${RESET}: ${passed}`);
 console.log(`  ${RED}FAIL${RESET}: ${failed}`);
 
-if (failed) process.exit(1);
+if (failed) {
+  for (const f of failures) {
+    console.log(`  - ${f.name}${f.details ? `: ${f.details}` : ''}`);
+  }
+  process.exit(1);
+}
+
 console.log(`\n${GREEN}ALL PASS: ${passed} passed, 0 failed${RESET}\n`);

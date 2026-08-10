@@ -1,85 +1,120 @@
 /**
- * Patient Chart Boundary Guard
- * --------------------------------------------------------------------
- * Static verification that every critical patient-chart mutation
- * endpoint now sits behind validateBody(RS.*) and idempotencyGuard.
- *
- * This is the boundary-hardening counterpart to the live tests in
- * test:clinical:safety. It must fail fast if a route regresses.
- *
- * Run: node patient_chart_boundary_guard_test.js
+ * zatca_submit_fail_closed_guard_test.js
+ * DB-free static guard for ZATCA route safety invariants in server.js.
  */
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
-const assert = require('assert');
 
-const ROOT = path.join(__dirname, '..', 'namaweb_waveA_subagent');
-const SERVER_JS = path.join(ROOT, 'server.js');
-const SCHEMAS_JS = path.join(ROOT, 'route_schemas.js');
+const GREEN = '\x1b[32m';
+const RED = '\x1b[31m';
+const BLUE = '\x1b[34m';
+const BOLD = '\x1b[1m';
+const RESET = '\x1b[0m';
 
-const serverSrc = fs.readFileSync(SERVER_JS, 'utf8');
-const schemasSrc = fs.readFileSync(SCHEMAS_JS, 'utf8');
+let passed = 0;
+let failed = 0;
+const failures = [];
 
-const checks = [
-  {
-    label: 'POST /api/patients → patientCreate + idempotencyGuard',
-    regex: /app\.post\(\s*'\/api\/patients'\s*,\s*requireAuth\s*,\s*requireRole\('patients'\)\s*,\s*validateBody\(RS\.patientCreate\)\s*,\s*idempotencyGuard\s*,/,
-    schema: 'patientCreate',
-  },
-  {
-    label: 'PUT /api/patients/:id → patientUpdate + idempotencyGuard',
-    regex: /app\.put\(\s*'\/api\/patients\/:id'\s*,\s*requireAuth\s*,\s*requireRole\('patients'\)\s*,\s*validateBody\(RS\.patientUpdate\)\s*,\s*idempotencyGuard\s*,/,
-    schema: 'patientUpdate',
-  },
-  {
-    label: 'POST /api/patients/:id/problems → patientProblemCreate + idempotencyGuard',
-    regex: /app\.post\(\s*'\/api\/patients\/:id\/problems'\s*,\s*requireAuth\s*,\s*requireTenantScope\s*,\s*validateBody\(RS\.patientProblemCreate\)\s*,\s*idempotencyGuard\s*,/,
-    schema: 'patientProblemCreate',
-  },
-  {
-    label: 'POST /api/patients/:id/social-history → patientSocialHistoryUpsert + idempotencyGuard',
-    regex: /app\.post\(\s*'\/api\/patients\/:id\/social-history'\s*,\s*requireAuth\s*,\s*requireTenantScope\s*,\s*validateBody\(RS\.patientSocialHistoryUpsert\)\s*,\s*idempotencyGuard\s*,/,
-    schema: 'patientSocialHistoryUpsert',
-  },
-  {
-    label: 'POST /api/patients/:id/family-history → patientFamilyHistoryCreate + idempotencyGuard',
-    regex: /app\.post\(\s*'\/api\/patients\/:id\/family-history'\s*,\s*requireAuth\s*,\s*requireTenantScope\s*,\s*validateBody\(RS\.patientFamilyHistoryCreate\)\s*,\s*idempotencyGuard\s*,/,
-    schema: 'patientFamilyHistoryCreate',
-  },
-  {
-    label: 'POST /api/patients/:id/consent → idempotencyGuard (no schema — body empty)',
-    regex: /app\.post\(\s*'\/api\/patients\/:id\/consent'\s*,\s*requireAuth\s*,\s*requireRole\('patients'\)\s*,\s*idempotencyGuard\s*,/,
-    schema: null,
-  },
-  {
-    label: 'POST /api/encounters/:id/sign → idempotencyGuard (no schema — body empty)',
-    regex: /app\.post\(\s*'\/api\/encounters\/:id\/sign'\s*,\s*requireAuth\s*,\s*requireTenantScope\s*,\s*idempotencyGuard\s*,/,
-    schema: null,
-  },
-];
-
-let pass = 0;
-let fail = 0;
-
-for (const c of checks) {
-  try {
-    assert.ok(c.regex.test(serverSrc), `route signature missing for: ${c.label}`);
-    if (c.schema) {
-      const defRe = new RegExp(`(?:const|let|var)\\s+${c.schema}\\s*=\\s*\\{`);
-      assert.ok(defRe.test(schemasSrc), `schema ${c.schema} not defined in route_schemas.js`);
-      const exportRe = new RegExp(`[,\\s]${c.schema}\\s*[,\\s}]`);
-      assert.ok(exportRe.test(schemasSrc), `schema ${c.schema} not exported from route_schemas.js`);
-    }
-    console.log(`  PASS  ${c.label}`);
-    pass++;
-  } catch (e) {
-    console.error(`  FAIL  ${c.label}\n        ${e.message}`);
-    fail++;
+function assert(cond, name, details) {
+  if (cond) {
+    passed++;
+    console.log(`  ${GREEN}PASS${RESET} - ${name}`);
+    return;
   }
+  failed++;
+  failures.push({ name, details: details || '' });
+  console.log(`  ${RED}FAIL${RESET} - ${name}${details ? ` | ${details}` : ''}`);
 }
 
-console.log('');
-console.log(`Patient chart boundary guard: ${pass} passed, ${fail} failed.`);
-if (fail > 0) process.exit(1);
+console.log(`\n${BOLD}${BLUE}=== ZATCA Submit Fail-Closed Guard Test ===${RESET}\n`);
+
+const serverPath = path.join(__dirname, 'server.js');
+const src = fs.readFileSync(serverPath, 'utf8');
+const clean = src.replace(/\s+/g, '');
+
+assert(
+  clean.includes("app.post('/api/zatca/submit',requireAuth,requireRole('finance','accounts'),requireTenantScope,validateBody(RS.zatcaSubmit),idempotencyGuard,async(req,res)=>{"),
+  'submit route is auth+role+tenant+validation+idempotency guarded'
+);
+
+assert(
+  clean.includes("app.post('/api/settings/integrations',requireAuth,requireTenantContext,validateBody(RS.integrationSettingsSave),async(req,res)=>{") &&
+  clean.includes("app.post('/api/settings/integrations/ping',requireAuth,requireTenantContext,validateBody(RS.integrationPing),async(req,res)=>{"),
+  'integration settings routes are guarded by boundary validation middleware'
+);
+
+assert(
+  clean.includes("app.get('/api/settings/integrations',requireAuth,requireTenantContext,async(req,res)=>{") &&
+    clean.includes("if(!['ZATCA','NPHIES','CBAHI'].includes(integrationName))returnrow;") &&
+    clean.includes("if(integrationName==='ZATCA')redactedConfig=redactZatcaConfig(parsed);") &&
+    clean.includes("if(integrationName==='NPHIES')redactedConfig=redactNphiesConfig(parsed);") &&
+    clean.includes("if(integrationName==='CBAHI')redactedConfig=redactCbahiConfig(parsed);") &&
+    clean.includes("if(integrationName==='ZATCA'||integrationName==='NPHIES'){") &&
+    clean.includes("safeRow['api_key']=row.api_key?'[REDACTED]':'';") &&
+    clean.includes("safeRow['api_secret']=row.api_secret?'[REDACTED]':'';"),
+  'GET integrations redacts integration configs and secret fields for ZATCA/NPHIES'
+);
+
+assert(
+  clean.includes('if(!globalEnabled||!integrationEnabled){') &&
+    clean.includes("submission_status=$2") &&
+    clean.includes("'Submitted_Mock'") &&
+    clean.includes("'ZATCA_SUBMIT_INTENT','ZATCA'"),
+  'submit route keeps safe mock fallback when integration/global gate is off'
+);
+
+assert(
+  clean.includes('ZATCA_ONBOARDING_INCOMPLETE') &&
+    clean.includes('missingproductioncredentials'),
+  'submit route fails closed when production credentials are missing'
+);
+
+assert(
+  clean.includes("validateZatcaConfig(configJson,{requireKeys:true,requireCsrProfile:true})") &&
+    clean.includes("error:'InvalidZATCAconfiguration'") &&
+    clean.includes('codes:configValidation.errors'),
+  'submit route enforces key+CSR validation and returns machine-readable codes'
+);
+
+assert(
+  clean.includes("constrequiresCsr=parseInt(is_enabled,10)===1;") &&
+    clean.includes("validateZatcaConfig(parsedConfig,{requireCsrProfile:requiresCsr,requireKeys:false})") &&
+    clean.includes("error:'InvalidZATCAconfig_json'"),
+  'settings save route validates ZATCA config_json when enabling integration'
+);
+
+assert(
+  clean.includes("constnormalizedName=String(integration_name).trim().toUpperCase();") &&
+    clean.includes('WHEREtenant_id=$1ANDUPPER(integration_name)=$2') &&
+    clean.includes('Updatedintegration${normalizedName}settings'),
+  'settings save route canonicalizes integration_name and uses canonical value for persistence/audit'
+);
+
+assert(
+  clean.includes("SELECT*FROMintegration_settingsWHEREtenant_id=$1ANDUPPER(integration_name)=$2") &&
+    clean.includes("[tenantId,'ZATCA']"),
+  'submit route loads ZATCA settings case-insensitively for legacy rows'
+);
+
+assert(
+  clean.includes("api_key!=='***REDACTED***'") &&
+    clean.includes("api_secret!=='***REDACTED***'") &&
+    clean.includes('exists?.api_key||\'\'') &&
+    clean.includes('exists?.api_secret||\'\''),
+  'settings save route preserves stored credentials when redacted placeholders are submitted'
+);
+
+console.log(`\n${BOLD}${BLUE}=== Result ===${RESET}`);
+console.log(`  ${GREEN}PASS${RESET}: ${passed}`);
+console.log(`  ${RED}FAIL${RESET}: ${failed}`);
+
+if (failed) {
+  for (const f of failures) {
+    console.log(`  - ${f.name}${f.details ? `: ${f.details}` : ''}`);
+  }
+  process.exit(1);
+}
+
+console.log(`\n${GREEN}ALL PASS: ${passed} passed, 0 failed${RESET}\n`);

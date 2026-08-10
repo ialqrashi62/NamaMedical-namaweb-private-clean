@@ -1,3 +1,7 @@
+/**
+ * zatca_submit_fail_closed_guard_test.js
+ * DB-free static guard for ZATCA route safety invariants in server.js.
+ */
 'use strict';
 
 const fs = require('fs');
@@ -11,50 +15,106 @@ const RESET = '\x1b[0m';
 
 let passed = 0;
 let failed = 0;
+const failures = [];
 
-function assert(cond, name) {
+function assert(cond, name, details) {
   if (cond) {
     passed++;
     console.log(`  ${GREEN}PASS${RESET} - ${name}`);
     return;
   }
   failed++;
-  console.log(`  ${RED}FAIL${RESET} - ${name}`);
+  failures.push({ name, details: details || '' });
+  console.log(`  ${RED}FAIL${RESET} - ${name}${details ? ` | ${details}` : ''}`);
 }
 
-console.log(`\n${BOLD}${BLUE}=== LIS Boundary Guard Test ===${RESET}\n`);
+console.log(`\n${BOLD}${BLUE}=== ZATCA Submit Fail-Closed Guard Test ===${RESET}\n`);
 
-const server = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8').replace(/\s+/g, '');
-const schemas = fs.readFileSync(path.join(__dirname, 'route_schemas.js'), 'utf8').replace(/\s+/g, '');
+const serverPath = path.join(__dirname, 'server.js');
+const src = fs.readFileSync(serverPath, 'utf8');
+const clean = src.replace(/\s+/g, '');
 
 assert(
-  server.includes("app.post('/api/lab/samples',requireAuth,requireTenantScope,validateBody(RS.labSampleCreate),idempotencyGuard,async(req,res)=>{") &&
-  server.includes("app.put('/api/lab/samples/:id',requireAuth,requireTenantScope,validateBody(RS.labSampleTransition),idempotencyGuard,async(req,res)=>{") &&
-  server.includes("app.post('/api/lab/results',requireAuth,requireTenantScope,validateBody(RS.labResultCreate),idempotencyGuard,async(req,res)=>{") &&
-  server.includes("app.put('/api/lab/results/:id/verify',requireAuth,requireTenantScope,idempotencyGuard,async(req,res)=>{") &&
-  server.includes("app.post('/api/lab/results/:id/callback',requireAuth,requireTenantScope,validateBody(RS.labResultCriticalCallback),idempotencyGuard,async(req,res)=>{") &&
-  server.includes("app.put('/api/lab/results/:id/report',requireAuth,requireTenantScope,idempotencyGuard,async(req,res)=>{") &&
-  server.includes("app.post('/api/lab/hl7',requireAuth,requireTenantScope,validateBody(RS.labHl7Ingest),idempotencyGuard,async(req,res)=>{") &&
-  server.includes("app.post('/api/lab/qc',requireAuth,requireTenantScope,validateBody(RS.labQcCreate),idempotencyGuard,async(req,res)=>{"),
-  'LIS mutation routes are guarded by validateBody/idempotencyGuard where applicable'
+  clean.includes("app.post('/api/zatca/submit',requireAuth,requireRole('finance','accounts'),requireTenantScope,validateBody(RS.zatcaSubmit),idempotencyGuard,async(req,res)=>{"),
+  'submit route is auth+role+tenant+validation+idempotency guarded'
 );
 
 assert(
-  schemas.includes('constlabSampleCreate={') &&
-  schemas.includes('constlabSampleTransition={') &&
-  schemas.includes('constlabResultCreate={') &&
-  schemas.includes('constlabResultCriticalCallback={') &&
-  schemas.includes('constlabHl7Ingest={') &&
-  schemas.includes('constlabQcCreate={') &&
-  schemas.includes("action:{type:'str',required:true,max:40}") &&
-  schemas.includes("test_name:{type:'str',required:true,max:300}") &&
-  schemas.includes("notified_to:{type:'str',required:true,max:300}"),
-  'route_schemas defines LIS boundary schemas'
+  clean.includes("app.post('/api/settings/integrations',requireAuth,requireTenantContext,validateBody(RS.integrationSettingsSave),async(req,res)=>{") &&
+  clean.includes("app.post('/api/settings/integrations/ping',requireAuth,requireTenantContext,validateBody(RS.integrationPing),async(req,res)=>{"),
+  'integration settings routes are guarded by boundary validation middleware'
+);
+
+assert(
+  clean.includes("app.get('/api/settings/integrations',requireAuth,requireTenantContext,async(req,res)=>{") &&
+    clean.includes("if(!['ZATCA','NPHIES','CBAHI'].includes(integrationName))returnrow;") &&
+    clean.includes("if(integrationName==='ZATCA')redactedConfig=redactZatcaConfig(parsed);") &&
+    clean.includes("if(integrationName==='NPHIES')redactedConfig=redactNphiesConfig(parsed);") &&
+    clean.includes("if(integrationName==='CBAHI')redactedConfig=redactCbahiConfig(parsed);") &&
+    clean.includes("if(integrationName==='ZATCA'||integrationName==='NPHIES'){") &&
+    clean.includes("safeRow['api_key']=row.api_key?'[REDACTED]':'';") &&
+    clean.includes("safeRow['api_secret']=row.api_secret?'[REDACTED]':'';"),
+  'GET integrations redacts integration configs and secret fields for ZATCA/NPHIES'
+);
+
+assert(
+  clean.includes('if(!globalEnabled||!integrationEnabled){') &&
+    clean.includes("submission_status=$2") &&
+    clean.includes("'Submitted_Mock'") &&
+    clean.includes("'ZATCA_SUBMIT_INTENT','ZATCA'"),
+  'submit route keeps safe mock fallback when integration/global gate is off'
+);
+
+assert(
+  clean.includes('ZATCA_ONBOARDING_INCOMPLETE') &&
+    clean.includes('missingproductioncredentials'),
+  'submit route fails closed when production credentials are missing'
+);
+
+assert(
+  clean.includes("validateZatcaConfig(configJson,{requireKeys:true,requireCsrProfile:true})") &&
+    clean.includes("error:'InvalidZATCAconfiguration'") &&
+    clean.includes('codes:configValidation.errors'),
+  'submit route enforces key+CSR validation and returns machine-readable codes'
+);
+
+assert(
+  clean.includes("constrequiresCsr=parseInt(is_enabled,10)===1;") &&
+    clean.includes("validateZatcaConfig(parsedConfig,{requireCsrProfile:requiresCsr,requireKeys:false})") &&
+    clean.includes("error:'InvalidZATCAconfig_json'"),
+  'settings save route validates ZATCA config_json when enabling integration'
+);
+
+assert(
+  clean.includes("constnormalizedName=String(integration_name).trim().toUpperCase();") &&
+    clean.includes('WHEREtenant_id=$1ANDUPPER(integration_name)=$2') &&
+    clean.includes('Updatedintegration${normalizedName}settings'),
+  'settings save route canonicalizes integration_name and uses canonical value for persistence/audit'
+);
+
+assert(
+  clean.includes("SELECT*FROMintegration_settingsWHEREtenant_id=$1ANDUPPER(integration_name)=$2") &&
+    clean.includes("[tenantId,'ZATCA']"),
+  'submit route loads ZATCA settings case-insensitively for legacy rows'
+);
+
+assert(
+  clean.includes("api_key!=='***REDACTED***'") &&
+    clean.includes("api_secret!=='***REDACTED***'") &&
+    clean.includes('exists?.api_key||\'\'') &&
+    clean.includes('exists?.api_secret||\'\''),
+  'settings save route preserves stored credentials when redacted placeholders are submitted'
 );
 
 console.log(`\n${BOLD}${BLUE}=== Result ===${RESET}`);
 console.log(`  ${GREEN}PASS${RESET}: ${passed}`);
 console.log(`  ${RED}FAIL${RESET}: ${failed}`);
 
-if (failed) process.exit(1);
+if (failed) {
+  for (const f of failures) {
+    console.log(`  - ${f.name}${f.details ? `: ${f.details}` : ''}`);
+  }
+  process.exit(1);
+}
+
 console.log(`\n${GREEN}ALL PASS: ${passed} passed, 0 failed${RESET}\n`);

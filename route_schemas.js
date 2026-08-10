@@ -2835,6 +2835,382 @@ const orWhoChecklist = {
     confirmed_by:      { type: 'str', required: false, max: 200 }
 };
 
+// WAVE E+F hardening: cosmetic/portal/ews/ovr/rehab/dental/oncology/visits/zatca/vendors/fhir/hl7/safety/mfa/auth + many validateBody-only additions
+const mfaEnroll = {
+    factor_type:       { type: 'enumOf', allowed: ['totp', 'sms', 'email', 'fido', ''], required: true },
+    phone:             { type: 'phone', required: false },
+    email:             { type: 'str', required: false, max: 200 }
+};
+
+const cosmeticCaseCreate = {
+    patient_id:        { type: 'id', required: true },
+    procedure_type:    { type: 'str', required: false, max: 200 },
+    procedure_name:    { type: 'str', required: false, max: 200 },
+    consultation_date: { type: 'dateStr', required: false },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
+
+const cosmeticCaseUpdate = {
+    status:            { type: 'enumOf', allowed: ['consultation', 'scheduled', 'in-progress', 'completed', 'cancelled', ''], required: false },
+    procedure_type:    { type: 'str', required: false, max: 200 },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
+
+const cosmeticConsentCreate = {
+    patient_id:        { type: 'id', required: true },
+    case_id:           { type: 'id', required: false },
+    procedure_name:    { type: 'str', required: false, max: 200 },
+    signature_data:    { type: 'str', required: false, max: 200000 }
+};
+
+const cosmeticFollowupCreate = {
+    case_id:           { type: 'id', required: true },
+    patient_id:        { type: 'id', required: false },
+    followup_date:     { type: 'dateStr', required: false },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
+
+const portalUserCreate = {
+    email:             { type: 'str', required: true, max: 200 },
+    password:          { type: 'str', required: true, max: 200 },
+    display_name:      { type: 'str', required: false, max: 200 },
+    phone:             { type: 'phone', required: false }
+};
+
+const portalAppointmentUpdate = {
+    status:            { type: 'enumOf', allowed: ['pending', 'confirmed', 'cancelled', 'rescheduled', 'completed', ''], required: false },
+    notes:             { type: 'str', required: false, max: 2000 }
+};
+
+const portalMessageCreate = {
+    recipient_id:      { type: 'id', required: false },
+    subject:           { type: 'str', required: false, max: 200 },
+    body:              { type: 'str', required: true, max: 8000 }
+};
+
+const zatcaGenerate = {
+    invoice_id:        { type: 'id', required: true },
+    format:            { type: 'enumOf', allowed: ['xml', 'json', 'pdf', ''], required: false }
+};
+
+const ewsAssess = {
+    patient_id:        { type: 'id', required: true },
+    encounter_id:      { type: 'id', required: false },
+    vitals:            { type: 'str', required: false, max: 4000 },
+    score:             { type: 'num', required: false, min: 0, max: 30 }
+};
+
+const ovrIncidentCreate = {
+    incident_date:     { type: 'dateStr', required: true },
+    incident_type:     { type: 'enumOf', allowed: ['patient-safety', 'medication-error', 'fall', 'equipment', 'documentation', 'near-miss', 'other', ''], required: true },
+    severity:          { type: 'enumOf', allowed: ['low', 'moderate', 'high', 'critical', 'sentinel', ''], required: false },
+    description:       { type: 'str', required: false, max: 4000 },
+    patient_id:        { type: 'id', required: false }
+};
+
+const ovrIncidentUpdate = {
+    status:            { type: 'enumOf', allowed: ['open', 'investigating', 'resolved', 'closed', ''], required: false },
+    root_cause:        { type: 'str', required: false, max: 4000 },
+    corrective_action: { type: 'str', required: false, max: 4000 }
+};
+
+const rehabPatientCreate = {
+    patient_id:        { type: 'id', required: true },
+    diagnosis:         { type: 'str', required: false, max: 1000 },
+    program_type:      { type: 'enumOf', allowed: ['physical', 'occupational', 'speech', 'cardiac', 'pulmonary', 'neuro', 'other', ''], required: false }
+};
+
+const rehabSessionCreate = {
+    patient_id:        { type: 'id', required: true },
+    session_date:      { type: 'dateStr', required: false },
+    duration_minutes:  { type: 'int', required: false, min: 1, max: 600 },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
+
+const rehabGoalCreate = {
+    patient_id:        { type: 'id', required: true },
+    goal_description:  { type: 'str', required: true, max: 1000 },
+    target_date:       { type: 'dateStr', required: false },
+    priority:          { type: 'enumOf', allowed: ['low', 'normal', 'high', ''], required: false }
+};
+
+const rehabGoalUpdate = {
+    status:            { type: 'enumOf', allowed: ['active', 'achieved', 'on-hold', 'cancelled', ''], required: false },
+    progress_notes:    { type: 'str', required: false, max: 4000 }
+};
+
+const rehabAssessmentCreate = {
+    patient_id:        { type: 'id', required: true },
+    assessment_date:   { type: 'dateStr', required: false },
+    assessment_type:   { type: 'enumOf', allowed: ['initial', 'progress', 'discharge', 're-assessment', ''], required: false },
+    findings:          { type: 'str', required: false, max: 4000 }
+};
+
+const dentalRecordCreate = {
+    patient_id:        { type: 'id', required: true },
+    encounter_id:      { type: 'id', required: false },
+    tooth_number:      { type: 'str', required: false, max: 20 },
+    procedure:         { type: 'str', required: false, max: 200 },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
+
+const dentalPeriodontalCreate = {
+    patient_id:        { type: 'id', required: true },
+    pocket_depths:     { type: 'str', required: false, max: 4000 },
+    bleeding_index:    { type: 'num', required: false, min: 0, max: 100 },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
+
+const dentalImageCreate = {
+    patient_id:        { type: 'id', required: true },
+    image_type:        { type: 'enumOf', allowed: ['xray', 'panoramic', 'photo', 'scan', 'other', ''], required: false },
+    tooth_number:      { type: 'str', required: false, max: 20 },
+    notes:             { type: 'str', required: false, max: 1000 }
+};
+
+const oncologyRegimenCreate = {
+    patient_id:        { type: 'id', required: true },
+    encounter_id:      { type: 'id', required: false },
+    regimen_name:      { type: 'str', required: true, max: 200 },
+    cycle_number:      { type: 'int', required: false, min: 1, max: 100 },
+    start_date:        { type: 'dateStr', required: false },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
+
+const visitCreate = {
+    patient_id:        { type: 'id', required: true },
+    visit_type:        { type: 'enumOf', allowed: ['opd', 'ipd', 'emergency', 'observation', 'day-care', 'other', ''], required: true },
+    visit_date:        { type: 'dateStr', required: false },
+    notes:             { type: 'str', required: false, max: 4000 }
+};
+
+const visitLifecycleCreate = {
+    patient_id:        { type: 'id', required: true },
+    stage:             { type: 'enumOf', allowed: ['check-in', 'triage', 'consultation', 'waiting', 'investigation', 'treatment', 'discharge', 'admission', 'other', ''], required: true },
+    timestamp:         { type: 'dateStr', required: false }
+};
+
+const visitLifecycleUpdate = {
+    stage:             { type: 'enumOf', allowed: ['check-in', 'triage', 'consultation', 'waiting', 'investigation', 'treatment', 'discharge', 'admission', 'other', ''], required: false },
+    notes:             { type: 'str', required: false, max: 2000 }
+};
+
+const consentSign = {
+    consent_id:        { type: 'id', required: true },
+    signer_name:       { type: 'str', required: false, max: 200 },
+    signer_role:       { type: 'enumOf', allowed: ['patient', 'guardian', 'witness', 'doctor', 'nurse', ''], required: false },
+    signature_data:    { type: 'str', required: false, max: 200000 }
+};
+
+const drugInteractionsCheck = {
+    patient_id:        { type: 'id', required: false },
+    medications:       { type: 'str', required: true, max: 8000 }
+};
+
+const allergyCheck = {
+    patient_id:        { type: 'id', required: false },
+    medications:       { type: 'str', required: false, max: 8000 },
+    substances:        { type: 'str', required: false, max: 8000 }
+};
+
+const cashDrawerOpen = {
+    terminal_id:       { type: 'str', required: true, max: 64 },
+    opening_amount:    { type: 'num', required: true, min: 0 },
+    opened_by:         { type: 'id', required: false }
+};
+
+const cashDrawerClose = {
+    terminal_id:       { type: 'str', required: true, max: 64 },
+    closing_amount:    { type: 'num', required: true, min: 0 },
+    expected_amount:   { type: 'num', required: false, min: 0 },
+    notes:             { type: 'str', required: false, max: 2000 }
+};
+
+const authChangePassword = {
+    current_password:  { type: 'str', required: true, max: 200 },
+    new_password:      { type: 'str', required: true, max: 200 }
+};
+
+const vendorCreate = {
+    vendor_name:       { type: 'str', required: true, max: 200 },
+    vendor_code:       { type: 'str', required: false, max: 64 },
+    contact_email:     { type: 'str', required: false, max: 200 },
+    contact_phone:     { type: 'phone', required: false },
+    address:           { type: 'str', required: false, max: 500 }
+};
+
+const fhirResourceCreate = {
+    resourceType:      { type: 'str', required: true, max: 64 },
+    resource:          { type: 'str', required: true, max: 200000 }
+};
+
+const hl7MessageSend = {
+    message_type:      { type: 'enumOf', allowed: ['ADT', 'ORM', 'ORU', 'SIU', 'MDM', 'DFT', 'BAR', 'other', ''], required: true },
+    payload:           { type: 'str', required: true, max: 200000 },
+    external_system:   { type: 'str', required: false, max: 200 }
+};
+
+const safetyWasteLogCreate = {
+    waste_type:        { type: 'enumOf', allowed: ['infectious', 'sharps', 'pharmaceutical', 'chemical', 'radioactive', 'general', 'other', ''], required: true },
+    weight_kg:         { type: 'num', required: false, min: 0, max: 100000 },
+    pickup_location:   { type: 'str', required: false, max: 200 },
+    notes:             { type: 'str', required: false, max: 2000 }
+};
+
+const notificationRead = {};
+
+const adminBackup = {
+    backup_type:       { type: 'enumOf', allowed: ['full', 'incremental', 'differential', 'snapshot', ''], required: false },
+    destination:       { type: 'str', required: false, max: 200 },
+    notes:             { type: 'str', required: false, max: 1000 }
+};
+
+const appointmentDelete = {
+    reason:            { type: 'str', required: false, max: 1000 }
+};
+
+const appointmentCheckin = {
+    checkin_time:      { type: 'dateStr', required: false },
+    notes:             { type: 'str', required: false, max: 1000 }
+};
+
+const appointmentNoShow = {
+    reason:            { type: 'str', required: false, max: 1000 }
+};
+
+const employeeDelete = {
+    reason:            { type: 'str', required: false, max: 1000 },
+    confirm:           { type: 'bool', required: true }
+};
+
+const nphiesClaimSubmit = {
+    submission_notes:  { type: 'str', required: false, max: 2000 },
+    force_submit:      { type: 'bool', required: false }
+};
+
+const medicalRecordSign = {
+    signature_data:    { type: 'str', required: false, max: 200000 },
+    signed_by:         { type: 'id', required: false },
+    notes:             { type: 'str', required: false, max: 2000 }
+};
+
+const labResultVerify = {
+    verified_by:       { type: 'id', required: false },
+    notes:             { type: 'str', required: false, max: 2000 }
+};
+
+const labResultReport = {
+    reported_by:       { type: 'id', required: false },
+    report_text:       { type: 'str', required: false, max: 50000 }
+};
+
+const radiologyOrderUpload = {
+    image_type:        { type: 'enumOf', allowed: ['dicom', 'jpeg', 'png', 'pdf', 'other', ''], required: false },
+    notes:             { type: 'str', required: false, max: 2000 }
+};
+
+const radiologyReportSign = {
+    signature_data:    { type: 'str', required: false, max: 200000 },
+    notes:             { type: 'str', required: false, max: 2000 }
+};
+
+const financeJournalPost = {
+    posted_by:         { type: 'id', required: false },
+    posting_notes:     { type: 'str', required: false, max: 2000 }
+};
+
+const financeJournalReverse = {
+    reversal_reason:   { type: 'str', required: false, max: 2000 },
+    reversed_by:       { type: 'id', required: false }
+};
+
+const settingsUserDelete = {
+    reason:            { type: 'str', required: false, max: 1000 },
+    confirm:           { type: 'bool', required: true }
+};
+
+const patientConsentCreate = {
+    consent_type:      { type: 'enumOf', allowed: ['general', 'surgical', 'anesthesia', 'research', 'data-sharing', 'other', ''], required: true },
+    signature_data:    { type: 'str', required: false, max: 200000 },
+    expiration_date:   { type: 'dateStr', required: false }
+};
+
+const clinicalRecordCreate = {
+    patient_id:        { type: 'id', required: true },
+    encounter_id:      { type: 'id', required: false },
+    template_id:       { type: 'id', required: false },
+    recorded_values:   { type: 'str', required: false, max: 50000 }
+};
+
+const clinicalRecordLock = {
+    lock_reason:       { type: 'str', required: false, max: 1000 }
+};
+
+const clinicalNoteLock = {
+    lock_reason:       { type: 'str', required: false, max: 1000 }
+};
+
+const formDelete = {
+    reason:            { type: 'str', required: false, max: 1000 }
+};
+
+const encounterSign = {
+    signature_data:    { type: 'str', required: false, max: 200000 },
+    notes:             { type: 'str', required: false, max: 2000 }
+};
+
+const queuePatientCall = {
+    called_by:         { type: 'id', required: false },
+    room:              { type: 'str', required: false, max: 80 }
+};
+
+const settingsRoomDelete = {
+    reason:            { type: 'str', required: false, max: 1000 }
+};
+
+const transportRequestUpdate = {
+    status:            { type: 'enumOf', allowed: ['pending', 'assigned', 'in-transit', 'completed', 'cancelled', ''], required: false },
+    notes:             { type: 'str', required: false, max: 2000 }
+};
+
+const messageRead = {};
+const messageDelete = {
+    reason:            { type: 'str', required: false, max: 1000 }
+};
+
+const pathologySpecimenSignout = {
+    signed_out_by:     { type: 'id', required: false },
+    destination:       { type: 'str', required: false, max: 200 }
+};
+
+const inventoryDelete = {
+    reason:            { type: 'str', required: false, max: 1000 }
+};
+
+const cssdCycleRelease = {
+    released_by:       { type: 'id', required: false },
+    release_notes:     { type: 'str', required: false, max: 2000 }
+};
+
+const smartTemplateDelete = {
+    reason:            { type: 'str', required: false, max: 1000 }
+};
+
+const nphiesRemittancePostToAr = {
+    posting_date:      { type: 'dateStr', required: false },
+    notes:             { type: 'str', required: false, max: 2000 }
+};
+
+const zatcaCreditNote = {
+    invoice_id:        { type: 'id', required: true },
+    reason:            { type: 'str', required: false, max: 1000 },
+    amount:            { type: 'num', required: false, min: 0 }
+};
+
+const zatcaCreditNoteSubmit = {
+    submission_notes:  { type: 'str', required: false, max: 2000 }
+};
+
 module.exports = {
     invoiceCreate,
     journalCreate,
@@ -2896,6 +3272,73 @@ module.exports = {
     maintenanceCalibrationCreate,
     orSlotCancel,
     orWhoChecklist,
+    mfaEnroll,
+    cosmeticCaseCreate,
+    cosmeticCaseUpdate,
+    cosmeticConsentCreate,
+    cosmeticFollowupCreate,
+    portalUserCreate,
+    portalAppointmentUpdate,
+    portalMessageCreate,
+    zatcaGenerate,
+    ewsAssess,
+    ovrIncidentCreate,
+    ovrIncidentUpdate,
+    rehabPatientCreate,
+    rehabSessionCreate,
+    rehabGoalCreate,
+    rehabGoalUpdate,
+    rehabAssessmentCreate,
+    dentalRecordCreate,
+    dentalPeriodontalCreate,
+    dentalImageCreate,
+    oncologyRegimenCreate,
+    visitCreate,
+    visitLifecycleCreate,
+    visitLifecycleUpdate,
+    consentSign,
+    drugInteractionsCheck,
+    allergyCheck,
+    cashDrawerOpen,
+    cashDrawerClose,
+    authChangePassword,
+    vendorCreate,
+    fhirResourceCreate,
+    hl7MessageSend,
+    safetyWasteLogCreate,
+    notificationRead,
+    adminBackup,
+    appointmentDelete,
+    appointmentCheckin,
+    appointmentNoShow,
+    employeeDelete,
+    nphiesClaimSubmit,
+    medicalRecordSign,
+    labResultVerify,
+    labResultReport,
+    radiologyOrderUpload,
+    radiologyReportSign,
+    financeJournalPost,
+    financeJournalReverse,
+    settingsUserDelete,
+    patientConsentCreate,
+    clinicalRecordCreate,
+    clinicalRecordLock,
+    clinicalNoteLock,
+    formDelete,
+    encounterSign,
+    queuePatientCall,
+    settingsRoomDelete,
+    transportRequestUpdate,
+    messageRead,
+    messageDelete,
+    pathologySpecimenSignout,
+    inventoryDelete,
+    cssdCycleRelease,
+    smartTemplateDelete,
+    nphiesRemittancePostToAr,
+    zatcaCreditNote,
+    zatcaCreditNoteSubmit,
     invoiceGenerate,
     invoicePay,
     paymentMoyasarInitiate,

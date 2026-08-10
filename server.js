@@ -1081,7 +1081,7 @@ app.get('/api/mfa/status', requireAuth, async (req, res) => {
 });
 
 // begin enrollment: issue a fresh secret (mfa stays disabled until /verify confirms a live code)
-app.post('/api/mfa/enroll', requireAuth, idempotencyGuard, async (req, res) => {
+app.post('/api/mfa/enroll', requireAuth, validateBody(RS.mfaEnroll), idempotencyGuard, async (req, res) => {
     try {
         const uid = req.session.user.id;
         const existing = (await pool.query('SELECT mfa_enabled FROM user_mfa WHERE user_id=$1', [uid])).rows[0];
@@ -1604,7 +1604,7 @@ app.post('/api/appointments', requireAuth, requireRole('appointments'), validate
     } catch (e) { console.error('APPOINTMENTS POST ERROR:', e); res.status(500).json({ error: 'Server error' }); }
 });
 
-app.delete('/api/appointments/:id', requireAuth, requireRole('appointments'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.delete('/api/appointments/:id', requireAuth, requireRole('appointments'), requireTenantScope, validateBody(RS.appointmentDelete), idempotencyGuard, async (req, res) => {
     try {
         // --- TENANT SCOPE: verify record belongs to current tenant before delete (IDOR prevention) ---
         const { tenantId } = getRequestTenantContext(req);
@@ -1709,7 +1709,7 @@ app.post('/api/employees', requireAuth, requireRole('hr'), requireTenantScope, v
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.delete('/api/employees/:id', requireAuth, requireRole('hr'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.delete('/api/employees/:id', requireAuth, requireRole('hr'), requireTenantScope, validateBody(RS.employeeDelete), idempotencyGuard, async (req, res) => {
     try {
         await pool.query('DELETE FROM employees WHERE id=$1', [req.params.id]);
         logAudit(req.session.user?.id, req.session.user?.display_name, 'DELETE_EMPLOYEE', 'HR', `Deleted employee #${req.params.id}`, req.ip);
@@ -2347,7 +2347,7 @@ app.post('/api/insurance/payer-pricing', requireAuth, requireRole(...E11_INS_ROL
 });
 
 // ----- NPHIES submission (GATED — 503 stub when NPHIES_ENABLED off; records submission intent) -----
-app.post('/api/nphies/submit-claim/:id', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/nphies/submit-claim/:id', requireAuth, requireRole(...E11_INS_ROLES), requireTenantScope, validateBody(RS.nphiesClaimSubmit), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const tenantId = e11RequireTenant(req);
@@ -2445,7 +2445,7 @@ app.post('/api/medical/records', requireAuth, requireRole('doctor', 'nursing'), 
 // ===== EMR LOCK / SIGNATURE (Phase A1) — sign+lock, amend (no silent edit after lock); tenant-scoped via RLS =====
 // SIGNATURE ATTRIBUTION: signing+locking a physician medical record is a PHYSICIAN act only.
 // Nurses document via nursing_vitals / assessments / MAR — they must not sign medical_records.
-app.post('/api/medical-records/:id/sign', requireAuth, requireRole('doctor'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/medical-records/:id/sign', requireAuth, requireRole('doctor'), requireTenantScope, validateBody(RS.medicalRecordSign), idempotencyGuard, async (req, res) => {
     try {
         const crypto = require('crypto');
         const id = parseInt(req.params.id, 10);
@@ -3133,7 +3133,7 @@ app.post('/api/lab/results', requireAuth, requireTenantScope, validateBody(RS.la
 });
 
 // ---- RESULTS: manual verify (for HELD results) ----
-app.put('/api/lab/results/:id/verify', requireAuth, requireTenantScope, idempotencyGuard, async (req, res) => {
+app.put('/api/lab/results/:id/verify', requireAuth, requireTenantScope, validateBody(RS.labResultVerify), idempotencyGuard, async (req, res) => {
     try {
         const ctx = lisRequireTenant(req, res); if (!ctx) return;
         const r = (await pool.query('SELECT * FROM lab_results WHERE id=$1 AND tenant_id=$2', [req.params.id, ctx.tenantId])).rows[0];
@@ -3172,7 +3172,7 @@ app.post('/api/lab/results/:id/callback', requireAuth, requireTenantScope, valid
 });
 
 // ---- RESULTS: report/release (FAIL-CLOSED: critical needs a documented call-back) ----
-app.put('/api/lab/results/:id/report', requireAuth, requireTenantScope, idempotencyGuard, async (req, res) => {
+app.put('/api/lab/results/:id/report', requireAuth, requireTenantScope, validateBody(RS.labResultReport), idempotencyGuard, async (req, res) => {
     try {
         const ctx = lisRequireTenant(req, res); if (!ctx) return;
         const r = (await pool.query('SELECT * FROM lab_results WHERE id=$1 AND tenant_id=$2', [req.params.id, ctx.tenantId])).rows[0];
@@ -3519,7 +3519,7 @@ app.post('/api/radiology/orders', requireAuth, requireTenantScope, validateBody(
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/radiology/orders/:id/upload', requireAuth, requireTenantScope, upload.single('image'), idempotencyGuard, async (req, res) => {
+app.post('/api/radiology/orders/:id/upload', requireAuth, requireTenantScope, upload.single('image'), validateBody(RS.radiologyOrderUpload), idempotencyGuard, async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
         const orderId = req.params.id;
@@ -3861,7 +3861,7 @@ app.post('/api/radiology/reports/:id/critical-notify', requireAuth, requireRole(
 });
 
 // --- E4-S3: SIGN report — FAIL-CLOSED if critical without documented notification ---
-app.put('/api/radiology/reports/:id/sign', requireAuth, requireRole('radiology', 'doctor'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.put('/api/radiology/reports/:id/sign', requireAuth, requireRole('radiology', 'doctor'), requireTenantScope, validateBody(RS.radiologyReportSign), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         if (!tenantId) return res.status(403).json({ error: 'Tenant scope required' }); // FAIL-CLOSED
@@ -4208,7 +4208,7 @@ app.post('/api/finance/journal', requireAuth, requireRole('finance', 'accounts')
 
 // ----- General Ledger: POST a draft entry to the ledger — GATED by ACCOUNTING_POSTING_ENABLED -----
 // State machine: DRAFT -> POSTED. Posting is irreversible (immutable); re-posting => 409.
-app.post('/api/finance/journal/:id/post', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/finance/journal/:id/post', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, validateBody(RS.financeJournalPost), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const tenantId = e10RequireTenant(req);
@@ -4244,7 +4244,7 @@ app.post('/api/finance/journal/:id/post', requireAuth, requireRole('finance', 'a
 });
 
 // ----- General Ledger: REVERSE a posted entry (the only mutation of a POSTED entry) -----
-app.post('/api/finance/journal/:id/reverse', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/finance/journal/:id/reverse', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, validateBody(RS.financeJournalReverse), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const tenantId = e10RequireTenant(req);
@@ -4611,7 +4611,7 @@ app.put('/api/settings/users/:id', requireAuth, requireRole('settings'), require
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.delete('/api/settings/users/:id', requireAuth, requireTenantAdmin({ action: 'BLOCKED_USER_DELETE', module: 'Settings' }), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.delete('/api/settings/users/:id', requireAuth, requireTenantAdmin({ action: 'BLOCKED_USER_DELETE', module: 'Settings' }), requireTenantScope, validateBody(RS.settingsUserDelete), idempotencyGuard, async (req, res) => {
     try {
         const userId = parseInt(req.params.id);
         if (userId === req.session.user.id) {
@@ -4761,7 +4761,7 @@ app.get('/api/patients/:id/results', requireAuth, requireRole('patients', 'lab',
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/patients/:id/consent', requireAuth, requireRole('patients'), idempotencyGuard, async (req, res) => {
+app.post('/api/patients/:id/consent', requireAuth, requireRole('patients'), validateBody(RS.patientConsentCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const tenantCheck = tenantId ? ' AND tenant_id=$2' : '';
@@ -4953,7 +4953,7 @@ app.post('/api/clinical/records', requireAuth, requireRole('patients'), requireT
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/clinical/records/:id/lock', requireAuth, requireRole('patients'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/clinical/records/:id/lock', requireAuth, requireRole('patients'), requireTenantScope, validateBody(RS.clinicalRecordLock), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const idParam = req.params.id;
@@ -7201,7 +7201,7 @@ app.post('/api/forms', requireAuth, requireTenantScope, validateBody(RS.formTemp
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.delete('/api/forms/:id', requireAuth, requireTenantScope, idempotencyGuard, async (req, res) => {
+app.delete('/api/forms/:id', requireAuth, requireTenantScope, validateBody(RS.formDelete), idempotencyGuard, async (req, res) => {
     try { await pool.query('UPDATE form_templates SET is_active=0 WHERE id=$1', [req.params.id]); res.json({ success: true }); }
     catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
@@ -7470,7 +7470,7 @@ app.post('/api/orders', requireAuth, requireTenantScope, validateBody(RS.clinica
  * POST /api/encounters/:id/sign
  * التوقيع الإلكتروني على الزيارة وقفل السجل السريري
  */
-app.post('/api/encounters/:id/sign', requireAuth, requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/encounters/:id/sign', requireAuth, requireTenantScope, validateBody(RS.encounterSign), idempotencyGuard, async (req, res) => {
     try {
         const { pin, doctor_name, signature_note } = req.body;
         if (!pin || !/^\d{4,6}$/.test(pin)) return res.status(400).json({ error: 'Invalid PIN format' });
@@ -7740,7 +7740,7 @@ app.put('/api/queue/patients/:id/triage', requireAuth, validateBody(RS.queueTria
     }
 });
 
-app.put('/api/queue/patients/:id/call', requireAuth, idempotencyGuard, async (req, res) => {
+app.put('/api/queue/patients/:id/call', requireAuth, validateBody(RS.queuePatientCall), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const record = (await pool.query(
@@ -7834,7 +7834,7 @@ app.put('/api/settings/rooms/:id', requireAuth, requireRole('settings'), require
     }
 });
 
-app.delete('/api/settings/rooms/:id', requireAuth, requireRole('settings'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.delete('/api/settings/rooms/:id', requireAuth, requireRole('settings'), requireTenantScope, validateBody(RS.settingsRoomDelete), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const result = await pool.query(
@@ -12545,7 +12545,7 @@ app.post('/api/transport/requests', requireAuth, requireRole('transport'), requi
         res.json(r.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/transport/requests/:id', requireAuth, requireRole('transport'), requireTenantScope, async (req, res) => {
+app.put('/api/transport/requests/:id', requireAuth, requireRole('transport'), requireTenantScope, validateBody(RS.transportRequestUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { status, assigned_porter, pickup_time, dropoff_time } = req.body;
@@ -12570,7 +12570,7 @@ app.get('/api/cosmetic/cases', requireAuth, requireRole('doctor', 'surgery'), re
     try { res.json((await pool.query('SELECT * FROM cosmetic_cases ORDER BY created_at DESC')).rows); }
     catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/cosmetic/cases', requireAuth, requireRole('doctor', 'surgery'), requireTenantScope, async (req, res) => {
+app.post('/api/cosmetic/cases', requireAuth, requireRole('doctor', 'surgery'), requireTenantScope, validateBody(RS.cosmeticCaseCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, patient_name, procedure_id, procedure_name, surgery_date, surgery_time, anesthesia_type, operating_room, total_cost, pre_op_notes } = req.body;
         const result = await pool.query('INSERT INTO cosmetic_cases (patient_id, patient_name, procedure_id, procedure_name, surgeon, surgery_date, surgery_time, anesthesia_type, operating_room, total_cost, pre_op_notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *',
@@ -12579,7 +12579,7 @@ app.post('/api/cosmetic/cases', requireAuth, requireRole('doctor', 'surgery'), r
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/cosmetic/cases/:id', requireAuth, requireRole('doctor', 'surgery'), requireTenantScope, async (req, res) => {
+app.put('/api/cosmetic/cases/:id', requireAuth, requireRole('doctor', 'surgery'), requireTenantScope, validateBody(RS.cosmeticCaseUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { status, operative_notes, post_op_notes, complications, duration_minutes } = req.body;
         await pool.query('UPDATE cosmetic_cases SET status=$1, operative_notes=$2, post_op_notes=$3, complications=$4, duration_minutes=$5 WHERE id=$6',
@@ -12595,7 +12595,7 @@ app.get('/api/cosmetic/consents', requireAuth, requireRole('doctor', 'surgery'),
         else res.json((await pool.query('SELECT * FROM cosmetic_consents ORDER BY created_at DESC')).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/cosmetic/consents', requireAuth, requireRole('doctor', 'surgery'), requireTenantScope, async (req, res) => {
+app.post('/api/cosmetic/consents', requireAuth, requireRole('doctor', 'surgery'), requireTenantScope, validateBody(RS.cosmeticConsentCreate), idempotencyGuard, async (req, res) => {
     try {
         const { case_id, patient_id, patient_name, procedure_name, consent_type, risks_explained, alternatives_explained, expected_results, limitations, patient_questions, is_photography_consent, is_anesthesia_consent, is_blood_transfusion_consent, witness_name } = req.body;
         const now = new Date();
@@ -12613,7 +12613,7 @@ app.get('/api/cosmetic/followups', requireAuth, requireRole('doctor', 'surgery')
         else res.json((await pool.query('SELECT * FROM cosmetic_followups ORDER BY followup_date DESC')).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/cosmetic/followups', requireAuth, requireRole('doctor', 'surgery'), requireTenantScope, async (req, res) => {
+app.post('/api/cosmetic/followups', requireAuth, requireRole('doctor', 'surgery'), requireTenantScope, validateBody(RS.cosmeticFollowupCreate), idempotencyGuard, async (req, res) => {
     try {
         const { case_id, patient_id, patient_name, followup_date, days_post_op, healing_status, pain_level, swelling, complications, patient_satisfaction, surgeon_notes, next_followup } = req.body;
         const result = await pool.query('INSERT INTO cosmetic_followups (case_id, patient_id, patient_name, followup_date, days_post_op, healing_status, pain_level, swelling, complications, patient_satisfaction, surgeon_notes, next_followup, surgeon) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *',
@@ -12630,7 +12630,7 @@ app.get('/api/portal/users', requireAuth, requireTenantScope, async (req, res) =
         res.json((await pool.query('SELECT pu.*, p.name_ar, p.name_en, p.file_number FROM portal_users pu JOIN patients p ON pu.patient_id=p.id WHERE p.tenant_id=$1 ORDER BY pu.id DESC', [tenantId])).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/portal/users', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/portal/users', requireAuth, requireTenantScope, validateBody(RS.portalUserCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { patient_id, username, password, email, phone } = req.body;
@@ -12661,7 +12661,7 @@ app.get('/api/portal/appointments', requireAuth, requireTenantScope, async (req,
         res.json((await pool.query('SELECT pa.* FROM portal_appointments pa JOIN patients p ON pa.patient_id=p.id WHERE p.tenant_id=$1 ORDER BY pa.created_at DESC', [tenantId])).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/portal/appointments/:id', requireAuth, requireTenantScope, async (req, res) => {
+app.put('/api/portal/appointments/:id', requireAuth, requireTenantScope, validateBody(RS.portalAppointmentUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { status } = req.body;
@@ -12777,7 +12777,7 @@ app.get('/api/portal/messages', requireAuth, requireTenantScope, async (req, res
 });
 
 // POST /api/portal/messages — إرسال رسالة من المريض للطاقم
-app.post('/api/portal/messages', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/portal/messages', requireAuth, requireTenantScope, validateBody(RS.portalMessageCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId, facilityId } = getRequestTenantContext(req);
         const { patient_id, subject, body, department } = req.body;
@@ -13087,7 +13087,7 @@ app.get('/api/zatca/invoices', requireAuth, requireRole('finance', 'accounts', '
     } catch (e) { e10Err(res, e); }
 });
 
-app.post('/api/zatca/generate', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/zatca/generate', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, validateBody(RS.zatcaGenerate), idempotencyGuard, async (req, res) => {
     try {
         const tenantId = e10RequireTenant(req);
         const invoiceId = e10IntId(req.body.invoice_id);
@@ -13873,7 +13873,7 @@ app.post('/api/nursing/assessments', requireAuth, requireRole('nursing', 'doctor
 // raw observations and returns the deterministic escalation recommendation. Client totals
 // are never accepted. Advisory only — never a diagnosis. The request is audited (module
 // EWS) so screening activity is traceable even before persistence lands.
-app.post('/api/ews/assess', requireAuth, requireRole('nursing', 'doctor'), requireTenantScope, async (req, res) => {
+app.post('/api/ews/assess', requireAuth, requireRole('nursing', 'doctor'), requireTenantScope, validateBody(RS.ewsAssess), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, mews, pews, sepsis } = req.body || {};
         const { tenantId } = getRequestTenantContext(req);
@@ -14337,7 +14337,7 @@ app.get('/api/incidents/ovr', requireAuth, requireTenantScope, async (req, res) 
   } catch (e) { console.error('[OVR GET]', e.message); res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/incidents/ovr', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/incidents/ovr', requireAuth, requireTenantScope, validateBody(RS.ovrIncidentCreate), idempotencyGuard, async (req, res) => {
   try {
     const { tenantId, facilityId } = getRequestTenantContext(req);
     const user = req.session.user;
@@ -14361,7 +14361,7 @@ app.post('/api/incidents/ovr', requireAuth, requireTenantScope, async (req, res)
   } catch (e) { console.error('[OVR POST]', e.message); res.status(500).json({ error: 'Server error' }); }
 });
 
-app.put('/api/incidents/ovr/:id', requireAuth, requireTenantScope, async (req, res) => {
+app.put('/api/incidents/ovr/:id', requireAuth, requireTenantScope, validateBody(RS.ovrIncidentUpdate), idempotencyGuard, async (req, res) => {
   try {
     const { tenantId } = getRequestTenantContext(req);
     const user = req.session.user;
@@ -14410,7 +14410,7 @@ app.get('/api/rehab/patients', requireAuth, requireTenantScope, async (req, res)
         res.json((await pool.query('SELECT * FROM rehab_patients WHERE tenant_id=$1 ORDER BY created_at DESC', [tenantId])).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/rehab/patients', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/rehab/patients', requireAuth, requireTenantScope, validateBody(RS.rehabPatientCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, patient_name, diagnosis, referral_source, therapist, therapy_type, start_date, target_end_date, notes } = req.body;
         const { tenantId } = getRequestTenantContext(req);
@@ -14427,7 +14427,7 @@ app.get('/api/rehab/sessions', requireAuth, requireTenantScope, async (req, res)
         else res.json((await pool.query('SELECT * FROM rehab_sessions WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 100', [tenantId])).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/rehab/sessions', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/rehab/sessions', requireAuth, requireTenantScope, validateBody(RS.rehabSessionCreate), idempotencyGuard, async (req, res) => {
     try {
         const { rehab_patient_id, patient_id, session_number, therapist, session_type, exercises, duration_minutes, pain_before, pain_after, progress_notes } = req.body;
         const { tenantId } = getRequestTenantContext(req);
@@ -14444,7 +14444,7 @@ app.get('/api/rehab/goals', requireAuth, requireTenantScope, async (req, res) =>
         else res.json((await pool.query('SELECT * FROM rehab_goals WHERE tenant_id=$1 ORDER BY id DESC', [tenantId])).rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/rehab/goals', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/rehab/goals', requireAuth, requireTenantScope, validateBody(RS.rehabGoalCreate), idempotencyGuard, async (req, res) => {
     try {
         const { rehab_patient_id, goal_description, target_date } = req.body;
         const { tenantId } = getRequestTenantContext(req);
@@ -14453,7 +14453,7 @@ app.post('/api/rehab/goals', requireAuth, requireTenantScope, async (req, res) =
         res.json(result.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/rehab/goals/:id', requireAuth, requireTenantScope, async (req, res) => {
+app.put('/api/rehab/goals/:id', requireAuth, requireTenantScope, validateBody(RS.rehabGoalUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { progress, status } = req.body;
         const { tenantId } = getRequestTenantContext(req);
@@ -14475,7 +14475,7 @@ app.get('/api/dental/records/:patient_id', requireAuth, requireTenantScope, asyn
         res.json(result.rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/dental/records', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/dental/records', requireAuth, requireTenantScope, validateBody(RS.dentalRecordCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, tooth_number, condition, treatment_done, affected_surfaces } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -14502,7 +14502,7 @@ app.get('/api/dental/periodontal/:patient_id', requireAuth, requireTenantScope, 
         res.json(result.rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/dental/periodontal', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/dental/periodontal', requireAuth, requireTenantScope, validateBody(RS.dentalPeriodontalCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, tooth_number, probing_depth, bleeding_on_probing, gingival_recession } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -14529,7 +14529,7 @@ app.get('/api/dental/images/:patient_id', requireAuth, requireTenantScope, async
         res.json(result.rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/dental/images', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/dental/images', requireAuth, requireTenantScope, validateBody(RS.dentalImageCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, tooth_number, image_path, image_type } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -14583,7 +14583,7 @@ app.get('/api/oncology/patient-regimens/:patient_id', requireAuth, requireTenant
         res.json(result.rows);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/oncology/patient-regimens', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/oncology/patient-regimens', requireAuth, requireTenantScope, validateBody(RS.oncologyRegimenCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, regimen_name, cycle_number, status, start_date } = req.body;
         const { tenantId, facilityId } = getRequestTenantContext(req);
@@ -14611,7 +14611,7 @@ app.get('/api/rehab/assessments', requireAuth, requireTenantScope, async (req, r
         }
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.post('/api/rehab/assessments', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/rehab/assessments', requireAuth, requireTenantScope, validateBody(RS.rehabAssessmentCreate), idempotencyGuard, async (req, res) => {
     try {
         const { rehab_patient_id, patient_id, assessment_type, rom_scores, strength_scores, functional_scores, balance_scores, pain_level, assessor } = req.body;
         const { tenantId } = getRequestTenantContext(req);
@@ -14661,7 +14661,7 @@ app.post('/api/messages', requireAuth, requireTenantScope, validateBody(RS.messa
         res.json({ success: true, id: result.rows[0].id });
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.put('/api/messages/:id/read', requireAuth, requireTenantScope, idempotencyGuard, async (req, res) => {
+app.put('/api/messages/:id/read', requireAuth, requireTenantScope, validateBody(RS.messageRead), idempotencyGuard, async (req, res) => {
     try {
         const userId = req.session.user.id;
         const { tenantId } = getRequestTenantContext(req);
@@ -14678,7 +14678,7 @@ app.put('/api/messages/:id/read', requireAuth, requireTenantScope, idempotencyGu
         res.status(500).json({ error: 'Server error' });
     }
 });
-app.delete('/api/messages/:id', requireAuth, requireTenantScope, requirePermission('messages:delete'), idempotencyGuard, async (req, res) => {
+app.delete('/api/messages/:id', requireAuth, requireTenantScope, requirePermission('messages:delete'), validateBody(RS.messageDelete), idempotencyGuard, async (req, res) => {
     try {
         const userId = req.session.user.id;
         const { tenantId } = getRequestTenantContext(req);
@@ -16140,7 +16140,7 @@ app.get('/api/notifications', requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.put('/api/notifications/:id/read', requireAuth, async (req, res) => {
+app.put('/api/notifications/:id/read', requireAuth, validateBody(RS.notificationRead), idempotencyGuard, async (req, res) => {
     try {
         await pool.query('UPDATE notifications SET is_read=1 WHERE id=$1', [req.params.id]);
         res.json({ success: true });
@@ -16148,7 +16148,7 @@ app.put('/api/notifications/:id/read', requireAuth, async (req, res) => {
 });
 
 // ===== VISIT TRACKING =====
-app.post('/api/visits', requireAuth, async (req, res) => {
+app.post('/api/visits', requireAuth, validateBody(RS.visitCreate), idempotencyGuard, async (req, res) => {
     try {
         const { patient_id, visit_type, department, doctor, chief_complaint } = req.body;
         const count = (await pool.query('SELECT COUNT(*) as cnt FROM patient_visits WHERE patient_id=$1', [patient_id])).rows[0].cnt;
@@ -16716,7 +16716,7 @@ app.get('/api/consent/templates/:id', requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/consent/sign', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/consent/sign', requireAuth, requireTenantScope, validateBody(RS.consentSign), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { template_id, patient_id, patient_name, signature_data, witness_name, witness_signature, doctor_name, procedure_details, notes } = req.body;
@@ -17038,7 +17038,7 @@ app.get('/api/medical-reports/:id', requireAuth, requireTenantScope, async (req,
 
 
 // ===== DRUG INTERACTION CHECK =====
-app.post('/api/drug-interactions/check', requireAuth, async (req, res) => {
+app.post('/api/drug-interactions/check', requireAuth, validateBody(RS.drugInteractionsCheck), async (req, res) => {
     try {
         const { drugs } = req.body; // Array of drug names
         if (!drugs || !Array.isArray(drugs)) return res.json({ interactions: [] });
@@ -17147,7 +17147,7 @@ app.post('/api/drug-interactions/check', requireAuth, async (req, res) => {
 });
 
 // ===== ALLERGY CROSS-CHECK =====
-app.post('/api/allergy-check', requireAuth, async (req, res) => {
+app.post('/api/allergy-check', requireAuth, validateBody(RS.allergyCheck), async (req, res) => {
     try {
         const { patient_id, drugs } = req.body;
         if (!patient_id || !drugs) return res.json({ alerts: [] });
@@ -17270,7 +17270,7 @@ app.post('/api/invoices/:id/refund', requireAuth, requireRole('invoices', 'accou
 });
 
 // ===== CASH DRAWER =====
-app.post('/api/cash-drawer/open', requireAuth, async (req, res) => {
+app.post('/api/cash-drawer/open', requireAuth, validateBody(RS.cashDrawerOpen), idempotencyGuard, async (req, res) => {
     try {
         const { opening_balance } = req.body;
         // cash_drawer schema provisioned out-of-band (route_level_ddl_cleanup_candidate_*); no DDL in handler.
@@ -17286,7 +17286,7 @@ app.post('/api/cash-drawer/open', requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/cash-drawer/close', requireAuth, async (req, res) => {
+app.post('/api/cash-drawer/close', requireAuth, validateBody(RS.cashDrawerClose), idempotencyGuard, async (req, res) => {
     try {
         const { counted_cash, notes } = req.body;
         const drawer = (await pool.query("SELECT * FROM cash_drawer WHERE user_id=$1 AND status='open'", [req.session.user?.id])).rows[0];
@@ -17329,7 +17329,7 @@ app.get('/api/cash-drawer/current', requireAuth, async (req, res) => {
 
 
 // ===== VISIT LIFECYCLE TRACKING =====
-app.post('/api/visits/lifecycle', requireAuth, async (req, res) => {
+app.post('/api/visits/lifecycle', requireAuth, validateBody(RS.visitLifecycleCreate), idempotencyGuard, async (req, res) => {
     try {
         // visit_lifecycle schema provisioned out-of-band (route_level_ddl_cleanup_candidate_*); no DDL in handler.
         const { patient_id, patient_name, appointment_id, doctor, department } = req.body;
@@ -17341,7 +17341,7 @@ app.post('/api/visits/lifecycle', requireAuth, async (req, res) => {
     } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 
-app.put('/api/visits/lifecycle/:id', requireAuth, async (req, res) => {
+app.put('/api/visits/lifecycle/:id', requireAuth, validateBody(RS.visitLifecycleUpdate), idempotencyGuard, async (req, res) => {
     try {
         const { status } = req.body;
         const visit = (await pool.query('SELECT * FROM visit_lifecycle WHERE id=$1', [req.params.id])).rows[0];
@@ -17389,7 +17389,7 @@ app.get('/api/visits/lifecycle/today', requireAuth, async (req, res) => {
 });
 
 // ===== APPOINTMENT CHECK-IN =====
-app.put('/api/appointments/:id/checkin', requireAuth, requireRole('appointments'), idempotencyGuard, async (req, res) => {
+app.put('/api/appointments/:id/checkin', requireAuth, requireRole('appointments'), validateBody(RS.appointmentCheckin), idempotencyGuard, async (req, res) => {
     try {
         // --- TENANT SCOPE: verify appointment belongs to current tenant ---
         const { tenantId } = getRequestTenantContext(req);
@@ -17421,7 +17421,7 @@ app.put('/api/appointments/:id/checkin', requireAuth, requireRole('appointments'
 });
 
 // ===== NO-SHOW MARKING =====
-app.put('/api/appointments/:id/noshow', requireAuth, requireRole('appointments'), idempotencyGuard, async (req, res) => {
+app.put('/api/appointments/:id/noshow', requireAuth, requireRole('appointments'), validateBody(RS.appointmentNoShow), idempotencyGuard, async (req, res) => {
     try {
         // --- TENANT SCOPE: verify appointment belongs to current tenant ---
         const { tenantId } = getRequestTenantContext(req);
@@ -17663,7 +17663,7 @@ app.get('/api/doctor/my-queue', requireAuth, async (req, res) => {
 
 
 // ===== PASSWORD CHANGE =====
-app.put('/api/auth/change-password', requireAuth, async (req, res) => {
+app.put('/api/auth/change-password', requireAuth, validateBody(RS.authChangePassword), idempotencyGuard, async (req, res) => {
     try {
         const { current_password, new_password } = req.body;
         if (!current_password || !new_password) return res.status(400).json({ error: 'Missing fields' });
@@ -17778,7 +17778,7 @@ app.get('/api/dashboard/charts', requireAuth, requireTenantScope, async (req, re
 
 
 // ===== DATABASE BACKUP (Admin only) =====
-app.post('/api/admin/backup', requireAuth, requireRole('Admin'), idempotencyGuard, async (req, res) => {
+app.post('/api/admin/backup', requireAuth, requireRole('Admin'), validateBody(RS.adminBackup), idempotencyGuard, async (req, res) => {
     try {
         if (req.session.user?.role !== 'Admin') return res.status(403).json({ error: 'Admin only' });
 
@@ -18098,7 +18098,7 @@ app.put('/api/pathology/specimens/:id/report', requireAuth, requireRole('patholo
 });
 
 // SIGN-OUT — pathologist only; final transition Reported -> SignedOut; locks report.
-app.post('/api/pathology/specimens/:id/signout', requireAuth, requireRole('pathology'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/pathology/specimens/:id/signout', requireAuth, requireRole('pathology'), requireTenantScope, validateBody(RS.pathologySpecimenSignout), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const { tenantId } = getRequestTenantContext(req);
@@ -18327,7 +18327,7 @@ app.put('/api/inventory/:id', requireAuth, requireTenantScope, validateBody(RS.i
         res.json(r.rows[0]);
     } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
-app.delete('/api/inventory/:id', requireAuth, requireTenantScope, idempotencyGuard, async (req, res) => {
+app.delete('/api/inventory/:id', requireAuth, requireTenantScope, validateBody(RS.inventoryDelete), idempotencyGuard, async (req, res) => {
     try {
         // inventory.tenant_id provisioned out-of-band (route_level_ddl_batch_b); no DDL in handler
         const { tenantId } = getRequestTenantContext(req);
@@ -18905,7 +18905,7 @@ app.put('/api/cssd/cycles/:id/bi-result', requireAuth, requireRole('cssd', 'nurs
 });
 
 // THE GATE: release a completed cycle's load for sterile issue — fail-CLOSED on BI.
-app.put('/api/cssd/cycles/:id/release', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.put('/api/cssd/cycles/:id/release', requireAuth, requireRole('cssd', 'nursing', 'surgery'), requireTenantScope, validateBody(RS.cssdCycleRelease), idempotencyGuard, async (req, res) => {
     try {
         const t = e16RequireTenant(req);
         if (!t.ok) return res.status(403).json({ error: 'Tenant scope required' });
@@ -19261,7 +19261,7 @@ app.post('/api/clinical/notes', requireAuth, requireRole('patients'), requireTen
     }
 });
 
-app.post('/api/clinical/notes/:id/lock', requireAuth, requireRole('patients'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/clinical/notes/:id/lock', requireAuth, requireRole('patients'), requireTenantScope, validateBody(RS.clinicalNoteLock), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const noteId = parseInt(req.params.id);
@@ -19363,7 +19363,7 @@ app.post('/api/clinical/smart-templates', requireAuth, requireRole('patients'), 
     }
 });
 
-app.delete('/api/clinical/smart-templates/:id', requireAuth, requireRole('patients'), requireTenantScope, async (req, res) => {
+app.delete('/api/clinical/smart-templates/:id', requireAuth, requireRole('patients'), requireTenantScope, validateBody(RS.smartTemplateDelete), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const doctorId = req.session.user?.id;
@@ -19573,7 +19573,7 @@ app.post('/api/nphies/remittance', requireAuth, requireRole('finance', 'accounts
 });
 
 // POST /api/nphies/remittance/:id/post-to-ar — post remittance to AR (Accounts Receivable) and GL
-app.post('/api/nphies/remittance/:id/post-to-ar', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/nphies/remittance/:id/post-to-ar', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, validateBody(RS.nphiesRemittancePostToAr), idempotencyGuard, async (req, res) => {
     const client = await pool.connect();
     try {
         const { tenantId: tid } = getRequestTenantContext(req);
@@ -19723,7 +19723,7 @@ app.get('/api/zatca/credit-notes', requireAuth, requireRole('finance', 'accounts
 });
 
 // POST /api/zatca/credit-note — generate credit note for an invoice
-app.post('/api/zatca/credit-note', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/zatca/credit-note', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, validateBody(RS.zatcaCreditNote), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { invoice_id, credit_reason = 'CANCEL', credit_reason_description, items_to_credit } = req.body;
@@ -19789,7 +19789,7 @@ app.post('/api/zatca/credit-note', requireAuth, requireRole('finance', 'accounts
 });
 
 // POST /api/zatca/credit-note/:id/submit — submit credit note to ZATCA (gated)
-app.post('/api/zatca/credit-note/:id/submit', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, idempotencyGuard, async (req, res) => {
+app.post('/api/zatca/credit-note/:id/submit', requireAuth, requireRole('finance', 'accounts'), requireTenantScope, validateBody(RS.zatcaCreditNoteSubmit), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const id = parseInt(req.params.id);
@@ -20570,7 +20570,7 @@ app.get('/api/vendors', requireAuth, requireTenantScope, async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/vendors', requireAuth, requireRole('finance', 'accounts', 'inventory', 'admin'), requireTenantScope, async (req, res) => {
+app.post('/api/vendors', requireAuth, requireRole('finance', 'accounts', 'inventory', 'admin'), requireTenantScope, validateBody(RS.vendorCreate), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { vendor_code, vendor_name_ar, vendor_name_en, vendor_type = 'Supplier', contact_person, phone, email, address, vat_number, commercial_register, iban, bank_name, payment_terms = 30 } = req.body;
@@ -20648,7 +20648,7 @@ app.get('/api/fhir/:resourceType/:id', requireAuth, requireTenantScope, async (r
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/fhir/:resourceType', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/fhir/:resourceType', requireAuth, requireTenantScope, validateBody(RS.fhirResourceCreate), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { resourceType } = req.params;
@@ -20676,7 +20676,7 @@ app.get('/api/hl7/messages', requireAuth, requireRole('admin', 'lis_admin', 'ris
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/hl7/messages/send', requireAuth, requireRole('admin', 'lis', 'ris'), requireTenantScope, async (req, res) => {
+app.post('/api/hl7/messages/send', requireAuth, requireRole('admin', 'lis', 'ris'), requireTenantScope, validateBody(RS.hl7MessageSend), idempotencyGuard, async (req, res) => {
     try {
         const tid = getRequestTenantContext(req);
         const { message_type, message_body, patient_id, interface_name } = req.body;
@@ -21236,7 +21236,7 @@ app.get('/api/safety/waste-logs', requireAuth, requireTenantScope, async (req, r
     }
 });
 
-app.post('/api/safety/waste-logs', requireAuth, requireTenantScope, async (req, res) => {
+app.post('/api/safety/waste-logs', requireAuth, requireTenantScope, validateBody(RS.safetyWasteLogCreate), idempotencyGuard, async (req, res) => {
     try {
         const { tenantId } = getRequestTenantContext(req);
         const { waste_type, weight_kg, disposal_company, truck_number, notes } = req.body;

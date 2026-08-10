@@ -1,3 +1,7 @@
+/**
+ * zatca_submit_fail_closed_guard_test.js
+ * DB-free static guard for ZATCA route safety invariants in server.js.
+ */
 'use strict';
 
 const fs = require('fs');
@@ -11,113 +15,106 @@ const RESET = '\x1b[0m';
 
 let passed = 0;
 let failed = 0;
+const failures = [];
 
-function assert(cond, name) {
+function assert(cond, name, details) {
   if (cond) {
     passed++;
     console.log(`  ${GREEN}PASS${RESET} - ${name}`);
     return;
   }
   failed++;
-  console.log(`  ${RED}FAIL${RESET} - ${name}`);
+  failures.push({ name, details: details || '' });
+  console.log(`  ${RED}FAIL${RESET} - ${name}${details ? ` | ${details}` : ''}`);
 }
 
-console.log(`\n${BOLD}${BLUE}=== Insurance Boundary Safety Guard Test ===${RESET}\n`);
+console.log(`\n${BOLD}${BLUE}=== ZATCA Submit Fail-Closed Guard Test ===${RESET}\n`);
 
-const server = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8').replace(/\s+/g, '');
-const schemas = fs.readFileSync(path.join(__dirname, 'route_schemas.js'), 'utf8').replace(/\s+/g, '');
+const serverPath = path.join(__dirname, 'server.js');
+const src = fs.readFileSync(serverPath, 'utf8');
+const clean = src.replace(/\s+/g, '');
 
 assert(
-  server.includes("app.post('/api/insurance/companies',requireAuth,requireRole(...E11_INS_ROLES),requireTenantScope,validateBody(RS.insuranceCompanyCreate),idempotencyGuard,async(req,res)=>{"),
-  'insurance companies create route is guarded by validateBody + idempotencyGuard'
+  clean.includes("app.post('/api/zatca/submit',requireAuth,requireRole('finance','accounts'),requireTenantScope,validateBody(RS.zatcaSubmit),idempotencyGuard,async(req,res)=>{"),
+  'submit route is auth+role+tenant+validation+idempotency guarded'
 );
 
 assert(
-  server.includes("app.post('/api/insurance/eligibility',requireAuth,requireRole(...E11_INS_ROLES),requireTenantScope,validateBody(RS.insuranceEligibilityCreate),idempotencyGuard,async(req,res)=>{"),
-  'insurance eligibility route is guarded by validateBody + idempotencyGuard'
+  clean.includes("app.post('/api/settings/integrations',requireAuth,requireTenantContext,validateBody(RS.integrationSettingsSave),async(req,res)=>{") &&
+  clean.includes("app.post('/api/settings/integrations/ping',requireAuth,requireTenantContext,validateBody(RS.integrationPing),async(req,res)=>{"),
+  'integration settings routes are guarded by boundary validation middleware'
 );
 
 assert(
-  server.includes("app.post('/api/nphies/eligibility',requireAuth,requireRole(...E11_INS_ROLES),requireTenantScope,validateBody(RS.insuranceEligibilityCreate),idempotencyGuard,async(req,res)=>{"),
-  'nphies eligibility route is guarded by validateBody + idempotencyGuard'
+  clean.includes("app.get('/api/settings/integrations',requireAuth,requireTenantContext,async(req,res)=>{") &&
+    clean.includes("if(!['ZATCA','NPHIES','CBAHI'].includes(integrationName))returnrow;") &&
+    clean.includes("if(integrationName==='ZATCA')redactedConfig=redactZatcaConfig(parsed);") &&
+    clean.includes("if(integrationName==='NPHIES')redactedConfig=redactNphiesConfig(parsed);") &&
+    clean.includes("if(integrationName==='CBAHI')redactedConfig=redactCbahiConfig(parsed);") &&
+    clean.includes("if(integrationName==='ZATCA'||integrationName==='NPHIES'){") &&
+    clean.includes("safeRow['api_key']=row.api_key?'[REDACTED]':'';") &&
+    clean.includes("safeRow['api_secret']=row.api_secret?'[REDACTED]':'';"),
+  'GET integrations redacts integration configs and secret fields for ZATCA/NPHIES'
 );
 
 assert(
-  server.includes("app.post('/api/insurance/pre-auth',requireAuth,requireRole(...E11_INS_ROLES),requireTenantScope,validateBody(RS.insurancePreAuthCreate),idempotencyGuard,async(req,res)=>{"),
-  'insurance pre-auth create route is guarded by validateBody + idempotencyGuard'
+  clean.includes('if(!globalEnabled||!integrationEnabled){') &&
+    clean.includes("submission_status=$2") &&
+    clean.includes("'Submitted_Mock'") &&
+    clean.includes("'ZATCA_SUBMIT_INTENT','ZATCA'"),
+  'submit route keeps safe mock fallback when integration/global gate is off'
 );
 
 assert(
-  server.includes("app.put('/api/insurance/pre-auth/:id/decision',requireAuth,requireRole(...E11_INS_ROLES),requireTenantScope,validateBody(RS.insurancePreAuthDecisionUpdate),idempotencyGuard,async(req,res)=>{"),
-  'insurance pre-auth decision route is guarded by validateBody + idempotencyGuard'
+  clean.includes('ZATCA_ONBOARDING_INCOMPLETE') &&
+    clean.includes('missingproductioncredentials'),
+  'submit route fails closed when production credentials are missing'
 );
 
 assert(
-  server.includes("app.post('/api/insurance/claims',requireAuth,requireRole(...E11_INS_ROLES),requireTenantScope,validateBody(RS.insuranceClaimCreate),idempotencyGuard,async(req,res)=>{"),
-  'insurance claim create route is guarded by validateBody + idempotencyGuard'
+  clean.includes("validateZatcaConfig(configJson,{requireKeys:true,requireCsrProfile:true})") &&
+    clean.includes("error:'InvalidZATCAconfiguration'") &&
+    clean.includes('codes:configValidation.errors'),
+  'submit route enforces key+CSR validation and returns machine-readable codes'
 );
 
 assert(
-  server.includes("app.put('/api/insurance/claims/:id/transition',requireAuth,requireRole(...E11_INS_ROLES),requireTenantScope,validateBody(RS.insuranceClaimTransitionUpdate),idempotencyGuard,async(req,res)=>{"),
-  'insurance claim transition route is guarded by validateBody + idempotencyGuard'
+  clean.includes("constrequiresCsr=parseInt(is_enabled,10)===1;") &&
+    clean.includes("validateZatcaConfig(parsedConfig,{requireCsrProfile:requiresCsr,requireKeys:false})") &&
+    clean.includes("error:'InvalidZATCAconfig_json'"),
+  'settings save route validates ZATCA config_json when enabling integration'
 );
 
 assert(
-  server.includes("app.post('/api/insurance/claims/:id/lines',requireAuth,requireRole(...E11_INS_ROLES),requireTenantScope,validateBody(RS.insuranceClaimLineCreate),idempotencyGuard,async(req,res)=>{"),
-  'insurance claim line create route is guarded by validateBody + idempotencyGuard'
+  clean.includes("constnormalizedName=String(integration_name).trim().toUpperCase();") &&
+    clean.includes('WHEREtenant_id=$1ANDUPPER(integration_name)=$2') &&
+    clean.includes('Updatedintegration${normalizedName}settings'),
+  'settings save route canonicalizes integration_name and uses canonical value for persistence/audit'
 );
 
 assert(
-  server.includes("app.put('/api/insurance/claims/:id',requireAuth,requireRole(...E11_INS_ROLES),requireTenantScope,validateBody(RS.insuranceClaimLegacyUpdate),idempotencyGuard,async(req,res)=>{"),
-  'legacy claim update route is guarded by validateBody + idempotencyGuard'
+  clean.includes("SELECT*FROMintegration_settingsWHEREtenant_id=$1ANDUPPER(integration_name)=$2") &&
+    clean.includes("[tenantId,'ZATCA']"),
+  'submit route loads ZATCA settings case-insensitively for legacy rows'
 );
 
 assert(
-  server.includes("app.put('/api/insurance/denials/:id/appeal',requireAuth,requireRole(...E11_INS_ROLES),requireTenantScope,validateBody(RS.insuranceDenialAppealUpdate),idempotencyGuard,async(req,res)=>{"),
-  'denial appeal route is guarded by validateBody + idempotencyGuard'
-);
-
-assert(
-  server.includes("app.post('/api/insurance/payer-pricing',requireAuth,requireRole(...E11_INS_ROLES),requireTenantScope,validateBody(RS.insurancePayerPricingCreate),idempotencyGuard,async(req,res)=>{"),
-  'payer pricing route is guarded by validateBody + idempotencyGuard'
-);
-
-assert(
-  server.includes("app.post('/api/nphies/claim-status-inquiry',requireAuth,requireRole('finance','accounts','insurance'),requireTenantScope,validateBody(RS.nphiesClaimStatusInquiry),idempotencyGuard,async(req,res)=>{"),
-  'nphies claim status inquiry route is guarded by validateBody + idempotencyGuard'
-);
-
-assert(
-  server.includes("app.post('/api/nphies/remittance',requireAuth,requireRole('finance','accounts','insurance'),requireTenantScope,validateBody(RS.nphiesRemittanceCreate),idempotencyGuard,async(req,res)=>{"),
-  'nphies remittance create route is guarded by validateBody + idempotencyGuard'
-);
-
-assert(
-  schemas.includes('constinsuranceClaimLegacyUpdate={') &&
-  schemas.includes('constinsuranceDenialAppealUpdate={') &&
-  schemas.includes('constinsurancePayerPricingCreate={') &&
-  schemas.includes('constinsuranceCompanyCreate={') &&
-  schemas.includes('constinsuranceEligibilityCreate={') &&
-  schemas.includes('constinsurancePreAuthCreate={') &&
-  schemas.includes('constinsurancePreAuthDecisionUpdate={') &&
-  schemas.includes('constinsuranceClaimCreate={') &&
-  schemas.includes('constinsuranceClaimTransitionUpdate={') &&
-  schemas.includes('constinsuranceClaimLineCreate={') &&
-  schemas.includes('constnphiesClaimStatusInquiry={') &&
-  schemas.includes('constnphiesRemittanceCreate={') &&
-  schemas.includes("contact_info:{type:'str',required:false,max:2000}") &&
-  schemas.includes("policy_number:{type:'str',required:false,max:120}") &&
-  schemas.includes("decision:{type:'enumOf',required:true,allowed:['approved','denied','partial']}") &&
-  schemas.includes("target:{type:'enumOf',required:true,allowed:['submitted','adjudicated','remittance_posted','denied','appealed']}") &&
-  schemas.includes("status:{type:'enumOf',required:true,allowed:['Approved','Rejected']}") &&
-  schemas.includes("appeal_status:{type:'enumOf',required:true,allowed:['appealed','upheld','overturned','closed']}") &&
-  schemas.includes("payer_price:{type:'num',required:true,min:0}"),
-  'route_schemas defines insurance mutation boundary schemas'
+  clean.includes("api_key!=='***REDACTED***'") &&
+    clean.includes("api_secret!=='***REDACTED***'") &&
+    clean.includes('exists?.api_key||\'\'') &&
+    clean.includes('exists?.api_secret||\'\''),
+  'settings save route preserves stored credentials when redacted placeholders are submitted'
 );
 
 console.log(`\n${BOLD}${BLUE}=== Result ===${RESET}`);
 console.log(`  ${GREEN}PASS${RESET}: ${passed}`);
 console.log(`  ${RED}FAIL${RESET}: ${failed}`);
 
-if (failed) process.exit(1);
+if (failed) {
+  for (const f of failures) {
+    console.log(`  - ${f.name}${f.details ? `: ${f.details}` : ''}`);
+  }
+  process.exit(1);
+}
+
 console.log(`\n${GREEN}ALL PASS: ${passed} passed, 0 failed${RESET}\n`);

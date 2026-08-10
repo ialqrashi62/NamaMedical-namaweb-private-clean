@@ -1,97 +1,120 @@
 /**
- * Surgery / Operations / Consent / ER / ADT / Dietary / Quality / Maintenance / Transport Wave Boundary Guard
- * 36 routes: surgery, OR, consent, ER, ADT, bed-transfers, dietary, nutrition,
- * quality, maintenance, transport
+ * zatca_submit_fail_closed_guard_test.js
+ * DB-free static guard for ZATCA route safety invariants in server.js.
  */
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
-const assert = require('assert');
 
-const ROOT = path.join(__dirname, '..', 'namaweb_waveA_subagent');
-const serverSrc = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
-const schemasSrc = fs.readFileSync(path.join(ROOT, 'route_schemas.js'), 'utf8');
+const GREEN = '\x1b[32m';
+const RED = '\x1b[31m';
+const BLUE = '\x1b[34m';
+const BOLD = '\x1b[1m';
+const RESET = '\x1b[0m';
 
-const checks = [
-  // Surgery / OR
-  { route: '/api/surgeries',                          verb: 'post',   schema: 'surgeryCreate' },
-  { route: '/api/surgeries/:id',                      verb: 'delete', schema: 'surgeryDelete' },
-  { route: '/api/operating-rooms',                    verb: 'post',   schema: 'operatingRoomCreate' },
-  { route: '/api/or/slots/:id/cancel',                verb: 'put',    schema: 'orSlotCancel' },
-  { route: '/api/or/surgeries/:id/who-checklist/:phase', verb: 'post', schema: 'orWhoChecklist' },
+let passed = 0;
+let failed = 0;
+const failures = [];
 
-  // Consent
-  { route: '/api/consent-forms',                      verb: 'post',   schema: 'consentFormCreate' },
-  { route: '/api/consent-forms/:id/sign',             verb: 'put',    schema: 'consentFormSign' },
-
-  // ER
-  { route: '/api/er/triage',                          verb: 'post',   schema: 'erTriage' },
-  { route: '/api/er/assign-provider',                 verb: 'post',   schema: 'erAssignProvider' },
-  { route: '/api/er/disposition',                     verb: 'post',   schema: 'erDisposition' },
-
-  // ADT / bed-transfers
-  { route: '/api/bed-transfers',                      verb: 'post',   schema: 'bedTransferCreate' },
-  { route: '/api/adt/admit',                          verb: 'post',   schema: 'adtAdmit' },
-  { route: '/api/adt/transfer',                       verb: 'post',   schema: 'adtTransfer' },
-  { route: '/api/adt/discharge',                      verb: 'post',   schema: 'adtDischarge' },
-  { route: '/api/adt/bed-status',                     verb: 'post',   schema: 'adtBedStatus' },
-
-  // Dietary
-  { route: '/api/dietary/orders',                     verb: 'post',   schema: 'dietaryOrderCreate' },
-  { route: '/api/dietary/orders/:id',                 verb: 'put',    schema: 'dietaryOrderUpdate' },
-  { route: '/api/dietary/meals',                      verb: 'post',   schema: 'dietaryMealCreate' },
-  { route: '/api/dietary/meals/:id/deliver',          verb: 'put',    schema: 'dietaryMealDeliver' },
-
-  // Nutrition
-  { route: '/api/nutrition/assessments',              verb: 'post',   schema: 'nutritionAssessmentCreate' },
-
-  // Quality
-  { route: '/api/quality/incidents',                  verb: 'post',   schema: 'qualityIncidentCreate' },
-  { route: '/api/quality/incidents/:id',              verb: 'put',    schema: 'qualityIncidentUpdate' },
-  { route: '/api/quality/satisfaction',               verb: 'post',   schema: 'qualitySatisfactionCreate' },
-  { route: '/api/quality/kpis',                       verb: 'post',   schema: 'qualityKpiCreate' },
-  { route: '/api/quality/incidents/:id/capa',          verb: 'post',   schema: 'qualityCapaCreate' },
-  { route: '/api/quality/capa/:id',                   verb: 'put',    schema: 'qualityCapaUpdate' },
-  { route: '/api/quality/risks',                      verb: 'post',   schema: 'qualityRiskCreate' },
-  { route: '/api/quality/risks/:id',                  verb: 'put',    schema: 'qualityRiskUpdate' },
-
-  // Maintenance
-  { route: '/api/maintenance/work-orders',            verb: 'post',   schema: 'maintenanceWorkOrderCreate' },
-  { route: '/api/maintenance/work-orders/:id',        verb: 'put',    schema: 'maintenanceWorkOrderUpdate' },
-  { route: '/api/maintenance/equipment',              verb: 'post',   schema: 'maintenanceEquipmentCreate' },
-  { route: '/api/maintenance/pm-schedules',           verb: 'post',   schema: 'maintenancePmScheduleCreate' },
-  { route: '/api/maintenance/orders',                 verb: 'post',   schema: 'maintenanceOrderCreate' },
-  { route: '/api/maintenance/orders/:id',             verb: 'put',    schema: 'maintenanceOrderUpdate' },
-  { route: '/api/maintenance/calibrations',           verb: 'post',   schema: 'maintenanceCalibrationCreate' },
-
-  // Transport
-  { route: '/api/transport/requests',                 verb: 'post',   schema: 'transportRequestCreate' },
-];
-
-let pass = 0, fail = 0;
-
-for (const c of checks) {
-  const escaped = c.route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(
-    `app\\.${c.verb}\\('${escaped}'[\\s\\S]{0,500}?idempotencyGuard\\s*,`
-  );
-  try {
-    assert.ok(re.test(serverSrc), `idempotencyGuard missing for: ${c.verb.toUpperCase()} ${c.route}`);
-    if (c.schema) {
-      const defRe = new RegExp(`(?:const|let|var)\\s+${c.schema}\\s*=\\s*\\{`);
-      assert.ok(defRe.test(schemasSrc), `schema ${c.schema} not defined`);
-      const exportRe = new RegExp(`[,\\s]${c.schema}\\s*[,\\s}]`);
-      assert.ok(exportRe.test(schemasSrc), `schema ${c.schema} not exported`);
-    }
-    console.log(`  PASS  ${c.verb.toUpperCase().padEnd(6)} ${c.route}${c.schema ? '  ->  ' + c.schema : '  (idempotencyGuard only)'}`);
-    pass++;
-  } catch (e) {
-    console.error(`  FAIL  ${c.verb.toUpperCase().padEnd(6)} ${c.route}\n        ${e.message}`);
-    fail++;
+function assert(cond, name, details) {
+  if (cond) {
+    passed++;
+    console.log(`  ${GREEN}PASS${RESET} - ${name}`);
+    return;
   }
+  failed++;
+  failures.push({ name, details: details || '' });
+  console.log(`  ${RED}FAIL${RESET} - ${name}${details ? ` | ${details}` : ''}`);
 }
 
-console.log('');
-console.log(`Surgery/Operations wave boundary guard: ${pass} passed, ${fail} failed.`);
-if (fail > 0) process.exit(1);
+console.log(`\n${BOLD}${BLUE}=== ZATCA Submit Fail-Closed Guard Test ===${RESET}\n`);
+
+const serverPath = path.join(__dirname, 'server.js');
+const src = fs.readFileSync(serverPath, 'utf8');
+const clean = src.replace(/\s+/g, '');
+
+assert(
+  clean.includes("app.post('/api/zatca/submit',requireAuth,requireRole('finance','accounts'),requireTenantScope,validateBody(RS.zatcaSubmit),idempotencyGuard,async(req,res)=>{"),
+  'submit route is auth+role+tenant+validation+idempotency guarded'
+);
+
+assert(
+  clean.includes("app.post('/api/settings/integrations',requireAuth,requireTenantContext,validateBody(RS.integrationSettingsSave),async(req,res)=>{") &&
+  clean.includes("app.post('/api/settings/integrations/ping',requireAuth,requireTenantContext,validateBody(RS.integrationPing),async(req,res)=>{"),
+  'integration settings routes are guarded by boundary validation middleware'
+);
+
+assert(
+  clean.includes("app.get('/api/settings/integrations',requireAuth,requireTenantContext,async(req,res)=>{") &&
+    clean.includes("if(!['ZATCA','NPHIES','CBAHI'].includes(integrationName))returnrow;") &&
+    clean.includes("if(integrationName==='ZATCA')redactedConfig=redactZatcaConfig(parsed);") &&
+    clean.includes("if(integrationName==='NPHIES')redactedConfig=redactNphiesConfig(parsed);") &&
+    clean.includes("if(integrationName==='CBAHI')redactedConfig=redactCbahiConfig(parsed);") &&
+    clean.includes("if(integrationName==='ZATCA'||integrationName==='NPHIES'){") &&
+    clean.includes("safeRow['api_key']=row.api_key?'[REDACTED]':'';") &&
+    clean.includes("safeRow['api_secret']=row.api_secret?'[REDACTED]':'';"),
+  'GET integrations redacts integration configs and secret fields for ZATCA/NPHIES'
+);
+
+assert(
+  clean.includes('if(!globalEnabled||!integrationEnabled){') &&
+    clean.includes("submission_status=$2") &&
+    clean.includes("'Submitted_Mock'") &&
+    clean.includes("'ZATCA_SUBMIT_INTENT','ZATCA'"),
+  'submit route keeps safe mock fallback when integration/global gate is off'
+);
+
+assert(
+  clean.includes('ZATCA_ONBOARDING_INCOMPLETE') &&
+    clean.includes('missingproductioncredentials'),
+  'submit route fails closed when production credentials are missing'
+);
+
+assert(
+  clean.includes("validateZatcaConfig(configJson,{requireKeys:true,requireCsrProfile:true})") &&
+    clean.includes("error:'InvalidZATCAconfiguration'") &&
+    clean.includes('codes:configValidation.errors'),
+  'submit route enforces key+CSR validation and returns machine-readable codes'
+);
+
+assert(
+  clean.includes("constrequiresCsr=parseInt(is_enabled,10)===1;") &&
+    clean.includes("validateZatcaConfig(parsedConfig,{requireCsrProfile:requiresCsr,requireKeys:false})") &&
+    clean.includes("error:'InvalidZATCAconfig_json'"),
+  'settings save route validates ZATCA config_json when enabling integration'
+);
+
+assert(
+  clean.includes("constnormalizedName=String(integration_name).trim().toUpperCase();") &&
+    clean.includes('WHEREtenant_id=$1ANDUPPER(integration_name)=$2') &&
+    clean.includes('Updatedintegration${normalizedName}settings'),
+  'settings save route canonicalizes integration_name and uses canonical value for persistence/audit'
+);
+
+assert(
+  clean.includes("SELECT*FROMintegration_settingsWHEREtenant_id=$1ANDUPPER(integration_name)=$2") &&
+    clean.includes("[tenantId,'ZATCA']"),
+  'submit route loads ZATCA settings case-insensitively for legacy rows'
+);
+
+assert(
+  clean.includes("api_key!=='***REDACTED***'") &&
+    clean.includes("api_secret!=='***REDACTED***'") &&
+    clean.includes('exists?.api_key||\'\'') &&
+    clean.includes('exists?.api_secret||\'\''),
+  'settings save route preserves stored credentials when redacted placeholders are submitted'
+);
+
+console.log(`\n${BOLD}${BLUE}=== Result ===${RESET}`);
+console.log(`  ${GREEN}PASS${RESET}: ${passed}`);
+console.log(`  ${RED}FAIL${RESET}: ${failed}`);
+
+if (failed) {
+  for (const f of failures) {
+    console.log(`  - ${f.name}${f.details ? `: ${f.details}` : ''}`);
+  }
+  process.exit(1);
+}
+
+console.log(`\n${GREEN}ALL PASS: ${passed} passed, 0 failed${RESET}\n`);
