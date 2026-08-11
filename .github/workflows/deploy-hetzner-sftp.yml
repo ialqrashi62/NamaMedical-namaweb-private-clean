@@ -56,7 +56,7 @@ jobs:
           command_timeout: 15m
 
       - name: Apply DB migrations on Hetzner
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.HETZNER_HOST }}
           username: ${{ secrets.HETZNER_USER }}
